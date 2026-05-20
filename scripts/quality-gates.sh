@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+# Quality gates runner.
+# Reads .quality-gates.conf from the git repo root, runs each check sequentially,
+# and writes a JSON result file. All checks run regardless of failures (run-all).
+#
+# Stdout:
+#   [N/total] <command>   — before each check
+#   PASS | FAIL           — after each check
+#   ===					  — delimiter between last check result and overall result 
+#   PASS | FAIL           — overall result (final line before Results)
+#   Results: <path>       — path to JSON result file
+#
+# Exit code: 0 if all checks passed, 1 if any failed.
+
+set -uo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+CONF="$REPO_ROOT/.quality-gates.conf"
+cd "$REPO_ROOT"
+RESULT_FILE=$(mktemp /tmp/quality-gates-XXXXXX.json)
+
+if [[ ! -f "$CONF" ]]; then
+    echo "Error: $CONF not found" >&2
+    exit 2
+fi
+
+# Read commands from config, skipping blank lines and comments
+commands=()
+while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ -z "$line" || "$line" =~ ^[[:space:]]*# ]] && continue
+    commands+=("$line")
+done < "$CONF"
+
+if [[ ${#commands[@]} -eq 0 ]]; then
+    echo "Error: no checks defined in $CONF" >&2
+    exit 2
+fi
+
+overall="PASS"
+checks_json="[]"
+total=${#commands[@]}
+
+for i in "${!commands[@]}"; do
+    cmd="${commands[$i]}"
+    n=$((i + 1))
+
+    echo "[$n/$total] $cmd"
+
+    output=$(eval "$cmd" 2>&1) && exit_code=0 || exit_code=$?
+
+    if [[ $exit_code -eq 0 ]]; then
+        status="PASS"
+    else
+        status="FAIL"
+        overall="FAIL"
+    fi
+
+    echo "$status"
+
+    checks_json=$(
+        printf '%s' "$output" | jq -Rs \
+            --argjson checks "$checks_json" \
+            --arg cmd "$cmd" \
+            --arg status "$status" \
+            '$checks + [{"command": $cmd, "status": $status, "output": .}]'
+    )
+done
+
+jq -n \
+    --arg overall "$overall" \
+    --argjson checks "$checks_json" \
+    '{"overall": $overall, "checks": $checks}' > "$RESULT_FILE"
+
+echo "==="
+echo "$overall"
+echo "Results: $RESULT_FILE"
+
+[[ "$overall" == "PASS" ]]
