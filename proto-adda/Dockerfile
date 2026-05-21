@@ -44,7 +44,7 @@ RUN chmod +x /usr/local/libexec/claude-dev/entrypoint.d/*.sh
 # ----------------------------------------------------------------------
 # Overlay — staged in image; hook copies to ~/.claude/ at container start
 # ----------------------------------------------------------------------
-COPY proto-adda/overlay/.claude/ /usr/local/share/claude-dev/templates/.claude/
+COPY proto-adda/overlay/.claude/ /usr/local/share/claude-dev/.claude/
 COPY proto-adda/.claude.json.template /usr/local/share/claude-dev/templates/.claude.json.template
 
 # ----------------------------------------------------------------------

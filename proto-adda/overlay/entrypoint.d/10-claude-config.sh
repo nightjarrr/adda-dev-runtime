@@ -40,7 +40,7 @@ if [[ -d "${HOME}/.claude" ]] && [[ -n "$(ls -A "${HOME}/.claude" 2>/dev/null)" 
 fi
 
 mkdir -p "${HOME}/.claude"
-cp -r /usr/local/share/claude-dev/templates/.claude/. "${HOME}/.claude/"
+cp -r /usr/local/share/claude-dev/.claude/. "${HOME}/.claude/"
 success "Overlay applied to ~/.claude."
 
 sed "s/__CLAUDE_CODE_VERSION__/${CLAUDE_CODE_VERSION}/" \
