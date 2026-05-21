@@ -1,0 +1,52 @@
+#!/bin/bash
+# Apply proto-adda overlay and initialize Claude config.
+# Sourced by Tier 1 entrypoint; require_env/require_tool/section/success/die
+# helpers are in scope from the parent shell.
+
+section "Running hook 10-claude-config.sh"
+
+# Validate AI harness tools (installed by this image)
+require_tool node
+require_tool claude
+
+# Validate AI harness env vars (Tier-2-specific; not checked by Tier 1)
+require_env CLAUDE_DEV_LLM_BACKEND true
+require_env CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC true
+require_env CLAUDE_CODE_VERSION true
+
+# Backend-specific env var validation
+case "${CLAUDE_DEV_LLM_BACKEND}" in
+    anthropic)
+        require_env CLAUDE_CODE_OAUTH_TOKEN
+        ;;
+    deepseek)
+        require_env ANTHROPIC_BASE_URL true
+        require_env ANTHROPIC_AUTH_TOKEN
+        require_env ANTHROPIC_MODEL true
+        require_env ANTHROPIC_DEFAULT_OPUS_MODEL true
+        require_env ANTHROPIC_DEFAULT_SONNET_MODEL true
+        require_env ANTHROPIC_DEFAULT_HAIKU_MODEL true
+        require_env CLAUDE_CODE_SUBAGENT_MODEL true
+        require_env CLAUDE_CODE_EFFORT_LEVEL true
+        ;;
+    *)
+        die "unsupported CLAUDE_DEV_LLM_BACKEND='${CLAUDE_DEV_LLM_BACKEND}'. Supported backends: anthropic, deepseek."
+        ;;
+esac
+
+# Die if ~/.claude already exists and is non-empty
+if [[ -d "${HOME}/.claude" ]] && [[ -n "$(ls -A "${HOME}/.claude" 2>/dev/null)" ]]; then
+    die "~/.claude already exists and is non-empty; overlay cannot be applied."
+fi
+
+mkdir -p "${HOME}/.claude"
+cp -r /usr/local/share/claude-dev/templates/.claude/. "${HOME}/.claude/"
+success "Overlay applied to ~/.claude."
+
+sed "s/__CLAUDE_CODE_VERSION__/${CLAUDE_CODE_VERSION}/" \
+    /usr/local/share/claude-dev/templates/.claude.json.template > "${HOME}/.claude.json"
+chmod 600 "${HOME}/.claude.json"
+success "Initialized ~/.claude.json (lastOnboardingVersion: ${CLAUDE_CODE_VERSION})."
+
+mkdir -p /workspace/.claude/memory
+success "Created /workspace/.claude/memory."
