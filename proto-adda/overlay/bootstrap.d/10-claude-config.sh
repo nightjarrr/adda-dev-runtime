@@ -16,7 +16,7 @@ require_env CLAUDE_CODE_VERSION true
 
 # Backend-specific env var validation
 case "${CLAUDE_DEV_LLM_BACKEND}" in
-    claude)
+    anthropic)
         require_env CLAUDE_CODE_OAUTH_TOKEN
         ;;
     deepseek)
@@ -30,7 +30,7 @@ case "${CLAUDE_DEV_LLM_BACKEND}" in
         require_env CLAUDE_CODE_EFFORT_LEVEL true
         ;;
     *)
-        die "Unknown CLAUDE_DEV_LLM_BACKEND: ${CLAUDE_DEV_LLM_BACKEND}"
+        die "unsupported CLAUDE_DEV_LLM_BACKEND='${CLAUDE_DEV_LLM_BACKEND}'. Supported backends: anthropic, deepseek."
         ;;
 esac
 
