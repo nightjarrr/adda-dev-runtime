@@ -16,6 +16,9 @@
 ARG BASE_TAG=latest
 FROM adda-dev-runtime:${BASE_TAG}
 
+# Build steps require root to write to /usr/local; Tier 1 leaves USER as node.
+USER root
+
 # ----------------------------------------------------------------------
 # Node.js 24 LTS — direct binary from nodejs.org
 # ----------------------------------------------------------------------
@@ -50,6 +53,9 @@ COPY proto-adda/.claude.json.template /usr/local/share/claude-dev/templates/.cla
 RUN mkdir -p /usr/local/lib/claude-dev/scripts
 COPY proto-adda/overlay/scripts/quality-gates.sh /usr/local/lib/claude-dev/scripts/quality-gates.sh
 RUN chmod +x /usr/local/lib/claude-dev/scripts/quality-gates.sh
+
+# Restore runtime user before handoff.
+USER node
 
 # Override Tier 1's generic CMD; proto-adda's purpose is to run Claude Code.
 CMD ["claude"]
