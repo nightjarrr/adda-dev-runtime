@@ -12,6 +12,7 @@ require_tool claude
 # Validate AI harness env vars (Tier-2-specific; not checked by Tier 1)
 require_env CLAUDE_DEV_LLM_BACKEND true
 require_env CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC true
+require_env CLAUDE_CODE_VERSION true
 
 # Backend-specific env var validation
 case "${CLAUDE_DEV_LLM_BACKEND}" in
