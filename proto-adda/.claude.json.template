@@ -1,0 +1,10 @@
+{
+    "hasCompletedOnboarding": true,
+    "lastOnboardingVersion": "__CLAUDE_CODE_VERSION__",
+    "theme": "dark-ansi",
+  "projects": {
+    "/workspace": {
+      "hasTrustDialogAccepted": true
+    }
+  }
+}

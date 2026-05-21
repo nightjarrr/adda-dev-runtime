@@ -6,6 +6,50 @@ Audience: AI agent or maintainer continuing implementation.
 
 ---
 
+## proto-adda — Tier 2 image
+
+### What it is
+
+`proto-adda` is the Tier 2 Docker image built `FROM adda-dev-runtime` (Tier 1). It adds:
+
+* Node.js 24 LTS — installed as a direct binary from `nodejs.org` (no NodeSource, no `xz-utils`). Pinned via `NODE_VERSION` build arg / `ENV`.
+* Claude Code — installed as a global npm package, version-pinned via `CLAUDE_CODE_VERSION` `ENV`.
+* A bootstrap hook that applies the overlay and initialises Claude config at container start.
+* `quality-gates.sh` baked at a fixed absolute path.
+
+Build context must be the repo root (not `proto-adda/`) because `COPY` paths reference `proto-adda/...`:
+
+```bash
+docker build -f proto-adda/Dockerfile -t proto-adda:latest .
+```
+
+### Bootstrap hook mechanism
+
+Tier 1's entrypoint sources every `*.sh` file under `/usr/local/lib/claude-dev/bootstrap.d/` after BASE init and before CMD handoff. Tier 1 ships nothing there; `proto-adda` drops `10-claude-config.sh` via `Dockerfile COPY`.
+
+Because hooks are sourced (not subprocessed), they can read and write environment variables that persist for downstream steps and the final CMD.
+
+### Overlay semantics
+
+The overlay is staged in the image at build time under `/usr/local/share/claude-dev/templates/.claude/`. At container start, `10-claude-config.sh`:
+
+1. Dies (non-silently) if `~/.claude/` already exists and is non-empty.
+2. `cp -r`s the staged overlay to `~/.claude/`.
+3. Stamps `~/.claude.json` from `/usr/local/share/claude-dev/templates/.claude.json.template`, substituting `__CLAUDE_CODE_VERSION__` with `$CLAUDE_CODE_VERSION`.
+4. Creates `/workspace/.claude/memory`.
+
+### Fixed paths
+
+| Artifact | Absolute path in container |
+|---|---|
+| Claude Code binary | `$(which claude)` (npm global, resolved via `PATH`) |
+| quality-gates.sh | `/usr/local/lib/claude-dev/scripts/quality-gates.sh` |
+| Overlay template dir | `/usr/local/share/claude-dev/templates/.claude/` |
+| `.claude.json` template | `/usr/local/share/claude-dev/templates/.claude.json.template` |
+| Bootstrap hook | `/usr/local/lib/claude-dev/bootstrap.d/10-claude-config.sh` |
+
+---
+
 ## Current status summary
 
 * The project has moved from the original in-container firewall design to a host/sidecar-enforced proxy design.

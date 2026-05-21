@@ -89,7 +89,7 @@ When uncertain, prefer dialog over silent assumptions — see Section 10 (Commun
 
 1. Run:
    ```bash
-   scripts/quality-gates.sh
+   /usr/local/lib/claude-dev/scripts/quality-gates.sh
    ```
 2. Read stdout: summary is the final two lines — `PASS` or `FAIL`, then `Results: <path-to-result-file>`.
 3. Result file structure:
