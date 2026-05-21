@@ -16,7 +16,7 @@
 ARG BASE_TAG=latest
 FROM adda-dev-runtime:${BASE_TAG}
 
-# Build steps require root to write to /usr/local; Tier 1 leaves USER as node.
+# Build steps require root to write to /usr/local; Tier 1 leaves USER as adda.
 USER root
 
 # ----------------------------------------------------------------------
@@ -38,24 +38,24 @@ RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 # ----------------------------------------------------------------------
 # Bootstrap hook — sourced by Tier 1 entrypoint after BASE init
 # ----------------------------------------------------------------------
-COPY proto-adda/overlay/entrypoint.d/ /usr/local/libexec/claude-dev/entrypoint.d/
-RUN chmod +x /usr/local/libexec/claude-dev/entrypoint.d/*.sh
+COPY proto-adda/overlay/entrypoint.d/ /usr/local/libexec/adda-dev-runtime/entrypoint.d/
+RUN chmod +x /usr/local/libexec/adda-dev-runtime/entrypoint.d/*.sh
 
 # ----------------------------------------------------------------------
 # Overlay — staged in image; hook copies to ~/.claude/ at container start
 # ----------------------------------------------------------------------
-COPY proto-adda/overlay/.claude/ /usr/local/share/claude-dev/.claude/
-COPY proto-adda/.claude.json.template /usr/local/share/claude-dev/templates/.claude.json.template
+COPY proto-adda/overlay/.claude/ /usr/local/share/adda-dev-runtime/.claude/
+COPY proto-adda/.claude.json.template /usr/local/share/adda-dev-runtime/templates/.claude.json.template
 
 # ----------------------------------------------------------------------
 # quality-gates.sh — baked at fixed absolute path; overlay/scripts/ is
 # the source-of-truth in the repo but ships here, not to ~/
 # ----------------------------------------------------------------------
-COPY proto-adda/overlay/scripts/quality-gates.sh.source /usr/local/libexec/claude-dev/quality-gates.sh
-RUN chmod +x /usr/local/libexec/claude-dev/quality-gates.sh
+COPY proto-adda/overlay/scripts/quality-gates.sh.source /usr/local/libexec/adda-dev-runtime/quality-gates.sh
+RUN chmod +x /usr/local/libexec/adda-dev-runtime/quality-gates.sh
 
 # Restore runtime user before handoff.
-USER node
+USER adda
 
 # Override Tier 1's generic CMD; proto-adda's purpose is to run Claude Code.
 CMD ["claude"]

@@ -1,5 +1,5 @@
 # ======================================================================
-# Claude dev egress proxy
+# adda-dev egress proxy
 #
 # Envoy HTTP/HTTPS forward proxy reachable through a Unix domain socket.
 # Intended to be used from a networkless container through a local
@@ -23,8 +23,8 @@
 # ======================================================================
 
 node:
-  id: claude-dev-egress-proxy
-  cluster: claude-dev-local
+  id: adda-dev-egress-proxy
+  cluster: adda-dev-local
 
 # ----------------------------------------------------------------------
 # Admin interface.
@@ -47,7 +47,7 @@ admin:
 
 static_resources:
   listeners:
-    - name: claude_dev_proxy_uds_listener
+    - name: adda_dev_proxy_uds_listener
 
       # ----------------------------------------------------------------
       # Downstream listener.
@@ -72,7 +72,7 @@ static_resources:
               typed_config:
                 "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
 
-                stat_prefix: claude_dev_forward_proxy
+                stat_prefix: adda_dev_forward_proxy
                 codec_type: AUTO
 
                 # ------------------------------------------------------
@@ -103,7 +103,7 @@ static_resources:
                 # cluster.
                 # ------------------------------------------------------
                 route_config:
-                  name: claude_dev_forward_proxy_routes
+                  name: adda_dev_forward_proxy_routes
 
                   virtual_hosts:
                     - name: forward_proxy_virtual_host
@@ -303,7 +303,7 @@ static_resources:
                       "@type": type.googleapis.com/envoy.extensions.filters.http.dynamic_forward_proxy.v3.FilterConfig
 
                       dns_cache_config:
-                        name: claude_dev_forward_proxy_dns_cache
+                        name: adda_dev_forward_proxy_dns_cache
                         dns_lookup_family: V4_ONLY
 
                         dns_cache_circuit_breaker:
@@ -349,7 +349,7 @@ static_resources:
           "@type": type.googleapis.com/envoy.extensions.clusters.dynamic_forward_proxy.v3.ClusterConfig
 
           dns_cache_config:
-            name: claude_dev_forward_proxy_dns_cache
+            name: adda_dev_forward_proxy_dns_cache
             dns_lookup_family: V4_ONLY
 
             dns_cache_circuit_breaker:

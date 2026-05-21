@@ -1,6 +1,6 @@
-# Claude Dev Container — Current State / Handover
+# adda-dev Container — Current State / Handover
 
-Purpose: dense implementation-state companion to `CLAUDE-DEV-ENVIRONMENT.md`. The master doc describes target state. This file describes what is currently implemented, what is known to work, what is intentionally deferred, and what remains to do.
+Purpose: dense implementation-state companion to `adda-dev-runtime.md`. The master doc describes target state. This file describes what is currently implemented, what is known to work, what is intentionally deferred, and what remains to do.
 
 Audience: AI agent or maintainer continuing implementation.
 
@@ -25,17 +25,17 @@ docker build -f proto-adda/Dockerfile -t proto-adda:latest .
 
 ### Bootstrap hook mechanism
 
-Tier 1's entrypoint sources every `*.sh` file under `/usr/local/lib/claude-dev/bootstrap.d/` after BASE init and before CMD handoff. Tier 1 ships nothing there; `proto-adda` drops `10-claude-config.sh` via `Dockerfile COPY`.
+Tier 1's entrypoint sources every `*.sh` file under `/usr/local/libexec/adda-dev-runtime/entrypoint.d/` after BASE init and before CMD handoff. Tier 1 ships nothing there; `proto-adda` drops `10-claude-config.sh` via `Dockerfile COPY`.
 
 Because hooks are sourced (not subprocessed), they can read and write environment variables that persist for downstream steps and the final CMD.
 
 ### Overlay semantics
 
-The overlay is staged in the image at build time under `/usr/local/share/claude-dev/templates/.claude/`. At container start, `10-claude-config.sh`:
+The overlay is staged in the image at build time under `/usr/local/share/adda-dev-runtime/.claude/`. At container start, `10-claude-config.sh`:
 
 1. Dies (non-silently) if `~/.claude/` already exists and is non-empty.
 2. `cp -r`s the staged overlay to `~/.claude/`.
-3. Stamps `~/.claude.json` from `/usr/local/share/claude-dev/templates/.claude.json.template`, substituting `__CLAUDE_CODE_VERSION__` with `$CLAUDE_CODE_VERSION`.
+3. Stamps `~/.claude.json` from `/usr/local/share/adda-dev-runtime/templates/.claude.json.template`, substituting `__CLAUDE_CODE_VERSION__` with `$CLAUDE_CODE_VERSION`.
 4. Creates `/workspace/.claude/memory`.
 
 ### Fixed paths
@@ -43,17 +43,17 @@ The overlay is staged in the image at build time under `/usr/local/share/claude-
 | Artifact | Absolute path in container |
 |---|---|
 | Claude Code binary | `$(which claude)` (npm global, resolved via `PATH`) |
-| quality-gates.sh | `/usr/local/lib/claude-dev/scripts/quality-gates.sh` |
-| Overlay template dir | `/usr/local/share/claude-dev/templates/.claude/` |
-| `.claude.json` template | `/usr/local/share/claude-dev/templates/.claude.json.template` |
-| Bootstrap hook | `/usr/local/lib/claude-dev/bootstrap.d/10-claude-config.sh` |
+| quality-gates.sh | `/usr/local/libexec/adda-dev-runtime/quality-gates.sh` |
+| Overlay template dir | `/usr/local/share/adda-dev-runtime/.claude/` |
+| `.claude.json` template | `/usr/local/share/adda-dev-runtime/templates/.claude.json.template` |
+| Bootstrap hook | `/usr/local/libexec/adda-dev-runtime/entrypoint.d/10-claude-config.sh` |
 
 ---
 
 ## Current status summary
 
 * The project has moved from the original in-container firewall design to a host/sidecar-enforced proxy design.
-* Claude dev container now runs successfully with:
+* adda-dev container now runs successfully with:
 
   * `--network none`
   * `--cap-drop ALL`
@@ -61,7 +61,7 @@ The overlay is staged in the image at build time under `/usr/local/share/claude-
   * `--read-only`
   * explicit tmpfs writable mounts
   * proxy egress via mounted Unix socket + in-container `socat` bridge
-* Envoy sidecar runs as a separate container, outside the Claude container.
+* Envoy sidecar runs as a separate container, outside the adda-dev container.
 * Envoy currently works as a dynamic forward proxy over Unix domain socket.
 * Envoy currently allows all destinations during dogfooding. Domain allow-list exists conceptually/configurationally but is not enforced yet.
 * Current priority changed from completing all hardening/publishing/allow-list work to dogfooding the container early.
@@ -71,30 +71,30 @@ The overlay is staged in the image at build time under `/usr/local/share/claude-
 
 ## Repository / branch context
 
-* Target design doc: `docs/CLAUDE-DEV-ENVIRONMENT.md`.
-* Host launcher: `scripts/claude-dev.sh`.
-* Launcher config: `scripts/claude-dev.env`.
-* Tmux seed config: `scripts/claude-dev.tmux.conf`.
-* Claude container Dockerfile: `.devcontainer/claude-dev/Dockerfile`.
-* Claude container entrypoint: `.devcontainer/claude-dev/entrypoint.sh`.
-* Envoy config template: `.devcontainer/envoy/envoy.yaml.template`.
+* Target design doc: `docs/adda-dev-runtime.md`.
+* Host launcher: `launcher/adda-dev.sh`.
+* Launcher config: `launcher/adda-dev.env` (gitignored; from `adda-dev.env.example`).
+* Tmux seed config: `launcher/adda-dev.tmux.conf`.
+* adda-dev container Dockerfile: `docker/adda-dev-runtime/Dockerfile`.
+* adda-dev container entrypoint: `docker/adda-dev-runtime/entrypoint.sh`.
+* Envoy config template: `docker/envoy/envoy.yaml.template`.
 
 ---
 
 ## Runtime architecture actually implemented
 
 * Launcher starts one Envoy sidecar container per Claude session.
-* Launcher then starts one Claude dev container per Claude session.
-* Claude container has no Docker network: `--network none`.
+* Launcher then starts one adda-dev container per Claude session.
+* adda-dev container has no Docker network: `--network none`.
 * Envoy sidecar has normal egress network and performs DNS/upstream connections.
 * Envoy listens on a Unix socket in a launcher-created runtime directory.
-* Launcher bind-mounts the Envoy socket into Claude container as `/run/proxy.sock`.
+* Launcher bind-mounts the Envoy socket into adda-dev container as `/run/proxy.sock`.
 * Claude entrypoint starts `socat`:
-  * listens on `127.0.0.1:${CLAUDE_DEV_PROXY_PORT}`
+  * listens on `127.0.0.1:${ADDA_DEV_PROXY_PORT}`
   * forwards to `/run/proxy.sock`
 * Claude entrypoint exports:
-  * `HTTP_PROXY=http://127.0.0.1:${CLAUDE_DEV_PROXY_PORT}`
-  * `HTTPS_PROXY=http://127.0.0.1:${CLAUDE_DEV_PROXY_PORT}`
+  * `HTTP_PROXY=http://127.0.0.1:${ADDA_DEV_PROXY_PORT}`
+  * `HTTPS_PROXY=http://127.0.0.1:${ADDA_DEV_PROXY_PORT}`
   * lowercase equivalents
   * `NO_PROXY=localhost,127.0.0.1,::1`
 * Proxy-aware tools work through Envoy.
@@ -109,21 +109,21 @@ The overlay is staged in the image at build time under `/usr/local/share/claude-
   * `secret-tool`
   * `tmux`
   * `openssl`
-* `claude-dev.env` is sourced and required variables validated.
-* Launcher seeds `~/.tmux.conf` from `scripts/claude-dev.tmux.conf` only if missing.
+* `adda-dev.env` is sourced and required variables validated.
+* Launcher seeds `~/.tmux.conf` from `scripts/adda-dev.tmux.conf` only if missing.
 * Launcher sources `~/.tmux.conf` best-effort; failures are warnings, not fatal.
 * Launcher creates a named tmux session and re-enters itself inside it.
 * `TMUX_SESSION` must be exported before re-entry; tmux window setup depends on this.
 * Launcher retrieves secrets from keyring:
-  * `service=claude-dev account=claude-oauth`
-  * `service=claude-dev account=github-token`
-* Launcher creates Envoy per-run runtime directory under `${XDG_RUNTIME_DIR:-/tmp}/claude-dev/${RUN_ID}`.
+  * `service=adda-dev account=claude-oauth`
+  * `service=adda-dev account=github-token`
+* Launcher creates Envoy per-run runtime directory under `${XDG_RUNTIME_DIR:-/tmp}/adda-dev/${RUN_ID}`.
 * Launcher renders Envoy config from `.devcontainer/envoy/envoy.yaml.template`.
 * Launcher starts Envoy sidecar detached with `--rm`.
 * Launcher exposes Envoy admin on host loopback, currently `127.0.0.1:7001`.
-* Launcher waits for Envoy socket before starting Claude container.
-* Launcher creates two additional windows in the primary tmux session: `claude-dev shell` (interactive bash into Claude container) and `claude-dev envoy logs` (`docker logs -f ${ENVOY_CONTAINER}`).
-* Launcher starts Claude container interactively with `docker run --rm -it --name ${CLAUDE_CONTAINER}`.
+* Launcher waits for Envoy socket before starting adda-dev container.
+* Launcher creates two additional windows in the primary tmux session: `adda-dev shell` (interactive bash into adda-dev container) and `adda-dev envoy logs` (`docker logs -f ${ENVOY_CONTAINER}`).
+* Launcher starts adda-dev container interactively with `docker run --rm -it --name ${CLAUDE_CONTAINER}`.
 * Launcher cleanup stops Envoy container and removes runtime dir on exit.
 
 ---
@@ -133,11 +133,11 @@ The overlay is staged in the image at build time under `/usr/local/share/claude-
 * Micro 2.0.15 — TUI text editor, static binary at `/usr/local/bin/micro`.
 * delta 0.19.2 — syntax-highlighting git diff pager, static binary at `/usr/local/bin/delta`. Wired in via `/etc/gitconfig` (system-level): `core.pager`, `interactive.diffFilter`, `delta.line-numbers = true`, `delta.navigate = true`.
 * `EDITOR=micro` and `VISUAL=micro` set via Dockerfile `ENV`; inherited by all container processes including non-interactive subshells.
-* No Micro config is included; defaults are used. `~/.config/micro/` is not pre-populated (it would live on the ephemeral `/home/node` tmpfs).
+* No Micro config is included; defaults are used. `~/.config/micro/` is not pre-populated (it would live on the ephemeral `/home/adda` tmpfs).
 
 ---
 
-## Claude container current `docker run` shape
+## adda-dev container current `docker run` shape
 
 Current important flags:
 
@@ -150,16 +150,16 @@ Current important flags:
   * `/tmp`
   * `/run`
   * `/var/tmp`
-  * `/home/${CLAUDE_DEV_USER}`
+  * `/home/${ADDA_DEV_USER}`
   * `/workspace`
-* `/home/${CLAUDE_DEV_USER}` and `/workspace` require `exec` because `uv`/project tooling may execute from there.
+* `/home/${ADDA_DEV_USER}` and `/workspace` require `exec` because `uv`/project tooling may execute from there.
 * `/run` should remain `noexec`.
-* Envoy socket is bind-mounted to `${CLAUDE_DEV_PROXY_SOCKET_CONTAINER_PATH}`, currently `/run/proxy.sock`.
+* Envoy socket is bind-mounted to `${ADDA_DEV_PROXY_SOCKET_CONTAINER_PATH}`, currently `/run/proxy.sock`.
 * Socket mount is expected to sit on top of tmpfs-mounted `/run`.
 
 Current observed working tmpfs constraints during testing:
 
-* `/home/node` tmpfs around 500M worked for current repo.
+* `/home/adda` tmpfs around 500M worked for current repo.
 * `/workspace` tmpfs around 200M worked for current repo.
 * `/tmp`, `/var/tmp`, `/run` small tmpfs mounts worked.
 * Exact sizes should remain configurable; larger projects may require larger values.
@@ -171,7 +171,7 @@ Current observed working tmpfs constraints during testing:
 * Envoy sidecar container starts and admin UI loads.
 * Envoy listens on Unix domain socket.
 * Unix socket verified directly with `curl --unix-socket` during smoke test.
-* `socat` TCP-to-UDS bridge verified on host and in Claude container.
+* `socat` TCP-to-UDS bridge verified on host and in adda-dev container.
 * Envoy dynamic forward proxy config works for:
 
   * plain HTTP proxy requests
@@ -204,7 +204,7 @@ Current observed working tmpfs constraints during testing:
 * For plain HTTP, authority may be `host` or `host:port`.
 * Allow-list entries should account for both forms where needed.
 * Dynamic forward proxy cluster remains appropriate; allow-list restricts it before DNS/upstream connection.
-* DNS for upstreams happens in Envoy sidecar, not Claude container.
+* DNS for upstreams happens in Envoy sidecar, not adda-dev container.
 
 ---
 
@@ -237,7 +237,7 @@ Policy clarification:
 * Prints section headers, warnings, and green check success lines.
 * Validates required env vars.
 * Configures ephemeral Bash prompt in `$HOME/.bashrc`.
-* Prompt includes repo and optional issue, e.g. `[claude-dev adda-dev-runtime #42] /workspace$`.
+* Prompt includes repo and optional issue, e.g. `[adda-dev adda-dev-runtime #42] /workspace$`.
 * Verifies `/workspace` is empty before clone.
 * Runs warning/success diagnostics for:
   * network mode: loopback-only, no default route
@@ -262,7 +262,7 @@ Policy clarification:
 * Clones repo into `/workspace`.
 * Resolves linked GitHub issue branch via GraphQL `linkedBranches(first: 2)`.
 * Initializes `~/.claude.json` from template using `CLAUDE_CODE_VERSION`.
-* Writes `~/.claude/settings.json` from `/etc/claude-dev/settings.json.template`; sets `autoMemoryDirectory` to `/workspace/.claude/memory`.
+* `~/.claude/settings.json` ships via overlay (no separate template path); `autoMemoryDirectory` is set to `/workspace/.claude/memory`.
 * Runs project bootstrap currently via `uv sync --frozen`.
 * Runs CMD (`claude` by default), then drops to interactive bash.
 * On exit, prints git status and commits ahead of upstream/main.
@@ -275,9 +275,9 @@ Policy clarification:
 
 * Launcher creates primary tmux session with three windows:
 
-  * `claude-dev primary` — Claude container (`docker run`)
-  * `claude-dev shell` — interactive `docker exec bash` into Claude container
-  * `claude-dev envoy logs` — `docker logs -f ${ENVOY_CONTAINER}`
+  * `adda-dev primary` — adda-dev container (`docker run`)
+  * `adda-dev shell` — interactive `docker exec bash` into adda-dev container
+  * `adda-dev envoy logs` — `docker logs -f ${ENVOY_CONTAINER}`
 * `Ctrl-b d` detaches from tmux without killing underlying command.
 * Tmux seed config is copied to `~/.tmux.conf` only if missing.
 * Existing user `~/.tmux.conf` is never overwritten.
@@ -325,17 +325,17 @@ Host/project launcher variables include at least:
 * `ENVOY_ADMIN_CONTAINER_PORT`
 * `ENVOY_ADMIN_ADDRESS`
 * `ENVOY_SOCKET_CONTAINER_PATH`
-* `CLAUDE_DEV_IMAGE`
-* `CLAUDE_DEV_USER`
-* `CLAUDE_DEV_UID`
-* `CLAUDE_DEV_GID`
-* `CLAUDE_DEV_HOME_TMPFS_SIZE`
-* `CLAUDE_DEV_WORKSPACE_TMPFS_SIZE`
-* `CLAUDE_DEV_PROXY_SOCKET_CONTAINER_PATH`
-* `CLAUDE_DEV_PROXY_PORT`
-* `CLAUDE_DEV_KEYRING_GITHUB_KEY`
-* `CLAUDE_DEV_KEYRING_CLAUDE_KEY`
-* `CLAUDE_DEV_KEYRING_DEEPSEEK_KEY`
+* `ADDA_DEV_IMAGE`
+* `ADDA_DEV_USER`
+* `ADDA_DEV_UID`
+* `ADDA_DEV_GID`
+* `ADDA_DEV_HOME_TMPFS_SIZE`
+* `ADDA_DEV_WORKSPACE_TMPFS_SIZE`
+* `ADDA_DEV_PROXY_SOCKET_CONTAINER_PATH`
+* `ADDA_DEV_PROXY_PORT`
+* `ADDA_DEV_KEYRING_GITHUB_KEY`
+* `ADDA_DEV_KEYRING_CLAUDE_KEY`
+* `ADDA_DEV_KEYRING_DEEPSEEK_KEY`
 
 ---
 

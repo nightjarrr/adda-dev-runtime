@@ -190,8 +190,8 @@ Claude Code subagents run inside the parent `claude` process. They do not get se
 A session is created when work begins:
 
 ```bash
-claude-dev.sh
-claude-dev.sh <issue-id>
+adda-dev.sh
+adda-dev.sh <issue-id>
 ```
 
 It runs while work is active and is destroyed when the session exits. Resuming work creates a new runtime and reloads state from GitHub.
@@ -224,7 +224,7 @@ delta is installed as the git diff pager. All `git diff`, `git show`, `git log -
 
 The launcher creates a named host `tmux` session and re-enters itself inside that session. This keeps the launcher, Envoy sidecar lifecycle, and `docker run` under tmux control. If the terminal emulator crashes or closes, the tmux server keeps the session alive. Reattach using the printed tmux session name.
 
-The launcher also opens a `claude-dev shell` window (interactive bash in the Claude container) and a `claude-dev envoy logs` window (`docker logs -f` on the Envoy sidecar) in the same session.
+The launcher also opens a `adda-dev shell` window (interactive bash in the Claude container) and a `adda-dev envoy logs` window (`docker logs -f` on the Envoy sidecar) in the same session.
 
 ---
 
@@ -241,11 +241,11 @@ Both are stored in the host Secret Service keyring, retrieved by the launcher, a
 
 | Secret                  | Service      | Account    | Key                               |
 | ----------------------- | ------------ | ---------- | --------------------------------- |
-| Claude Code OAuth token | `claude-dev` | `claude`   | `oauth` (default)                 |
-| GitHub Token            | `claude-dev` | `github`   | repo-specific (e.g. `molim-token`) |
-| DeepSeek API key        | `claude-dev` | `deepseek` | `apikey` (default)                |
+| Claude Code OAuth token | `adda-dev` | `claude`   | `oauth` (default)                 |
+| GitHub Token            | `adda-dev` | `github`   | repo-specific (e.g. `acme-token`) |
+| DeepSeek API key        | `adda-dev` | `deepseek` | `apikey` (default)                |
 
-All entries use the `claude-dev` service namespace. `account` identifies the target system; `key` identifies the credential within that system and is configured per-repo in `claude-dev.env` via `CLAUDE_DEV_KEYRING_GITHUB_KEY`, `CLAUDE_DEV_KEYRING_CLAUDE_KEY`, and `CLAUDE_DEV_KEYRING_DEEPSEEK_KEY`. Multiple GitHub repos can coexist in one keyring by using distinct `key` values (e.g., `molim-token`, `otherrepo-token`).
+All entries use the `adda-dev` service namespace. `account` identifies the target system; `key` identifies the credential within that system and is configured per-repo in `adda-dev.env` via `ADDA_DEV_KEYRING_GITHUB_KEY`, `ADDA_DEV_KEYRING_CLAUDE_KEY`, and `ADDA_DEV_KEYRING_DEEPSEEK_KEY`. Multiple GitHub repos can coexist in one keyring by using distinct `key` values (e.g., `acme-token`, `otherrepo-token`).
 
 ### One-time bootstrap: Claude Code OAuth token
 
@@ -267,7 +267,7 @@ Procedure:
 
 ```bash
 secret-tool store --label='Claude Code OAuth' \
-  service claude-dev account claude key oauth
+  service adda-dev account claude key oauth
 ```
 
 ### One-time bootstrap: GitHub Token
@@ -276,10 +276,10 @@ Generate a fine-grained Personal Access Token in GitHub and store it directly in
 
 ```bash
 secret-tool store --label='Claude Code GitHub Token ({repo})' \
-  service claude-dev account github key {repo}-token
+  service adda-dev account github key {repo}-token
 ```
 
-Replace `{repo}` with the actual repository name (e.g., `molim`). The `{repo}-token` value must match `CLAUDE_DEV_KEYRING_GITHUB_KEY` in that repo's `claude-dev.env`. Using distinct values per repo enables simultaneous sessions against different repositories from the same keyring.
+Replace `{repo}` with the actual repository name (e.g., `acme`). The `{repo}-token` value must match `ADDA_DEV_KEYRING_GITHUB_KEY` in that repo's `adda-dev.env`. Using distinct values per repo enables simultaneous sessions against different repositories from the same keyring.
 
 Github token scoping and permissions are explained further in **GitHub Token scoping** section.
 
@@ -288,8 +288,8 @@ Github token scoping and permissions are explained further in **GitHub Token sco
 The launcher retrieves both tokens at runtime:
 
 ```bash
-CLAUDE_CODE_OAUTH_TOKEN=$(secret-tool lookup service claude-dev account claude key oauth)
-GITHUB_TOKEN_=$(secret-tool lookup service claude-dev account github key {repo}-token)
+CLAUDE_CODE_OAUTH_TOKEN=$(secret-tool lookup service adda-dev account claude key oauth)
+GITHUB_TOKEN_=$(secret-tool lookup service adda-dev account github key {repo}-token)
 ```
 
 If either lookup returns empty, the launcher fails fast with a bootstrap-procedure pointer.
@@ -360,8 +360,8 @@ Expected properties:
 Most applications understand HTTP proxies as `host:port`, not Unix sockets. The entrypoint therefore starts `socat` bridge inside the Claude container:
 
 ```text
-127.0.0.1:<CLAUDE_DEV_PROXY_PORT>
-  -> <CLAUDE_DEV_PROXY_SOCKET>
+127.0.0.1:<ADDA_DEV_PROXY_PORT>
+  -> <ADDA_DEV_PROXY_SOCKET>
 ```
 
 The entrypoint then exports:
@@ -495,10 +495,10 @@ Writable paths are explicit tmpfs mounts. The design assumes a single effective 
 The launcher/project configuration defines:
 
 ```bash
-CLAUDE_DEV_USER=node
-CLAUDE_DEV_UID=1000
-CLAUDE_DEV_GID=1000
-CLAUDE_DEV_HOME=/home/node
+ADDA_DEV_USER=node
+ADDA_DEV_UID=1000
+ADDA_DEV_GID=1000
+ADDA_DEV_HOME=/home/node
 ```
 
 The image must run as that user, or the entrypoint should warn that runtime UID/GID do not match the expected configuration.
@@ -509,7 +509,7 @@ Target writable mounts:
 
 | Path                 | Mode   | Exec?             | Purpose                                                                     |
 | -------------------- | ------ | ----------------- | --------------------------------------------------------------------------- |
-| `/home/${CLAUDE_DEV_USER}` | `0700` | yes               | Claude state, gh config, git config, uv/Python runtime state, shell config. |
+| `/home/${ADDA_DEV_USER}` | `0700` | yes               | Claude state, gh config, git config, uv/Python runtime state, shell config. |
 | `/workspace`         | `0700` | yes               | Repository checkout, project writes, test/build output.                     |
 | `/tmp`               | `0700` | no | Temporary files.                                                            |
 | `/var/tmp`           | `0700` | no | Temporary files for tools that use `/var/tmp`.                              |
@@ -522,8 +522,8 @@ Target writable mounts:
 Tmpfs sizes are configured by project/launcher variables, for example:
 
 ```bash
-CLAUDE_DEV_HOME_TMPFS_SIZE=500m
-CLAUDE_DEV_WORKSPACE_TMPFS_SIZE=200m
+ADDA_DEV_HOME_TMPFS_SIZE=500m
+ADDA_DEV_WORKSPACE_TMPFS_SIZE=200m
 ```
 
 Sizes are limits, not pre-allocated RAM reservations. Linux tmpfs consumes host memory/swap according to actual usage.
@@ -558,7 +558,7 @@ The harness lives in the project repository.
 
 ```text
 .devcontainer/
-  claude-dev/
+  adda-dev-runtime/
     Dockerfile                       # Claude dev image definition
     entrypoint.sh                    # in-container bootstrap/orchestration
     .claude.json.template            # Claude Code configuration template 
@@ -570,9 +570,9 @@ The harness lives in the project repository.
   ...                                # Claude Code project configuration
 
 scripts/
-  claude-dev.sh                      # host-side launcher
-  claude-dev.env                     # host side launcher configuration (per-project)
-  claude-dev.tmux.conf               # seed tmux config, copied only if ~/.tmux.conf is absent
+  adda-dev.sh                      # host-side launcher
+  adda-dev.env                     # host side launcher configuration (per-project)
+  adda-dev.tmux.conf               # seed tmux config, copied only if ~/.tmux.conf is absent
 
 .github/workflows/
   devenv.yml                         # target-state image build/publish workflow
@@ -605,22 +605,22 @@ Target tags:
 
 ---
 
-## Launcher script (`claude-dev.sh`)
+## Launcher script (`adda-dev.sh`)
 
 Host-side script. Its job is to create one ephemeral Claude dev runtime.
 
 Invocation:
 
 ```bash
-claude-dev.sh
-claude-dev.sh <issue-id>
-claude-dev.sh -- <cmd> [args...]
-claude-dev.sh <issue-id> -- <cmd> [args...]
+adda-dev.sh
+adda-dev.sh <issue-id>
+adda-dev.sh -- <cmd> [args...]
+adda-dev.sh <issue-id> -- <cmd> [args...]
 ```
 
 ### Per-project configuration
 
-The launcher reads `scripts/claude-dev.env`.
+The launcher reads `scripts/adda-dev.env`.
 
 Required target variables:
 
@@ -630,30 +630,30 @@ GITHUB_OWNER=
 GITHUB_REPO=
 
 # Claude dev container image configuration
-CLAUDE_DEV_IMAGE=
-CLAUDE_DEV_USER=node
-CLAUDE_DEV_UID=1000
-CLAUDE_DEV_GID=1000
-CLAUDE_DEV_HOME_TMPFS_SIZE=500m
-CLAUDE_DEV_WORKSPACE_TMPFS_SIZE=200m
+ADDA_DEV_IMAGE=
+ADDA_DEV_USER=node
+ADDA_DEV_UID=1000
+ADDA_DEV_GID=1000
+ADDA_DEV_HOME_TMPFS_SIZE=500m
+ADDA_DEV_WORKSPACE_TMPFS_SIZE=200m
 # Needs to be a file directly in /run to support the /run tmpfs
-CLAUDE_DEV_PROXY_SOCKET_CONTAINER_PATH=/run/proxy.sock
-CLAUDE_DEV_PROXY_PORT=8080
+ADDA_DEV_PROXY_SOCKET_CONTAINER_PATH=/run/proxy.sock
+ADDA_DEV_PROXY_PORT=8080
  
 # Envoy perimeter sidecar configuration
 ENVOY_IMAGE=envoyproxy/envoy:v1.33.14
 ENVOY_ADMIN_HOST_PORT=7001
 ENVOY_ADMIN_CONTAINER_PORT=9901
 ENVOY_ADMIN_ADDRESS=0.0.0.0
-ENVOY_SOCKET_CONTAINER_PATH=/run/claude-dev-proxy/proxy.sock
+ENVOY_SOCKET_CONTAINER_PATH=/run/adda-dev-proxy/proxy.sock
 ```
 
 ### Behavior
 
 1. Validate arguments.
 2. Verify host prerequisites: `docker`, `secret-tool`, `tmux`, `openssl`.
-3. Source `claude-dev.env` and validate required variables.
-4. Seed `~/.tmux.conf` from `scripts/claude-dev.tmux.conf` only if missing; source it best-effort.
+3. Source `adda-dev.env` and validate required variables.
+4. Seed `~/.tmux.conf` from `scripts/adda-dev.tmux.conf` only if missing; source it best-effort.
 5. If not already inside tmux, generate a session name, export it, and re-enter the launcher inside a named tmux session.
 6. Retrieve auth tokens from Secret Service keyring.
 7. Detect host timezone.
@@ -661,7 +661,7 @@ ENVOY_SOCKET_CONTAINER_PATH=/run/claude-dev-proxy/proxy.sock
 9. Render Envoy config from `.devcontainer/envoy/envoy.yaml.template` into the runtime directory.
 10. Start Envoy sidecar container with hardened flags.
 11. Wait for the Envoy Unix socket.
-12. Create `claude-dev shell` and `claude-dev envoy logs` windows in the primary tmux session.
+12. Create `adda-dev shell` and `adda-dev envoy logs` windows in the primary tmux session.
 13. Assemble and run the Claude dev container with:
 
     * `--rm -it`
@@ -701,7 +701,7 @@ Container-side script. It validates the runtime contract, starts the local proxy
 3. Configure Bash prompt to identify the container context, for example:
 
    ```text
-   [claude-dev {repo} #{issue}] /workspace$
+   [adda-dev {repo} #{issue}] /workspace$
    ```
 
 4. Verify `/workspace` is empty.
@@ -719,7 +719,7 @@ Container-side script. It validates the runtime contract, starts the local proxy
    * `/run` noexec;
    * no unexpected writable non-tmpfs mounts.
 
-6. Start `socat` bridge from `127.0.0.1:${CLAUDE_DEV_PROXY_PORT}` to `${CLAUDE_DEV_PROXY_SOCKET}`.
+6. Start `socat` bridge from `127.0.0.1:${ADDA_DEV_PROXY_PORT}` to `${ADDA_DEV_PROXY_SOCKET}`.
 
 7. Export proxy environment variables.
 
@@ -779,7 +779,7 @@ scrollback-limit = 100000000
 
 ### tmux
 
-The launcher uses tmux for survivability. It may seed user tmux config from `scripts/claude-dev.tmux.conf` only when `~/.tmux.conf` is absent. Existing user tmux config is never overwritten.
+The launcher uses tmux for survivability. It may seed user tmux config from `scripts/adda-dev.tmux.conf` only when `~/.tmux.conf` is absent. Existing user tmux config is never overwritten.
 
 Recommended seed behavior:
 

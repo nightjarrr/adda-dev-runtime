@@ -10,12 +10,12 @@ require_tool node
 require_tool claude
 
 # Validate AI harness env vars (Tier-2-specific; not checked by Tier 1)
-require_env CLAUDE_DEV_LLM_BACKEND true
+require_env ADDA_DEV_LLM_BACKEND true
 require_env CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC true
 require_env CLAUDE_CODE_VERSION true
 
 # Backend-specific env var validation
-case "${CLAUDE_DEV_LLM_BACKEND}" in
+case "${ADDA_DEV_LLM_BACKEND}" in
     anthropic)
         require_env CLAUDE_CODE_OAUTH_TOKEN
         ;;
@@ -30,7 +30,7 @@ case "${CLAUDE_DEV_LLM_BACKEND}" in
         require_env CLAUDE_CODE_EFFORT_LEVEL true
         ;;
     *)
-        die "unsupported CLAUDE_DEV_LLM_BACKEND='${CLAUDE_DEV_LLM_BACKEND}'. Supported backends: anthropic, deepseek."
+        die "unsupported ADDA_DEV_LLM_BACKEND='${ADDA_DEV_LLM_BACKEND}'. Supported backends: anthropic, deepseek."
         ;;
 esac
 
@@ -40,11 +40,11 @@ if [[ -d "${HOME}/.claude" ]] && [[ -n "$(ls -A "${HOME}/.claude" 2>/dev/null)" 
 fi
 
 mkdir -p "${HOME}/.claude"
-cp -r /usr/local/share/claude-dev/.claude/. "${HOME}/.claude/"
+cp -r /usr/local/share/adda-dev-runtime/.claude/. "${HOME}/.claude/"
 success "Overlay applied to ~/.claude."
 
 sed "s/__CLAUDE_CODE_VERSION__/${CLAUDE_CODE_VERSION}/" \
-    /usr/local/share/claude-dev/templates/.claude.json.template > "${HOME}/.claude.json"
+    /usr/local/share/adda-dev-runtime/templates/.claude.json.template > "${HOME}/.claude.json"
 chmod 600 "${HOME}/.claude.json"
 success "Initialized ~/.claude.json (lastOnboardingVersion: ${CLAUDE_CODE_VERSION})."
 

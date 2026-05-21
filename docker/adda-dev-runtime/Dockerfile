@@ -4,7 +4,7 @@
 #
 # This Dockerfile produces the adda-dev-runtime base image. It is
 # project-agnostic and AI-tool-agnostic. Higher-tier images (proto-adda,
-# dawe-claude-dev-runtime, per-project images) FROM this image and add
+# adda-dev-runtime, per-project images) FROM this image and add
 # AI tooling and project-specific dependencies.
 #
 # Pinned versions (update via chore Issue when bumping):
@@ -39,12 +39,12 @@ ENV DEBIAN_FRONTEND=noninteractive \
 #   - locales: for the en_US.UTF-8 locale
 #   - tzdata: zoneinfo files; required for run-time TZ env var resolution
 #   - ca-certificates, curl: TLS + bootstrap downloads
-#   - git: source control (used by the entrypoint and by Claude)
+#   - git: source control (used by the entrypoint and AI tooling)
 #   - tmux: in-container session survivability
 #   - jq: JSON parsing (entrypoint and helpers)
 #
 # Operational tooling:
-#   - bubblewrap: namespace-based sandbox used by Claude's `bash --sandbox`
+#   - bubblewrap: namespace-based sandbox used by the AI tool's `bash --sandbox`
 #   - ripgrep: fast code search
 #   - fd-find: fast file finder
 #
@@ -118,9 +118,9 @@ RUN curl -fsSL "https://github.com/dandavison/delta/releases/download/${DELTA_VE
 # Copied from docker/adda-dev-runtime/entrypoint.sh into the image at
 # build time; invoked as the container's ENTRYPOINT (see COMMON section).
 # ----------------------------------------------------------------------
-RUN mkdir -p /usr/local/libexec/claude-dev/entrypoint.d
-COPY docker/adda-dev-runtime/entrypoint.sh /usr/local/libexec/claude-dev/entrypoint.sh
-RUN chmod +x /usr/local/libexec/claude-dev/entrypoint.sh
+RUN mkdir -p /usr/local/libexec/adda-dev-runtime/entrypoint.d
+COPY docker/adda-dev-runtime/entrypoint.sh /usr/local/libexec/adda-dev-runtime/entrypoint.sh
+RUN chmod +x /usr/local/libexec/adda-dev-runtime/entrypoint.sh
 
 
 # ======================================================================
@@ -128,9 +128,9 @@ RUN chmod +x /usr/local/libexec/claude-dev/entrypoint.sh
 # ======================================================================
 
 # Create the runtime user explicitly. UID/GID align with the launcher's
-# CLAUDE_DEV_USER/UID/GID defaults. Higher-tier images FROM this image
+# ADDA_DEV_USER/UID/GID defaults. Higher-tier images FROM this image
 # and inherit the user without re-creating it.
-ARG USERNAME=node
+ARG USERNAME=adda
 ARG USER_UID=1000
 ARG USER_GID=1000
 RUN groupadd --gid ${USER_GID} ${USERNAME} \
@@ -144,5 +144,5 @@ WORKDIR /workspace
 # final command after bootstrap. CMD is overridable at `docker run` time
 # for troubleshooting (e.g., `docker run ... adda-dev-runtime ls /workspace`
 # bootstraps and runs ls instead of bash).
-ENTRYPOINT ["/usr/local/libexec/claude-dev/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/libexec/adda-dev-runtime/entrypoint.sh"]
 CMD ["/bin/bash"]
