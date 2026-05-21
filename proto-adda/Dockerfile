@@ -51,7 +51,7 @@ COPY proto-adda/.claude.json.template /usr/local/share/claude-dev/templates/.cla
 # quality-gates.sh — baked at fixed absolute path; overlay/scripts/ is
 # the source-of-truth in the repo but ships here, not to ~/
 # ----------------------------------------------------------------------
-COPY proto-adda/overlay/scripts/quality-gates.sh /usr/local/libexec/claude-dev/quality-gates.sh
+COPY proto-adda/overlay/scripts/quality-gates.sh.source /usr/local/libexec/claude-dev/quality-gates.sh
 RUN chmod +x /usr/local/libexec/claude-dev/quality-gates.sh
 
 # Restore runtime user before handoff.
