@@ -26,6 +26,7 @@ ENV NODE_VERSION=24.1.0
 RUN curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" \
         -o /tmp/node.tar.gz \
     && tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1 --no-same-owner \
+    && rm /usr/local/LICENSE /usr/local/CHANGELOG.md /usr/local/README.md \
     && rm /tmp/node.tar.gz
 
 # ----------------------------------------------------------------------
@@ -37,8 +38,8 @@ RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 # ----------------------------------------------------------------------
 # Bootstrap hook — sourced by Tier 1 entrypoint after BASE init
 # ----------------------------------------------------------------------
-COPY proto-adda/overlay/bootstrap.d/ /usr/local/lib/claude-dev/bootstrap.d/
-RUN chmod +x /usr/local/lib/claude-dev/bootstrap.d/*.sh
+COPY proto-adda/overlay/entrypoint.d/ /usr/local/libexec/claude-dev/entrypoint.d/
+RUN chmod +x /usr/local/libexec/claude-dev/entrypoint.d/*.sh
 
 # ----------------------------------------------------------------------
 # Overlay — staged in image; hook copies to ~/.claude/ at container start
@@ -50,9 +51,8 @@ COPY proto-adda/.claude.json.template /usr/local/share/claude-dev/templates/.cla
 # quality-gates.sh — baked at fixed absolute path; overlay/scripts/ is
 # the source-of-truth in the repo but ships here, not to ~/
 # ----------------------------------------------------------------------
-RUN mkdir -p /usr/local/lib/claude-dev/scripts
-COPY proto-adda/overlay/scripts/quality-gates.sh /usr/local/lib/claude-dev/scripts/quality-gates.sh
-RUN chmod +x /usr/local/lib/claude-dev/scripts/quality-gates.sh
+COPY proto-adda/overlay/scripts/quality-gates.sh /usr/local/libexec/claude-dev/quality-gates.sh
+RUN chmod +x /usr/local/libexec/claude-dev/quality-gates.sh
 
 # Restore runtime user before handoff.
 USER node

@@ -118,8 +118,9 @@ RUN curl -fsSL "https://github.com/dandavison/delta/releases/download/${DELTA_VE
 # Copied from docker/adda-dev-runtime/entrypoint.sh into the image at
 # build time; invoked as the container's ENTRYPOINT (see COMMON section).
 # ----------------------------------------------------------------------
-COPY docker/adda-dev-runtime/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+RUN mkdir -p /usr/local/libexec/claude-dev/entrypoint.d
+COPY docker/adda-dev-runtime/entrypoint.sh /usr/local/libexec/claude-dev/entrypoint.sh
+RUN chmod +x /usr/local/libexec/claude-dev/entrypoint.sh
 
 
 # ======================================================================
@@ -136,10 +137,6 @@ RUN groupadd --gid ${USER_GID} ${USERNAME} \
     && useradd --uid ${USER_UID} --gid ${USER_GID} \
        --create-home --shell /bin/bash ${USERNAME}
 
-# Hook directory — empty in Tier 1. proto-adda / Tier 2 / Tier 3 drop
-# *.sh files here via Dockerfile COPY; Tier 1 entrypoint sources them.
-RUN mkdir -p /usr/local/lib/claude-dev/bootstrap.d
-
 USER ${USERNAME}
 WORKDIR /workspace
 
@@ -147,5 +144,5 @@ WORKDIR /workspace
 # final command after bootstrap. CMD is overridable at `docker run` time
 # for troubleshooting (e.g., `docker run ... adda-dev-runtime ls /workspace`
 # bootstraps and runs ls instead of bash).
-ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/libexec/claude-dev/entrypoint.sh"]
 CMD ["/bin/bash"]

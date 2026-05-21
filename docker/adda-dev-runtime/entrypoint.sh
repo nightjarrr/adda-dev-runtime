@@ -647,15 +647,15 @@ resolve_working_branch() {
 resolve_working_branch
 
 # ======================================================================
-# Bootstrap hooks — sourced by Tier 1 entrypoint after BASE init and
+# Entrypoint hooks — sourced by Tier 1 entrypoint after BASE init and
 # before CMD handoff. Tier 1 ships nothing here; proto/project layers
 # drop *.sh files via Dockerfile COPY. Sourced (not subprocess) so
 # hooks can mutate env for downstream tooling and CMD.
 # ======================================================================
 
-if [[ -d /usr/local/lib/claude-dev/bootstrap.d ]]; then
+if [[ -d /usr/local/libexec/claude-dev/entrypoint.d ]]; then
     shopt -s nullglob
-    hooks=(/usr/local/lib/claude-dev/bootstrap.d/*.sh)
+    hooks=(/usr/local/libexec/claude-dev/entrypoint.d/*.sh)
     shopt -u nullglob
     if (( ${#hooks[@]} > 0 )); then
         section "Running bootstrap hooks"
