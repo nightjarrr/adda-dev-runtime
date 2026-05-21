@@ -30,7 +30,7 @@ SCRIPT_PATH="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")"
 PROJECT_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )"
 
 ENV_FILE="${SCRIPT_DIR}/claude-dev.env"
-ENVOY_DIR="${PROJECT_DIR}/.devcontainer/envoy"
+ENVOY_DIR="${PROJECT_DIR}/docker/envoy"
 ENVOY_TEMPLATE="${ENVOY_DIR}/envoy.yaml.template"
 
 TMUX_SEED_CONFIG="${SCRIPT_DIR}/claude-dev.tmux.conf"
