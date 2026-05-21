@@ -554,20 +554,15 @@ export GH_REPO="${GITHUB_OWNER}/${GITHUB_REPO}"
 success "GitHub authentication initialized."
 
 # ----------------------------------------------------------------------
-# Configure git identity
-# Author is "Claude Code (authorized by <gh-user>)", email uses GitHub's
-# noreply format keyed by the human's numeric user ID so the avatar
-# routes to the human's profile.
+# Fetch GitHub user details
+# Populate GH_USER_ID and GH_USERNAME so downstream hooks (e.g. the
+# proto-adda Tier 2 hook) can use them without making their own API calls.
 # ----------------------------------------------------------------------
-section "Configuring git identity"
+section "Fetching GitHub user details"
 
 GH_USER_ID="$(gh api user --jq .id)"
 GH_USERNAME="$(gh api user --jq .login)"
-GIT_AUTHOR_NAME="Claude Code (authorized by ${GH_USERNAME})"
-GIT_AUTHOR_EMAIL="${GH_USER_ID}+${GH_USERNAME}@users.noreply.github.com"
-git config --global user.name  "${GIT_AUTHOR_NAME}"
-git config --global user.email "${GIT_AUTHOR_EMAIL}"
-success "Author: ${GIT_AUTHOR_NAME} <${GIT_AUTHOR_EMAIL}>."
+success "GitHub user: ${GH_USERNAME} (id=${GH_USER_ID})."
 
 # ----------------------------------------------------------------------
 # Clone the project repository

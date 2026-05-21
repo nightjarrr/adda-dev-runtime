@@ -50,3 +50,13 @@ success "Initialized ~/.claude.json (lastOnboardingVersion: ${CLAUDE_CODE_VERSIO
 
 mkdir -p /workspace/.claude/memory
 success "Created /workspace/.claude/memory."
+
+# Configure git identity.
+# Author is "Claude Code (authorized by <gh-user>)", email uses GitHub's
+# noreply format keyed by the human's numeric user ID so the avatar
+# routes to the human's profile.
+GIT_AUTHOR_NAME="Claude Code (authorized by ${GH_USERNAME})"
+GIT_AUTHOR_EMAIL="${GH_USER_ID}+${GH_USERNAME}@users.noreply.github.com"
+git config --global user.name  "${GIT_AUTHOR_NAME}"
+git config --global user.email "${GIT_AUTHOR_EMAIL}"
+success "Git identity: ${GIT_AUTHOR_NAME} <${GIT_AUTHOR_EMAIL}>."
