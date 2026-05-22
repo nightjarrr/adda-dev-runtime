@@ -63,4 +63,4 @@ jobs:
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
-          files: launcher/adda-dev.sh
+          files: launcher/*
