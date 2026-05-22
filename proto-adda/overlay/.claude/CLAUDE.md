@@ -1,6 +1,6 @@
 # ADDA Dev Runtime
 
-Hardened, ephemeral, Docker container-based runtime for agentic development. Design and current state are in `docs/CLAUDE-DEV-ENVIRONMENT.md` and `docs/CURRENT-STATE.md`.
+Hardened, ephemeral, Docker container-based runtime for agentic development. Design and current state are in `docs/adda-dev-runtime.md` and `docs/adda-dev-runtime-current-state.md`.
 
 ## Roles
 

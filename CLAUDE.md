@@ -1,7 +1,7 @@
 # ADDA Dev Runtime
 
 This repo *is* the dev runtime. Design and current state are in
-`docs/CLAUDE-DEV-ENVIRONMENT.md` and `docs/CURRENT-STATE.md`.
+`docs/adda-dev-runtime.md` and `docs/adda-dev-runtime-current-state.md`.
 
 ## Repo layout
 
@@ -9,7 +9,7 @@ This repo *is* the dev runtime. Design and current state are in
 - `proto-adda/` — Tier 2 AI-harness image. Ships an overlay
   (`proto-adda/overlay/`) that the Tier 1 entrypoint applies to `~/.claude/`
   at container start.
-- `launcher/claude-dev.sh` — host-side launcher.
+- `launcher/adda-dev.sh` — host-side launcher.
 - `docker/envoy/` — Envoy proxy template.
 
 ## Working on the runtime from inside the runtime
