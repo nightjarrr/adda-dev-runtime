@@ -486,7 +486,7 @@ wait_for_envoy() {
 # ----------------------------------------------------------------------
 # Tmux window setup
 # ----------------------------------------------------------------------
-CLAUDE_CONTAINER="adda-dev-claude-${RUN_ID}"
+ADDA_DEV_CONTAINER="adda-dev-${RUN_ID}"
 
 setup_tmux_windows() {
     if [[ -z "${TMUX_SESSION:-}" ]]; then
@@ -495,8 +495,8 @@ setup_tmux_windows() {
     fi
 
     if ! tmux new-window -t "${TMUX_SESSION}" -n "adda-dev shell" \
-        "c=0; until docker inspect -f '{{.State.Running}}' ${CLAUDE_CONTAINER} 2>/dev/null | grep -q true; do sleep 1; c=\$((c+1)); if [[ \$c -ge 30 ]]; then echo 'Timed out waiting for Claude container'; exit 1; fi; done; docker exec -it ${CLAUDE_CONTAINER} bash"; then
-        warning "failed to create 'adda-dev shell' tmux window; to open manually: tmux new-window -t '${TMUX_SESSION}' -n 'adda-dev shell' 'docker exec -it ${CLAUDE_CONTAINER} bash'"
+        "c=0; until docker inspect -f '{{.State.Running}}' ${ADDA_DEV_CONTAINER} 2>/dev/null | grep -q true; do sleep 1; c=\$((c+1)); if [[ \$c -ge 30 ]]; then echo 'Timed out waiting for Claude container'; exit 1; fi; done; docker exec -it ${ADDA_DEV_CONTAINER} bash"; then
+        warning "failed to create 'adda-dev shell' tmux window; to open manually: tmux new-window -t '${TMUX_SESSION}' -n 'adda-dev shell' 'docker exec -it ${ADDA_DEV_CONTAINER} bash'"
     fi
 
     if ! tmux new-window -t "${TMUX_SESSION}" -n "adda-dev envoy logs" \
@@ -509,11 +509,11 @@ setup_tmux_windows() {
 }
 
 # ----------------------------------------------------------------------
-# Build Claude container docker run argument list
+# Build dev container docker run argument list
 # ----------------------------------------------------------------------
 DOCKER_ARGS=(
   run --rm -it
-  --name "${CLAUDE_CONTAINER}"
+  --name "${ADDA_DEV_CONTAINER}"
 
   -e GITHUB_OWNER
   -e GITHUB_REPO
@@ -550,8 +550,7 @@ if [[ -n "$ISSUE_ID" ]]; then
     DOCKER_ARGS+=(-e ISSUE_ID)
 fi
 
-# Local image tag for v0; switch to digest-pinned GHCR reference at Step 13.
-DOCKER_ARGS+=("${ADDA_DEV_IMAGE}:dev")
+DOCKER_ARGS+=("${ADDA_DEV_IMAGE}")
 
 # If a command override was given, append it after the image reference.
 # Docker passes everything after the image to the container's CMD, which
