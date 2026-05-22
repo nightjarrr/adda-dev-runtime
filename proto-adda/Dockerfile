@@ -14,7 +14,7 @@
 # ======================================================================
 
 ARG BASE_TAG=latest
-FROM adda-dev-runtime:${BASE_TAG}
+FROM ghcr.io/nightjarrr/adda-dev-runtime:${BASE_TAG}
 
 # Build steps require root to write to /usr/local; Tier 1 leaves USER as adda.
 USER root
