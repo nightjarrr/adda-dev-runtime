@@ -868,7 +868,13 @@ GitHub-aware operations happen inside the container.
 
 ### No floating dependency versions
 
-Container/toolchain dependencies and project code dependencies must use pinned or lockfile-frozen resolution. Runtime package-registry access for project dependencies is allowed only in locked/frozen mode; floating versions would let upstream changes enter the environment without review.
+All external dependencies are pinned. Floating versions let upstream changes enter the environment without review — this policy eliminates that risk. Pinning operates at three layers:
+
+1. **Application and tool versions** — exact versions are pinned in the Dockerfile via `ENV` variables and hard-coded curl download URLs (GitHub CLI, Micro, Delta, Node.js, Claude Code). The version comment block at the top of `docker/adda-dev-runtime/Dockerfile` is the single visible source of truth; bumps go through an explicit chore Issue.
+
+2. **Base image** — the Tier 1 `FROM` line is pinned to the current Debian 12 point release (`debian:12.11-slim`) rather than the rolling `debian:bookworm-slim` tag. The version comment block tracks the pin date; bumping requires an explicit chore Issue.
+
+3. **apt-installed packages** — package versions are *not* pinned to specific apt version strings. Debian stable's release policy is itself the structural pin: packages in `stable` only receive security and critical bug-fix updates within a minor release cycle, making the distribution the effective version anchor. Pinning individual apt package versions would be brittle (version strings differ between architectures and snapshot dates) without meaningfully improving reproducibility. Hadolint DL3008 is suppressed inline with a rationale comment for this reason.
 
 ---
 

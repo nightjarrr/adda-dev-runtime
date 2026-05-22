@@ -8,7 +8,7 @@
 # AI tooling and project-specific dependencies.
 #
 # Pinned versions (update via chore Issue when bumping):
-#   Base image:    debian:bookworm-slim
+#   Base image:    debian:12.11-slim              # 2026-05-22 (current Debian 12 point release)
 #   GitHub CLI:    2.91.0                        # Apr 22, 2026
 #   Micro:         2.0.15
 #   Delta:         0.19.2
@@ -19,7 +19,7 @@
 # BASE — generic dev runtime (project-agnostic, AI-tool-agnostic)
 # ======================================================================
 
-FROM debian:bookworm-slim
+FROM debian:12.11-slim
 
 # ----------------------------------------------------------------------
 # Environment defaults that apply for both build and runtime.
@@ -53,6 +53,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 #     container-internal HTTP proxy (e.g., 127.0.0.1:8080) to
 #     the sidecar proxy listening socket (mounted as Unix socket)
 # ----------------------------------------------------------------------
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
         locales \
         tzdata \
@@ -73,7 +74,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ----------------------------------------------------------------------
 RUN curl -fsSL "https://github.com/cli/cli/releases/download/v2.91.0/gh_2.91.0_linux_amd64.deb" \
         -o /tmp/gh.deb \
-    && apt-get install -y /tmp/gh.deb \
+    && apt-get install -y --no-install-recommends /tmp/gh.deb \
     && rm /tmp/gh.deb \
     && rm -rf /var/lib/apt/lists/*
 
