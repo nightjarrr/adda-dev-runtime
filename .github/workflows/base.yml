@@ -29,6 +29,9 @@ jobs:
       - name: Build adda-dev-runtime
         run: docker build -t adda-dev-runtime:ci -f docker/adda-dev-runtime/Dockerfile .
 
+      - name: Tag adda-dev-runtime for proto-adda build
+        run: docker tag adda-dev-runtime:ci ghcr.io/nightjarrr/adda-dev-runtime:ci
+
       - name: Build proto-adda
         run: docker build -t proto-adda:ci --build-arg BASE_TAG=ci -f proto-adda/Dockerfile .
 
