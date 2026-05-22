@@ -224,7 +224,7 @@ delta is installed as the git diff pager. All `git diff`, `git show`, `git log -
 
 The launcher creates a named host `tmux` session and re-enters itself inside that session. This keeps the launcher, Envoy sidecar lifecycle, and `docker run` under tmux control. If the terminal emulator crashes or closes, the tmux server keeps the session alive. Reattach using the printed tmux session name.
 
-The launcher also opens a `adda-dev shell` window (interactive bash in the Claude container) and a `adda-dev envoy logs` window (`docker logs -f` on the Envoy sidecar) in the same session.
+The launcher also opens a `adda-dev shell` window (interactive bash in the ADDA Dev Runtime container) and a `adda-dev envoy logs` window (`docker logs -f` on the Envoy sidecar) in the same session.
 
 ---
 
@@ -495,10 +495,10 @@ Writable paths are explicit tmpfs mounts. The design assumes a single effective 
 The launcher/project configuration defines:
 
 ```bash
-ADDA_DEV_USER=node
+ADDA_DEV_USER=adda
 ADDA_DEV_UID=1000
 ADDA_DEV_GID=1000
-ADDA_DEV_HOME=/home/node
+ADDA_DEV_HOME=/home/adda
 ```
 
 The image must run as that user, or the entrypoint should warn that runtime UID/GID do not match the expected configuration.
@@ -629,9 +629,9 @@ Required target variables:
 GITHUB_OWNER=
 GITHUB_REPO=
 
-# Claude dev container image configuration
+# ADDA Dev Runtime container image configuration
 ADDA_DEV_IMAGE=
-ADDA_DEV_USER=node
+ADDA_DEV_USER=adda
 ADDA_DEV_UID=1000
 ADDA_DEV_GID=1000
 ADDA_DEV_HOME_TMPFS_SIZE=500m

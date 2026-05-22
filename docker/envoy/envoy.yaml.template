@@ -1,5 +1,5 @@
 # ======================================================================
-# adda-dev egress proxy
+# ADDA Dev Runtime egress proxy
 #
 # Envoy HTTP/HTTPS forward proxy reachable through a Unix domain socket.
 # Intended to be used from a networkless container through a local

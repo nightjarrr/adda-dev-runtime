@@ -1,4 +1,4 @@
-# adda-dev Container — Current State / Handover
+# ADDA Dev Runtime — Current State / Handover
 
 Purpose: dense implementation-state companion to `adda-dev-runtime.md`. The master doc describes target state. This file describes what is currently implemented, what is known to work, what is intentionally deferred, and what remains to do.
 
@@ -53,7 +53,7 @@ The overlay is staged in the image at build time under `/usr/local/share/adda-de
 ## Current status summary
 
 * The project has moved from the original in-container firewall design to a host/sidecar-enforced proxy design.
-* adda-dev container now runs successfully with:
+* ADDA Dev Runtime container now runs successfully with:
 
   * `--network none`
   * `--cap-drop ALL`
@@ -61,7 +61,7 @@ The overlay is staged in the image at build time under `/usr/local/share/adda-de
   * `--read-only`
   * explicit tmpfs writable mounts
   * proxy egress via mounted Unix socket + in-container `socat` bridge
-* Envoy sidecar runs as a separate container, outside the adda-dev container.
+* Envoy sidecar runs as a separate container, outside the ADDA Dev Runtime container.
 * Envoy currently works as a dynamic forward proxy over Unix domain socket.
 * Envoy currently allows all destinations during dogfooding. Domain allow-list exists conceptually/configurationally but is not enforced yet.
 * Current priority changed from completing all hardening/publishing/allow-list work to dogfooding the container early.
@@ -75,8 +75,8 @@ The overlay is staged in the image at build time under `/usr/local/share/adda-de
 * Host launcher: `launcher/adda-dev.sh`.
 * Launcher config: `launcher/adda-dev.env` (gitignored; from `adda-dev.env.example`).
 * Tmux seed config: `launcher/adda-dev.tmux.conf`.
-* adda-dev container Dockerfile: `docker/adda-dev-runtime/Dockerfile`.
-* adda-dev container entrypoint: `docker/adda-dev-runtime/entrypoint.sh`.
+* ADDA Dev Runtime container Dockerfile: `docker/adda-dev-runtime/Dockerfile`.
+* ADDA Dev Runtime container entrypoint: `docker/adda-dev-runtime/entrypoint.sh`.
 * Envoy config template: `docker/envoy/envoy.yaml.template`.
 
 ---
@@ -84,11 +84,11 @@ The overlay is staged in the image at build time under `/usr/local/share/adda-de
 ## Runtime architecture actually implemented
 
 * Launcher starts one Envoy sidecar container per Claude session.
-* Launcher then starts one adda-dev container per Claude session.
-* adda-dev container has no Docker network: `--network none`.
+* Launcher then starts one ADDA Dev Runtime container per Claude session.
+* ADDA Dev Runtime container has no Docker network: `--network none`.
 * Envoy sidecar has normal egress network and performs DNS/upstream connections.
 * Envoy listens on a Unix socket in a launcher-created runtime directory.
-* Launcher bind-mounts the Envoy socket into adda-dev container as `/run/proxy.sock`.
+* Launcher bind-mounts the Envoy socket into ADDA Dev Runtime container as `/run/proxy.sock`.
 * Claude entrypoint starts `socat`:
   * listens on `127.0.0.1:${ADDA_DEV_PROXY_PORT}`
   * forwards to `/run/proxy.sock`
@@ -121,9 +121,9 @@ The overlay is staged in the image at build time under `/usr/local/share/adda-de
 * Launcher renders Envoy config from `.devcontainer/envoy/envoy.yaml.template`.
 * Launcher starts Envoy sidecar detached with `--rm`.
 * Launcher exposes Envoy admin on host loopback, currently `127.0.0.1:7001`.
-* Launcher waits for Envoy socket before starting adda-dev container.
-* Launcher creates two additional windows in the primary tmux session: `adda-dev shell` (interactive bash into adda-dev container) and `adda-dev envoy logs` (`docker logs -f ${ENVOY_CONTAINER}`).
-* Launcher starts adda-dev container interactively with `docker run --rm -it --name ${CLAUDE_CONTAINER}`.
+* Launcher waits for Envoy socket before starting ADDA Dev Runtime container.
+* Launcher creates two additional windows in the primary tmux session: `adda-dev shell` (interactive bash into ADDA Dev Runtime container) and `adda-dev envoy logs` (`docker logs -f ${ENVOY_CONTAINER}`).
+* Launcher starts ADDA Dev Runtime container interactively with `docker run --rm -it --name ${CLAUDE_CONTAINER}`.
 * Launcher cleanup stops Envoy container and removes runtime dir on exit.
 
 ---
@@ -137,7 +137,7 @@ The overlay is staged in the image at build time under `/usr/local/share/adda-de
 
 ---
 
-## adda-dev container current `docker run` shape
+## ADDA Dev Runtime container current `docker run` shape
 
 Current important flags:
 
@@ -171,7 +171,7 @@ Current observed working tmpfs constraints during testing:
 * Envoy sidecar container starts and admin UI loads.
 * Envoy listens on Unix domain socket.
 * Unix socket verified directly with `curl --unix-socket` during smoke test.
-* `socat` TCP-to-UDS bridge verified on host and in adda-dev container.
+* `socat` TCP-to-UDS bridge verified on host and in ADDA Dev Runtime container.
 * Envoy dynamic forward proxy config works for:
 
   * plain HTTP proxy requests
@@ -204,7 +204,7 @@ Current observed working tmpfs constraints during testing:
 * For plain HTTP, authority may be `host` or `host:port`.
 * Allow-list entries should account for both forms where needed.
 * Dynamic forward proxy cluster remains appropriate; allow-list restricts it before DNS/upstream connection.
-* DNS for upstreams happens in Envoy sidecar, not adda-dev container.
+* DNS for upstreams happens in Envoy sidecar, not ADDA Dev Runtime container.
 
 ---
 
@@ -237,7 +237,7 @@ Policy clarification:
 * Prints section headers, warnings, and green check success lines.
 * Validates required env vars.
 * Configures ephemeral Bash prompt in `$HOME/.bashrc`.
-* Prompt includes repo and optional issue, e.g. `[adda-dev adda-dev-runtime #42] /workspace$`.
+* Prompt includes repo and optional issue, e.g. `[adda-dev acme-repo #42] /workspace$`.
 * Verifies `/workspace` is empty before clone.
 * Runs warning/success diagnostics for:
   * network mode: loopback-only, no default route
@@ -275,8 +275,8 @@ Policy clarification:
 
 * Launcher creates primary tmux session with three windows:
 
-  * `adda-dev primary` — adda-dev container (`docker run`)
-  * `adda-dev shell` — interactive `docker exec bash` into adda-dev container
+  * `adda-dev primary` — ADDA Dev Runtime container (`docker run`)
+  * `adda-dev shell` — interactive `docker exec bash` into ADDA Dev Runtime container
   * `adda-dev envoy logs` — `docker logs -f ${ENVOY_CONTAINER}`
 * `Ctrl-b d` detaches from tmux without killing underlying command.
 * Tmux seed config is copied to `~/.tmux.conf` only if missing.

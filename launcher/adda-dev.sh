@@ -1,6 +1,6 @@
 #!/bin/bash
 # ======================================================================
-# adda-dev.sh — adda dev environment launcher
+# adda-dev.sh — ADDA Dev Runtime launcher
 #
 # Single purpose: start the container.
 # Reads project identity from adda-dev.env, retrieves auth tokens from
@@ -567,5 +567,5 @@ start_envoy
 wait_for_envoy
 setup_tmux_windows
 
-echo "Starting adda dev container..."
+echo "Starting ADDA Dev Runtime container..."
 docker "${DOCKER_ARGS[@]}"

@@ -41,7 +41,7 @@ fi
 
 mkdir -p "${HOME}/.claude"
 cp -r /usr/local/share/adda-dev-runtime/.claude/. "${HOME}/.claude/"
-success "Overlay applied to ~/.claude."
+success "Claude configuration initialized in ~/.claude."
 
 sed "s/__CLAUDE_CODE_VERSION__/${CLAUDE_CODE_VERSION}/" \
     /usr/local/share/adda-dev-runtime/templates/.claude.json.template > "${HOME}/.claude.json"
