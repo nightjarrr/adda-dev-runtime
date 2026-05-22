@@ -1,0 +1,54 @@
+name: build-and-lint
+
+on:
+  workflow_call:
+
+jobs:
+  build-and-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: shellcheck
+        run: |
+          shellcheck \
+            docker/adda-dev-runtime/entrypoint.sh \
+            launcher/adda-dev.sh \
+            proto-adda/overlay/entrypoint.d/10-claude-config.sh
+
+      - name: hadolint (adda-dev-runtime)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: docker/adda-dev-runtime/Dockerfile
+
+      - name: hadolint (proto-adda)
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: proto-adda/Dockerfile
+
+      - name: Build adda-dev-runtime
+        run: docker build -t adda-dev-runtime:ci -f docker/adda-dev-runtime/Dockerfile .
+
+      - name: Build proto-adda
+        run: docker build -t proto-adda:ci --build-arg BASE_TAG=ci -f proto-adda/Dockerfile .
+
+      - name: Smoke test — adda-dev-runtime
+        run: |
+          docker run --rm --entrypoint sh adda-dev-runtime:ci -c '
+            set -eu
+            [ "$(whoami)" = "adda" ]
+            [ "$(id -u)" = "1000" ]
+            command -v git >/dev/null
+            command -v gh >/dev/null
+            command -v socat >/dev/null
+            test -x /usr/local/libexec/adda-dev-runtime/entrypoint.sh
+          '
+
+      - name: Smoke test — proto-adda
+        run: |
+          docker run --rm --entrypoint sh proto-adda:ci -c '
+            set -eu
+            [ "$(whoami)" = "adda" ]
+            [ "$(id -u)" = "1000" ]
+            test -d /usr/local/share/adda-dev-runtime/.claude
+          '
