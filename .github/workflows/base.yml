@@ -16,23 +16,23 @@ jobs:
             launcher/adda-dev.sh \
             proto-adda/overlay/entrypoint.d/10-claude-config.sh
 
-      - name: hadolint (Tier 1)
+      - name: hadolint (adda-dev-runtime)
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: docker/adda-dev-runtime/Dockerfile
 
-      - name: hadolint (proto)
+      - name: hadolint (proto-adda)
         uses: hadolint/hadolint-action@v3.1.0
         with:
           dockerfile: proto-adda/Dockerfile
 
-      - name: Build Tier 1
+      - name: Build adda-dev-runtime
         run: docker build -t adda-dev-runtime:ci -f docker/adda-dev-runtime/Dockerfile .
 
-      - name: Build proto
+      - name: Build proto-adda
         run: docker build -t proto-adda:ci --build-arg BASE_TAG=ci -f proto-adda/Dockerfile .
 
-      - name: Smoke test — Tier 1
+      - name: Smoke test — adda-dev-runtime
         run: |
           docker run --rm --entrypoint sh adda-dev-runtime:ci -c '
             set -eu
@@ -44,7 +44,7 @@ jobs:
             test -x /usr/local/libexec/adda-dev-runtime/entrypoint.sh
           '
 
-      - name: Smoke test — proto
+      - name: Smoke test — proto-adda
         run: |
           docker run --rm --entrypoint sh proto-adda:ci -c '
             set -eu
