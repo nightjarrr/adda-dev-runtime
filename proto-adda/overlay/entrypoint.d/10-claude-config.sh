@@ -36,7 +36,7 @@ esac
 
 # Die if ~/.claude already exists and is non-empty
 if [[ -d "${HOME}/.claude" ]] && [[ -n "$(ls -A "${HOME}/.claude" 2>/dev/null)" ]]; then
-    die "~/.claude already exists and is non-empty; overlay cannot be applied."
+    die "${HOME}/.claude already exists and is non-empty; overlay cannot be applied."
 fi
 
 mkdir -p "${HOME}/.claude"

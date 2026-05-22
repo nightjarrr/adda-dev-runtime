@@ -57,6 +57,9 @@ section "Welcome to ephemeral ADDA Dev Runtime"
 # ----------------------------------------------------------------------
 section "Validating environment"
 
+# shellcheck disable=SC2317
+# Why: function body runs via `trap bootstrap_failure EXIT`; shellcheck
+# does not follow trap-bound execution paths.
 bootstrap_failure() {
     printf '\n\033[1;31m==> %s\033[0m\n' "Entrypoint bootstrap failed, ADDA Dev Runtime cannot proceed."
     read -r -s -n 1 -p $'\nPress any key to exit the container...' _
@@ -441,7 +444,7 @@ verify_filesystem_hardening() {
     # Ignore expected Docker/pseudo filesystems and Docker-managed config
     # file mounts. Warn on unexpected writable non-tmpfs mounts.
     local unexpected_mounts=""
-    while read -r source target fstype options rest; do
+    while read -r _source target fstype options rest; do
         [[ ",${options}," == *",rw,"* ]] || continue
 
         case "$fstype" in
@@ -597,7 +600,12 @@ resolve_working_branch() {
             die "issue #${ISSUE_ID} not found in ${GH_REPO}."
         fi
 
-        local query_result="$(gh api graphql \
+        local query_result
+        # shellcheck disable=SC2016
+        # Why: $owner/$repo/$number are GraphQL variables resolved by the
+        # GraphQL parser via the -F flags above; single quotes are required
+        # to prevent shell expansion of these tokens.
+        query_result="$(gh api graphql \
             -F owner="${GITHUB_OWNER}" \
             -F repo="${GITHUB_REPO}" \
             -F number="${ISSUE_ID}" \
@@ -617,8 +625,10 @@ resolve_working_branch() {
             die "issue #${ISSUE_ID} not returned by GraphQL API in ${GH_REPO}."
         fi
 
-        local linked_branches="$(echo "${query_result}" | jq -r '.data.repository.issue.linkedBranches.nodes | map(.ref.name)')"
-        local linked_count="$(echo "${linked_branches}" | jq 'length')"
+        local linked_branches
+        linked_branches="$(echo "${query_result}" | jq -r '.data.repository.issue.linkedBranches.nodes | map(.ref.name)')"
+        local linked_count
+        linked_count="$(echo "${linked_branches}" | jq 'length')"
 
         case "${linked_count}" in
             0)
@@ -626,7 +636,8 @@ resolve_working_branch() {
                 echo "Branch creation is the SDLC's spec phase responsibility."
                 ;;
             1)
-                local branch="$(echo "${linked_branches}" | jq -r '.[0]')"
+                local branch
+                branch="$(echo "${linked_branches}" | jq -r '.[0]')"
                 echo "Issue #${ISSUE_ID}: one linked branch (${branch}); checking out."
                 git checkout "${branch}"
                 success "Checked out linked branch ${branch} for Issue #${ISSUE_ID}."
@@ -656,6 +667,10 @@ if [[ -d /usr/local/libexec/adda-dev-runtime/entrypoint.d ]]; then
         section "Running bootstrap hooks"
         for hook in "${hooks[@]}"; do
             echo "Sourcing ${hook}"
+            # shellcheck disable=SC1090
+            # Why: hooks are discovered at runtime via glob over
+            # /usr/local/libexec/adda-dev-runtime/entrypoint.d/*.sh; the source
+            # path is intentionally dynamic.
             source "${hook}"
         done
         success "Bootstrap hooks complete."
@@ -686,6 +701,10 @@ echo
 # - drop into interactive bash when CMD exits
 # ----------------------------------------------------------------------
 
+# shellcheck disable=SC2317,SC1083
+# Why: SC2317 — function body runs via `trap git_trail EXIT`.
+# SC1083 — `@{u}` is git revision syntax (upstream tracking branch),
+# not shell brace expansion.
 git_trail() {
     section "Git state on exit"
     git -C /workspace status || true
