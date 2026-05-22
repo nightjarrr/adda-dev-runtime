@@ -4,7 +4,7 @@
 #
 # This Dockerfile produces the adda-dev-runtime base image. It is
 # project-agnostic and AI-tool-agnostic. Higher-tier images (proto-adda,
-# adda-dev-runtime, per-project images) FROM this image and add
+# dawe-claude-dev-runtime, per-project images) FROM this image and add
 # AI tooling and project-specific dependencies.
 #
 # Pinned versions (update via chore Issue when bumping):
