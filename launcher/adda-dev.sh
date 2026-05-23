@@ -60,6 +60,9 @@ Options:
   --backend=BACKEND       Same as --backend BACKEND.
   --anthropic             Shortcut for --backend anthropic.
   --deepseek              Shortcut for --backend deepseek.
+  --no-tmux               Bypass tmux session management; run launcher inline.
+                          Used internally for re-entry detection. Also useful for
+                          debugging launcher or entrypoint failures.
   -h, --help              Show this help.
 
 Arguments:
@@ -127,6 +130,7 @@ pull_if_not_local() {
 # ----------------------------------------------------------------------
 ISSUE_ID=""
 CLI_BACKEND=""
+IS_NO_TMUX=0
 CMD_OVERRIDE=()
 POSITIONAL=()
 SEPARATOR_FOUND=0
@@ -168,6 +172,9 @@ while [[ $# -gt 0 ]]; do
       ;;
     --deepseek)
       CLI_BACKEND="deepseek"
+      ;;
+    --no-tmux)
+      IS_NO_TMUX=1
       ;;
     --*)
       usage
@@ -301,9 +308,7 @@ ensure_tmux_config() {
     fi
 }
 
-if [[ -z "${TMUX:-}" ]]; then
-    ensure_tmux_config
-
+if [[ "$IS_NO_TMUX" -eq 0 ]]; then
     SUFFIX="$(openssl rand -hex 2)"
     if [[ -n "$ISSUE_ID" ]]; then
         TMUX_SESSION="${GITHUB_OWNER}-${GITHUB_REPO}-${ISSUE_ID}-${SUFFIX}"
@@ -313,8 +318,19 @@ if [[ -z "${TMUX:-}" ]]; then
     export TMUX_SESSION
     echo "tmux session: ${TMUX_SESSION}"
 
-    TMUX_COMMAND="$(quote_command "$SCRIPT_PATH" "${ORIGINAL_ARGS[@]}")"
-    exec tmux new-session -s "${TMUX_SESSION}" -n "adda-dev primary" "${TMUX_COMMAND}"
+    TMUX_COMMAND="$(quote_command "$SCRIPT_PATH" "--no-tmux" "${ORIGINAL_ARGS[@]}")"
+
+    if [[ -z "${TMUX:-}" ]]; then
+        ensure_tmux_config
+        exec tmux new-session -s "${TMUX_SESSION}" \
+            -e "TMUX_SESSION=${TMUX_SESSION}" \
+            -n "adda-dev primary" "${TMUX_COMMAND}"
+    else
+        tmux new-session -d -s "${TMUX_SESSION}" \
+            -e "TMUX_SESSION=${TMUX_SESSION}" \
+            -n "adda-dev primary" "${TMUX_COMMAND}"
+        exec tmux switch-client -t "${TMUX_SESSION}"
+    fi
 fi
 
 # ----------------------------------------------------------------------
