@@ -32,7 +32,7 @@ Every implementation task — regardless of size — follows this workflow from 
 
 **`docs` issue fast tracking.** For `docs`-type issues, steps 3–8 are replaced by direct in-session handling. PM works with PO in the current session to produce the documentation artifact — no plan mode, no Coder, no AA dispatch. Proceed to step 9 when PO approves the artifact.
 
-**CI must be green before proceeding.** Every push and every opened PR triggers a GitHub Actions run. PM owns CI health: red CI is never surfaced to PO as an outcome — it is fixed first. See steps 5a and 9.
+**CI must be green before proceeding.** Every push and every opened PR triggers a GitHub Actions run. PM owns CI health: red CI is never surfaced to PO as an outcome — it is analyzed and fixed autonomously if possible. See steps 5a and 9.
 
 ### 1. Issue identification
 
@@ -91,14 +91,14 @@ After Coder pushes, call:
 
 Exit 0: proceed to step 6.
 
-Exit 1: `ci-watch` prints a JSON summary to stdout and captures failed logs to a temp file referenced in the JSON. Dispatch the CI failure analyst agent (name for `Agent` tool: `ci-failure-analyst`) with the log file path(s) from the JSON. Read the analyst's report and act on the classification:
+Exit 1: `ci-watch` prints a JSON summary to stdout and captures failed logs to a temp file referenced in the JSON. Dispatch the CI failure analyst agent (name for `Agent` tool: `ci-failure-analyst`) with the log file path(s) from the JSON. Do not read the log yourself or include details about the current implementation in the dispatch — the analyst must work as an independent reviewer. Read the analyst's report and act on the classification:
 
 - **`transient`** — ask PO to re-run; wait; return to step 5a.
 - **`ci_infra`** — surface the analyst's report to PO; wait for PO direction.
 - **`code_fix`** — dispatch Coder with: the current plan, Coder's previous structured response, the ci-watch JSON output, and the analyst's report. Return to step 5a when Coder finishes.
 - **`unclear`** — surface the analyst's report to PO; wait for PO direction.
 
-This inner loop is agent-owned. Do not ask PO before dispatching Coder on a `code_fix` classification — CI is not PO's problem to triage.
+This inner loop is PM-owned. Do not ask PO before dispatching Coder on a `code_fix` classification — CI is not PO's problem to triage.
 
 ### 6. Post outcome
 
