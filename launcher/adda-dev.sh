@@ -108,6 +108,13 @@ validate_backend() {
   esac
 }
 
+pull_if_not_local() {
+    local image="$1"
+    if [[ "$image" == *:local ]]; then return 0; fi
+    echo "Pulling image: ${image}"
+    docker pull "${image}"
+}
+
 # ----------------------------------------------------------------------
 # Argument parsing
 #
@@ -440,8 +447,7 @@ prepare_envoy() {
 start_envoy() {
     prepare_envoy
 
-    echo "Pulling Envoy image: ${ENVOY_IMAGE}"
-    docker pull "${ENVOY_IMAGE}"
+    pull_if_not_local "${ENVOY_IMAGE}"
 
     echo "Starting Envoy proxy sidecar: ${ENVOY_CONTAINER}"
 
@@ -562,8 +568,7 @@ start_envoy
 wait_for_envoy
 setup_tmux_windows
 
-echo "Pulling ADDA Dev Runtime image: ${ADDA_DEV_IMAGE}"
-docker pull "${ADDA_DEV_IMAGE}"
+pull_if_not_local "${ADDA_DEV_IMAGE}"
 
 echo "Starting ADDA Dev Runtime container..."
 docker "${DOCKER_ARGS[@]}"
