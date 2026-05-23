@@ -55,6 +55,8 @@ COPY proto-adda/overlay/scripts/quality-gates.sh.source /usr/local/libexec/adda-
 RUN chmod +x /usr/local/libexec/adda-dev-runtime/quality-gates.sh
 COPY proto-adda/overlay/scripts/ci-watch.sh.source /usr/local/libexec/adda-dev-runtime/ci-watch.sh
 RUN chmod +x /usr/local/libexec/adda-dev-runtime/ci-watch.sh
+COPY proto-adda/overlay/scripts/resolve-issue-branch.sh.source /usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh
+RUN chmod +x /usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh
 
 # Restore runtime user before handoff.
 USER adda

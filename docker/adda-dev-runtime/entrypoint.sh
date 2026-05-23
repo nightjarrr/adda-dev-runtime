@@ -578,79 +578,43 @@ success "Repository cloned."
 
 # ----------------------------------------------------------------------
 # Resolve and check out the working branch
-#
-#   ISSUE_ID not set                       -> stay on main
-#   ISSUE_ID set, issue does not exist     -> error
-#   ISSUE_ID set, issue exists, 0 branches -> stay on main
-#   ISSUE_ID set, issue exists, 1 branch   -> check it out
-#   ISSUE_ID set, issue exists, ≥2 branches -> refuse and exit
-#
-# Implemented via GraphQL because `gh issue develop --list` does not
-# support --json output. The first:2 cap is sufficient since logic
-# only distinguishes 0 / 1 / multiple.
 # ----------------------------------------------------------------------
 section "Resolving working branch"
 
-resolve_working_branch() {
-    if [[ -z "${ISSUE_ID:-}" ]]; then
-        success "No ISSUE_ID; staying on main."
-    else
+if [[ -z "${ISSUE_ID:-}" ]]; then
+    success "No ISSUE_ID; staying on main."
+else
+    resolve_result="$(/usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh "${ISSUE_ID}" || true)"
+    resolve_status="$(echo "${resolve_result}" | jq -r '.status')"
+    resolve_branch="$(echo "${resolve_result}" | jq -r '.branch')"
+    resolve_pr="$(echo "${resolve_result}"    | jq -r '.pr')"
+    resolve_details="$(echo "${resolve_result}" | jq -r '.details')"
 
-        if ! gh issue view "${ISSUE_ID}" --json number >/dev/null 2>&1; then
-            die "issue #${ISSUE_ID} not found in ${GH_REPO}."
-        fi
-
-        local query_result
-        # shellcheck disable=SC2016
-        # Why: $owner/$repo/$number are GraphQL variables resolved by the
-        # GraphQL parser via the -F flags above; single quotes are required
-        # to prevent shell expansion of these tokens.
-        query_result="$(gh api graphql \
-            -F owner="${GITHUB_OWNER}" \
-            -F repo="${GITHUB_REPO}" \
-            -F number="${ISSUE_ID}" \
-            -f query='
-                query($owner: String!, $repo: String!, $number: Int!) {
-                repository(owner: $owner, name: $repo) {
-                    issue(number: $number) {
-                    linkedBranches(first: 2) {
-                        nodes { ref { name } }
-                    }
-                    }
-                }
-                }')"
-
-        # Issue not found -> .data.repository.issue is null
-        if [[ "$(echo "${query_result}" | jq '.data.repository.issue')" == "null" ]]; then
-            die "issue #${ISSUE_ID} not returned by GraphQL API in ${GH_REPO}."
-        fi
-
-        local linked_branches
-        linked_branches="$(echo "${query_result}" | jq -r '.data.repository.issue.linkedBranches.nodes | map(.ref.name)')"
-        local linked_count
-        linked_count="$(echo "${linked_branches}" | jq 'length')"
-
-        case "${linked_count}" in
-            0)
-                success "Issue #${ISSUE_ID}: no linked branch yet; staying on main."
-                echo "Branch creation is the SDLC's spec phase responsibility."
-                ;;
-            1)
-                local branch
-                branch="$(echo "${linked_branches}" | jq -r '.[0]')"
-                echo "Issue #${ISSUE_ID}: one linked branch (${branch}); checking out."
-                git checkout "${branch}"
-                success "Checked out linked branch ${branch} for Issue #${ISSUE_ID}."
-                ;;
-            *)
-                echo "Issue #${ISSUE_ID}: multiple linked branches found:" >&2
-                echo "${linked_branches}" | jq -r '.[]' | sed 's/^/  - /' >&2
-                die "ambiguous branch state. Resolve in GitHub (Issue page → Development sidebar → unlink unwanted branches) and retry."
-                ;;
-        esac
-    fi
-}
-resolve_working_branch
+    case "${resolve_status}" in
+        feature_branch)
+            if [[ -n "${resolve_pr}" ]]; then
+                echo "Issue #${ISSUE_ID}: resolved via open PR #${resolve_pr} (branch: ${resolve_branch})."
+            else
+                echo "Issue #${ISSUE_ID}: one linked branch (${resolve_branch}); checking out."
+            fi
+            git checkout "${resolve_branch}"
+            success "Checked out branch ${resolve_branch} for Issue #${ISSUE_ID}."
+            ;;
+        main)
+            success "Issue #${ISSUE_ID}: no linked branch yet; staying on main."
+            echo "Branch creation is the SDLC's spec phase responsibility."
+            ;;
+        ambiguous)
+            die "Issue #${ISSUE_ID}: ${resolve_details}. Resolve in GitHub (Issue page → Development sidebar) and retry."
+            ;;
+        error)
+            die "Issue #${ISSUE_ID}: branch resolution failed. ${resolve_details}"
+            ;;
+        *)
+            die "Issue #${ISSUE_ID}: unexpected resolution status '${resolve_status}'."
+            ;;
+    esac
+fi
 
 # ======================================================================
 # Entrypoint hooks — sourced by Tier 1 entrypoint after BASE init and
