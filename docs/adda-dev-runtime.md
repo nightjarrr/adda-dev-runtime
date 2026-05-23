@@ -390,19 +390,28 @@ Envoy responsibilities:
 * Enforce domain allow-list / default-deny policy using RBAC.
 * Resolve allowed upstream domains.
 * Emit access logs for audit/debugging.
-* Expose an admin interface on host loopback for diagnostics.
+* Expose an admin interface on container loopback for diagnostics; it is not published to the host and is accessible via `docker exec`.
 
 Envoy is per-session. One Claude container gets one Envoy sidecar.
 
 ### Envoy admin interface
 
-Envoy admin is published only to host loopback, for example:
+The Envoy admin interface is bound to container loopback (`127.0.0.1:9901`) and is not published to any host port. Parallel Envoy sidecars can coexist without port conflicts.
 
-```text
-127.0.0.1:7001 -> Envoy container:9901
+To access the admin interface for diagnostics, use `docker exec` into the named Envoy container. The Envoy image runs as a non-root user and does not include HTTP client tools; use bash's built-in TCP support instead (HTTP/1.1 required — Envoy rejects HTTP/1.0):
+
+```bash
+docker exec adda-dev-envoy-<RUN_ID> bash -c \
+  'exec 3<>/dev/tcp/127.0.0.1/9901
+   printf "GET /ready HTTP/1.1\r\nHost: localhost\r\n\r\n" >&3
+   cat <&3'
 ```
 
+Replace `/ready` with `/stats`, `/listeners`, `/clusters`, or `/config_dump` for other diagnostic endpoints.
+
 It is for diagnostics only: readiness, stats, listeners, clusters, config dump, and troubleshooting. It is not a policy editing UI and must not be exposed to untrusted networks.
+
+**Future:** when allow-list enforcement and WebFetch/WebSearch handling are implemented, revisit whether to publish the admin interface to host loopback for operational use.
 
 ### Allow-list
 
@@ -642,9 +651,6 @@ ADDA_DEV_PROXY_PORT=8080
  
 # Envoy perimeter sidecar configuration
 ENVOY_IMAGE=envoyproxy/envoy:v1.33.14
-ENVOY_ADMIN_HOST_PORT=7001
-ENVOY_ADMIN_CONTAINER_PORT=9901
-ENVOY_ADMIN_ADDRESS=0.0.0.0
 ENVOY_SOCKET_CONTAINER_PATH=/run/adda-dev-proxy/proxy.sock
 ```
 
@@ -684,7 +690,7 @@ Envoy sidecar is outside the Claude trust boundary but should still be minimized
 * `--security-opt no-new-privileges`;
 * read-only root where compatible;
 * tmpfs for `/tmp`;
-* admin published only to `127.0.0.1`.
+* admin interface not published to host; accessible via `docker exec` only.
 
 ---
 

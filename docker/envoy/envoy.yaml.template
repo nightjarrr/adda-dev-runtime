@@ -18,8 +18,6 @@
 # Template placeholders filled by launcher:
 #
 #   __ENVOY_SOCKET_PATH__      Unix socket path inside Envoy container
-#   __ENVOY_ADMIN_ADDRESS__    Envoy admin bind address inside container
-#   __ENVOY_ADMIN_PORT__       Envoy admin bind port inside container
 # ======================================================================
 
 node:
@@ -29,10 +27,13 @@ node:
 # ----------------------------------------------------------------------
 # Admin interface.
 #
-# The admin listener is intended to be published only to host loopback,
-# for example:
+# The admin listener is bound to container loopback only (127.0.0.1:9901)
+# and is NOT published to any host port. Parallel Envoy sidecars can
+# coexist without port conflicts.
 #
-#   127.0.0.1:7001 -> __ENVOY_ADMIN_ADDRESS__:__ENVOY_ADMIN_PORT__ (e.g., 0.0.0.0:9901)
+# To access the admin interface for diagnostics:
+#
+#   docker exec <envoy-container> curl -s http://localhost:9901/ready
 #
 # The admin interface exposes operational state and potentially sensitive
 # configuration data. It must not be exposed to untrusted networks.
@@ -42,8 +43,8 @@ admin:
   address:
     socket_address:
       protocol: TCP
-      address: __ENVOY_ADMIN_ADDRESS__
-      port_value: __ENVOY_ADMIN_PORT__
+      address: 127.0.0.1
+      port_value: 9901
 
 static_resources:
   listeners:

@@ -120,7 +120,7 @@ The overlay is staged in the image at build time under `/usr/local/share/adda-de
 * Launcher creates Envoy per-run runtime directory under `${XDG_RUNTIME_DIR:-/tmp}/adda-dev/${RUN_ID}`.
 * Launcher renders Envoy config from `.devcontainer/envoy/envoy.yaml.template`.
 * Launcher starts Envoy sidecar detached with `--rm`.
-* Launcher exposes Envoy admin on host loopback, currently `127.0.0.1:7001`.
+* Launcher does not publish Envoy admin to the host. Admin is accessible via `docker exec` using bash's built-in TCP (the Envoy image has no HTTP client tools and runs as non-root): `docker exec adda-dev-envoy-<RUN_ID> bash -c 'exec 3<>/dev/tcp/127.0.0.1/9901; printf "GET /ready HTTP/1.1\r\nHost: localhost\r\n\r\n" >&3; cat <&3'`
 * Launcher waits for Envoy socket before starting ADDA Dev Runtime container.
 * Launcher creates two additional windows in the primary tmux session: `adda-dev shell` (interactive bash into ADDA Dev Runtime container) and `adda-dev envoy logs` (`docker logs -f ${ENVOY_CONTAINER}`).
 * Launcher starts ADDA Dev Runtime container interactively with `docker run --rm -it --name ${CLAUDE_CONTAINER}`.
@@ -168,7 +168,7 @@ Current observed working tmpfs constraints during testing:
 
 ## Envoy current behavior
 
-* Envoy sidecar container starts and admin UI loads.
+* Envoy sidecar container starts. Admin interface is accessible via `docker exec` (not published to host).
 * Envoy listens on Unix domain socket.
 * Unix socket verified directly with `curl --unix-socket` during smoke test.
 * `socat` TCP-to-UDS bridge verified on host and in ADDA Dev Runtime container.
@@ -321,9 +321,6 @@ Host/project launcher variables include at least:
 * `GITHUB_OWNER`
 * `GITHUB_REPO`
 * `ENVOY_IMAGE`
-* `ENVOY_ADMIN_HOST_PORT`
-* `ENVOY_ADMIN_CONTAINER_PORT`
-* `ENVOY_ADMIN_ADDRESS`
 * `ENVOY_SOCKET_CONTAINER_PATH`
 * `ADDA_DEV_IMAGE`
 * `ADDA_DEV_USER`
