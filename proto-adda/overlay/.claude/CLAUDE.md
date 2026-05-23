@@ -86,7 +86,7 @@ Dispatch the Coder agent (name for `Agent` tool: `coder`) with: issue id, issue 
 After Coder pushes, call:
 
 ```bash
-/usr/local/libexec/adda-dev-runtime/ci-watch.sh --push $(git rev-parse HEAD)
+/usr/local/libexec/adda-dev-runtime/ci-watch.sh --push HEAD
 ```
 
 Exit 0: proceed to step 6.

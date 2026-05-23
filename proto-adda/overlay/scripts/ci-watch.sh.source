@@ -56,6 +56,7 @@ esac
 
 watch_push() {
     local sha="$1"
+    [[ "$sha" == "HEAD" ]] && sha=$(git rev-parse HEAD)
     local run_id url
     local elapsed=0
     local poll_interval=2
