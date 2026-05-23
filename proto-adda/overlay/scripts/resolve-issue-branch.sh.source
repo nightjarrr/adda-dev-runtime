@@ -1,0 +1,156 @@
+#!/usr/bin/env bash
+# resolve-issue-branch.sh — resolve which branch to check out for a GitHub issue.
+#
+# Usage:
+#   resolve-issue-branch.sh <issue_id>
+#
+# Environment:
+#   GITHUB_OWNER  — GitHub repository owner (required)
+#   GITHUB_REPO   — GitHub repository name (required)
+#
+# Stdout: a single JSON object with fields: issue_id, status, branch, pr, details
+# Stderr: diagnostic messages
+#
+# Exit codes:
+#   0 — status is feature_branch or main
+#   1 — status is ambiguous or error
+
+set -uo pipefail
+
+# ----------------------------------------------------------------------
+# Argument validation
+# ----------------------------------------------------------------------
+
+if [[ $# -ne 1 ]]; then
+    jq -n --arg d "usage: resolve-issue-branch.sh <issue_id>" \
+        '{issue_id:"",status:"error",branch:"",pr:"",details:$d}'
+    exit 1
+fi
+
+ISSUE_ID="$1"
+
+# ----------------------------------------------------------------------
+# Helper: emit structured JSON result to stdout
+# ----------------------------------------------------------------------
+
+emit() {
+    local status="$1" branch="$2" pr="$3" details="$4"
+    jq -n \
+        --arg issue_id "${ISSUE_ID}" \
+        --arg status   "${status}"   \
+        --arg branch   "${branch}"   \
+        --arg pr       "${pr}"       \
+        --arg details  "${details}"  \
+        '{issue_id:$issue_id,status:$status,branch:$branch,pr:$pr,details:$details}'
+}
+
+# ----------------------------------------------------------------------
+# Validate required environment variables
+# ----------------------------------------------------------------------
+
+for var in GITHUB_OWNER GITHUB_REPO; do
+    if [[ -z "${!var:-}" ]]; then
+        emit "error" "" "" "required environment variable '${var}' is not set"
+        exit 1
+    fi
+done
+
+# ----------------------------------------------------------------------
+# Single GraphQL query: linkedBranches + timelineItems CONNECTED_EVENT
+# ----------------------------------------------------------------------
+
+query_result=""
+# shellcheck disable=SC2016
+# Why: $owner/$repo/$number are GraphQL variables resolved by the GraphQL
+# parser via the -F flags above; single quotes prevent shell expansion.
+if ! query_result="$(gh api graphql \
+    -F owner="${GITHUB_OWNER}" \
+    -F repo="${GITHUB_REPO}"  \
+    -F number="${ISSUE_ID}"   \
+    -f query='
+        query($owner: String!, $repo: String!, $number: Int!) {
+          repository(owner: $owner, name: $repo) {
+            issue(number: $number) {
+              linkedBranches(first: 2) {
+                nodes { ref { name } }
+              }
+              timelineItems(itemTypes: [CONNECTED_EVENT], first: 10) {
+                nodes {
+                  ... on ConnectedEvent {
+                    subject {
+                      ... on PullRequest {
+                        number
+                        state
+                        headRefName
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }' 2>&1)"; then
+    emit "error" "" "" "GraphQL API call failed: ${query_result}"
+    exit 1
+fi
+
+# ----------------------------------------------------------------------
+# Validate issue exists
+# ----------------------------------------------------------------------
+
+if [[ "$(echo "${query_result}" | jq '.data.repository.issue')" == "null" ]]; then
+    emit "error" "" "" "issue #${ISSUE_ID} not found in ${GITHUB_OWNER}/${GITHUB_REPO}"
+    exit 1
+fi
+
+# ----------------------------------------------------------------------
+# Resolution: linkedBranches first
+# ----------------------------------------------------------------------
+
+linked_branches="$(echo "${query_result}" | jq '[.data.repository.issue.linkedBranches.nodes[].ref.name]')"
+linked_count="$(echo "${linked_branches}" | jq 'length')"
+
+case "${linked_count}" in
+    0)
+        # Fall through to CONNECTED_EVENT path below.
+        ;;
+    1)
+        branch="$(echo "${linked_branches}" | jq -r '.[0]')"
+        emit "feature_branch" "${branch}" "" ""
+        exit 0
+        ;;
+    *)
+        details="$(echo "${linked_branches}" | jq -r '.[]' | paste -sd ', ')"
+        emit "ambiguous" "" "" "multiple linked branches: ${details}"
+        exit 1
+        ;;
+esac
+
+# ----------------------------------------------------------------------
+# Resolution: CONNECTED_EVENT fallback — open PRs only
+# ----------------------------------------------------------------------
+
+open_prs="$(echo "${query_result}" | jq '[
+    .data.repository.issue.timelineItems.nodes[]
+    | select(.subject.state == "OPEN")
+    | {branch: .subject.headRefName, pr: (.subject.number | tostring)}
+]')"
+open_count="$(echo "${open_prs}" | jq 'length')"
+
+case "${open_count}" in
+    0)
+        emit "main" "" "" ""
+        exit 0
+        ;;
+    1)
+        branch="$(echo "${open_prs}" | jq -r '.[0].branch')"
+        pr="$(echo "${open_prs}" | jq -r '.[0].pr')"
+        emit "feature_branch" "${branch}" "${pr}" ""
+        exit 0
+        ;;
+    *)
+        details="$(echo "${open_prs}" | jq -r '.[].branch' | paste -sd ', ')"
+        emit "ambiguous" "" "" "multiple open PRs with branches: ${details}"
+        exit 1
+        ;;
+esac

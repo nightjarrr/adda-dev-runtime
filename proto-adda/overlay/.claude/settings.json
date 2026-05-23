@@ -21,6 +21,8 @@
       "Bash(bash /usr/local/libexec/adda-dev-runtime/quality-gates.sh)",
       "Bash(/usr/local/libexec/adda-dev-runtime/ci-watch.sh *)",
       "Bash(bash /usr/local/libexec/adda-dev-runtime/ci-watch.sh *)",
+      "Bash(/usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh *)",
+      "Bash(bash /usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh *)",
       "Bash(jq *)",
       "Bash(gh run *)",
       "Bash(gh pr comment *)",
