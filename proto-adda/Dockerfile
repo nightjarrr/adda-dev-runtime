@@ -53,6 +53,8 @@ COPY proto-adda/.claude.json.template /usr/local/share/adda-dev-runtime/template
 # ----------------------------------------------------------------------
 COPY proto-adda/overlay/scripts/quality-gates.sh.source /usr/local/libexec/adda-dev-runtime/quality-gates.sh
 RUN chmod +x /usr/local/libexec/adda-dev-runtime/quality-gates.sh
+COPY proto-adda/overlay/scripts/ci-watch.sh.source /usr/local/libexec/adda-dev-runtime/ci-watch.sh
+RUN chmod +x /usr/local/libexec/adda-dev-runtime/ci-watch.sh
 
 # Restore runtime user before handoff.
 USER adda

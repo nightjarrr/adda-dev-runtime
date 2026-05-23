@@ -1,0 +1,223 @@
+#!/usr/bin/env bash
+# ci-watch.sh — monitor GitHub Actions CI runs to completion and report failures.
+#
+# Usage:
+#   ci-watch.sh --push <sha>        Monitor the push-triggered run for a commit SHA.
+#   ci-watch.sh --pr <pr-number>    Monitor all PR checks for a pull request.
+#
+# Exit codes:
+#   0 — all monitored runs completed with success.
+#   1 — one or more runs failed; JSON summary written to stdout.
+#   2 — usage error or missing input.
+#
+# Stdout on exit 0: silent.
+# Stdout on exit 1: JSON object describing failing runs (see Requirements).
+
+set -uo pipefail
+
+# ----------------------------------------------------------------------
+# Argument parsing
+# ----------------------------------------------------------------------
+
+usage() {
+    echo "Usage: ci-watch.sh --push <sha> | --pr <pr-number>" >&2
+    exit 2
+}
+
+if [[ $# -lt 2 ]]; then
+    usage
+fi
+
+MODE=""
+ARG=""
+
+case "$1" in
+    --push)
+        MODE="push"
+        ARG="${2:-}"
+        [[ -z "$ARG" ]] && usage
+        ;;
+    --pr)
+        MODE="pr"
+        ARG="${2:-}"
+        [[ -z "$ARG" ]] && usage
+        ;;
+    *)
+        usage
+        ;;
+esac
+
+# ----------------------------------------------------------------------
+# watch_push <sha>
+#
+# Poll for the push-triggered Actions run for the given commit SHA, wait
+# for it to complete, and report the result.
+# ----------------------------------------------------------------------
+
+watch_push() {
+    local sha="$1"
+    [[ "$sha" == "HEAD" ]] && sha=$(git rev-parse HEAD)
+    local run_id url
+    local elapsed=0
+    local poll_interval=2
+    local timeout=60
+
+    # Poll until a run appears or timeout is reached.
+    while true; do
+        local result
+        result=$(gh run list --commit "$sha" --event push --json databaseId,url 2>/dev/null || true)
+
+        if [[ -n "$result" ]] && [[ "$(echo "$result" | jq 'length')" -gt 0 ]]; then
+            run_id=$(echo "$result" | jq -r '.[0].databaseId')
+            url=$(echo "$result" | jq -r '.[0].url')
+            break
+        fi
+
+        if [[ $elapsed -ge $timeout ]]; then
+            echo "Error: no push run found for commit $sha after ${timeout}s" >&2
+            exit 1
+        fi
+
+        sleep "$poll_interval"
+        elapsed=$((elapsed + poll_interval))
+    done
+
+    # Block until the run completes (exits non-zero if run fails, but we
+    # check conclusion ourselves so allow non-zero here).
+    gh run watch "$run_id" >/dev/null 2>&1 || true
+
+    # Check the final conclusion.
+    local conclusion
+    conclusion=$(gh run view "$run_id" --json conclusion -q .conclusion)
+
+    if [[ "$conclusion" == "success" ]]; then
+        exit 0
+    fi
+
+    # Capture failure logs to a temp file.
+    local log_file
+    log_file=$(mktemp /tmp/ci-watch-logs-XXXXXX.txt)
+    gh run view "$run_id" --log-failed >"$log_file" 2>&1 || true
+
+    # Write JSON summary to stdout and exit 1.
+    jq -n \
+        --arg conclusion "failure" \
+        --arg runId "$run_id" \
+        --arg event "push" \
+        --arg url "$url" \
+        --arg runConclusion "$conclusion" \
+        --arg logFile "$log_file" \
+        '{
+            conclusion: $conclusion,
+            runs: [
+                {
+                    runId: $runId,
+                    event: $event,
+                    url: $url,
+                    conclusion: $runConclusion,
+                    logFile: $logFile
+                }
+            ]
+        }'
+
+    exit 1
+}
+
+# ----------------------------------------------------------------------
+# watch_pr <pr-number>
+#
+# Wait for all PR checks to complete, collect failing runs, and report.
+# ----------------------------------------------------------------------
+
+watch_pr() {
+    local pr_number="$1"
+
+    # Block until all checks complete. gh pr checks --watch exits non-zero
+    # when any check fails — allow that and check results ourselves.
+    gh pr checks "$pr_number" --watch >/dev/null 2>&1 || true
+
+    # Get final check results.
+    local checks_json
+    checks_json=$(gh pr checks "$pr_number" --json name,state,link)
+
+    # Count failing checks.
+    local fail_count
+    fail_count=$(echo "$checks_json" | jq '[.[] | select(.state != "SUCCESS" and .state != "success")] | length')
+
+    if [[ "$fail_count" -eq 0 ]]; then
+        exit 0
+    fi
+
+    # Extract unique run IDs from link URLs of failing checks.
+    # URL format: .../runs/<run-id>/job/...
+    local failing_urls
+    failing_urls=$(echo "$checks_json" | jq -r '.[] | select(.state != "SUCCESS" and .state != "success") | .link')
+
+    local -a run_ids=()
+    while IFS= read -r link_url; do
+        if [[ -z "$link_url" ]]; then
+            continue
+        fi
+        local run_id
+        run_id=$(echo "$link_url" | grep -oP '/runs/\K[0-9]+' || true)
+        if [[ -z "$run_id" ]]; then
+            echo "Warning: could not extract run ID from link: $link_url" >&2
+            continue
+        fi
+        run_ids+=("$run_id")
+    done <<< "$failing_urls"
+
+    # Deduplicate run IDs (multiple jobs can share a run).
+    local -a unique_run_ids=()
+    while IFS= read -r rid; do
+        unique_run_ids+=("$rid")
+    done < <(printf '%s\n' "${run_ids[@]}" | sort -u)
+
+    # Build JSON array of failing runs.
+    local runs_json="[]"
+    for run_id in "${unique_run_ids[@]}"; do
+        local run_url run_event log_file
+        run_url=$(gh run view "$run_id" --json url -q .url 2>/dev/null || echo "")
+        run_event=$(gh run view "$run_id" --json event -q .event 2>/dev/null || echo "")
+        run_conclusion=$(gh run view "$run_id" --json conclusion -q .conclusion 2>/dev/null || echo "failure")
+
+        log_file=$(mktemp /tmp/ci-watch-logs-XXXXXX.txt)
+        gh run view "$run_id" --log-failed >"$log_file" 2>&1 || true
+
+        runs_json=$(
+            jq -n \
+                --argjson runs "$runs_json" \
+                --arg runId "$run_id" \
+                --arg event "$run_event" \
+                --arg url "$run_url" \
+                --arg conclusion "$run_conclusion" \
+                --arg logFile "$log_file" \
+                '$runs + [
+                    {
+                        runId: $runId,
+                        event: $event,
+                        url: $url,
+                        conclusion: $conclusion,
+                        logFile: $logFile
+                    }
+                ]'
+        )
+    done
+
+    # Write final JSON summary to stdout and exit 1.
+    jq -n \
+        --arg conclusion "failure" \
+        --argjson runs "$runs_json" \
+        '{conclusion: $conclusion, runs: $runs}'
+
+    exit 1
+}
+
+# ----------------------------------------------------------------------
+# Dispatch
+# ----------------------------------------------------------------------
+
+case "$MODE" in
+    push) watch_push "$ARG" ;;
+    pr)   watch_pr   "$ARG" ;;
+esac

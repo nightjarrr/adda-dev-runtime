@@ -32,6 +32,8 @@ Every implementation task — regardless of size — follows this workflow from 
 
 **`docs` issue fast tracking.** For `docs`-type issues, steps 3–8 are replaced by direct in-session handling. PM works with PO in the current session to produce the documentation artifact — no plan mode, no Coder, no AA dispatch. Proceed to step 9 when PO approves the artifact.
 
+**CI must be green before proceeding.** Every push and every opened PR triggers a GitHub Actions run. PM owns CI health: red CI is never surfaced to PO as an outcome — it is analyzed and fixed autonomously if possible. See steps 5a and 9.
+
 ### 1. Issue identification
 
 Run `printenv ISSUE_ID` to check the issue number, then confirm with PO. PO can provide a different number. If no issue exists yet, use the `/new-issue` skill to create one.
@@ -79,6 +81,25 @@ gh issue comment {issue-id} --body-file {path-to-plan-file}
 
 Dispatch the Coder agent (name for `Agent` tool: `coder`) with: issue id, issue title, issue type, path to the plan file (instruct Coder to treat it as `impl-plan.md`), and any additional context or instructions from the conversation.
 
+### 5a. Monitor CI after Coder push
+
+After Coder pushes, call:
+
+```bash
+/usr/local/libexec/adda-dev-runtime/ci-watch.sh --push HEAD
+```
+
+Exit 0: proceed to step 6.
+
+Exit 1: `ci-watch` prints a JSON summary to stdout and captures failed logs to a temp file referenced in the JSON. Dispatch the CI failure analyst agent (name for `Agent` tool: `ci-failure-analyst`) with the log file path(s) from the JSON. Do not read the log yourself or include details about the current implementation in the dispatch — the analyst must work as an independent reviewer. Read the analyst's report and act on the classification:
+
+- **`transient`** — ask PO to re-run; wait; return to step 5a.
+- **`ci_infra`** — surface the analyst's report to PO; wait for PO direction.
+- **`code_fix`** — dispatch Coder with: the current plan, Coder's previous structured response, the ci-watch JSON output, and the analyst's report. Return to step 5a when Coder finishes.
+- **`unclear`** — surface the analyst's report to PO; wait for PO direction.
+
+This inner loop is PM-owned. Do not ask PO before dispatching Coder on a `code_fix` classification — CI is not PO's problem to triage.
+
 ### 6. Post outcome
 
 Immediately after Coder terminates — before asking PO anything — post Coder's verbatim (no rewording, no reformatting, no condensing) structured final response as a comment to the issue:
@@ -106,3 +127,13 @@ Verify all commits are pushed (`git push` if needed — Coder pushes as part of 
 ```bash
 gh pr create --title "..." --body "..."
 ```
+
+After the PR is opened, monitor all checks to completion:
+
+```bash
+/usr/local/libexec/adda-dev-runtime/ci-watch.sh --pr {pr-number}
+```
+
+Exit 0: step 9 is complete.
+
+Exit 1: apply the same triage logic as step 5a. Step 9 is not complete until all PR checks are green.
