@@ -228,9 +228,6 @@ require_var ADDA_DEV_PROXY_SOCKET_CONTAINER_PATH
 require_var ADDA_DEV_PROXY_PORT
 
 require_var ENVOY_IMAGE
-require_var ENVOY_ADMIN_HOST_PORT
-require_var ENVOY_ADMIN_CONTAINER_PORT
-require_var ENVOY_ADMIN_ADDRESS
 require_var ENVOY_SOCKET_CONTAINER_PATH
 
 require_var ADDA_DEV_KEYRING_GITHUB_KEY
@@ -435,8 +432,6 @@ prepare_envoy() {
 
     sed \
         -e "s|__ENVOY_SOCKET_PATH__|${ENVOY_SOCKET_CONTAINER_PATH}|g" \
-        -e "s|__ENVOY_ADMIN_ADDRESS__|${ENVOY_ADMIN_ADDRESS}|g" \
-        -e "s|__ENVOY_ADMIN_PORT__|${ENVOY_ADMIN_CONTAINER_PORT}|g" \
         "$ENVOY_TEMPLATE" > "$ENVOY_RUNTIME_CONFIG"
 
     chmod 600 "$ENVOY_RUNTIME_CONFIG"
@@ -446,7 +441,6 @@ start_envoy() {
     prepare_envoy
 
     echo "Starting Envoy proxy sidecar: ${ENVOY_CONTAINER}"
-    echo "Envoy admin UI: http://127.0.0.1:${ENVOY_ADMIN_HOST_PORT}/"
 
     docker run --rm -d \
         --name "${ENVOY_CONTAINER}" \
@@ -455,7 +449,6 @@ start_envoy() {
         --security-opt no-new-privileges \
         --read-only \
         --tmpfs /tmp:rw,nosuid,nodev,noexec,size=16m \
-        -p "127.0.0.1:${ENVOY_ADMIN_HOST_PORT}:${ENVOY_ADMIN_CONTAINER_PORT}" \
         -v "${RUN_DIR}:/run/adda-dev-proxy:rw" \
         "${ENVOY_IMAGE}" \
         -c /run/adda-dev-proxy/envoy.yaml
