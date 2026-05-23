@@ -398,13 +398,16 @@ Envoy is per-session. One Claude container gets one Envoy sidecar.
 
 The Envoy admin interface is bound to container loopback (`127.0.0.1:9901`) and is not published to any host port. Parallel Envoy sidecars can coexist without port conflicts.
 
-To access the admin interface for diagnostics, use `docker exec` into the named Envoy container:
+To access the admin interface for diagnostics, use `docker exec` into the named Envoy container. The Envoy image runs as a non-root user and does not include HTTP client tools; use bash's built-in TCP support instead (HTTP/1.1 required — Envoy rejects HTTP/1.0):
 
 ```bash
-docker exec adda-dev-envoy-<RUN_ID> curl -s http://localhost:9901/ready
-docker exec adda-dev-envoy-<RUN_ID> curl -s http://localhost:9901/stats
-docker exec adda-dev-envoy-<RUN_ID> curl -s http://localhost:9901/listeners
+docker exec adda-dev-envoy-<RUN_ID> bash -c \
+  'exec 3<>/dev/tcp/127.0.0.1/9901
+   printf "GET /ready HTTP/1.1\r\nHost: localhost\r\n\r\n" >&3
+   cat <&3'
 ```
+
+Replace `/ready` with `/stats`, `/listeners`, `/clusters`, or `/config_dump` for other diagnostic endpoints.
 
 It is for diagnostics only: readiness, stats, listeners, clusters, config dump, and troubleshooting. It is not a policy editing UI and must not be exposed to untrusted networks.
 

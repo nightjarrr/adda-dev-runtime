@@ -120,7 +120,7 @@ The overlay is staged in the image at build time under `/usr/local/share/adda-de
 * Launcher creates Envoy per-run runtime directory under `${XDG_RUNTIME_DIR:-/tmp}/adda-dev/${RUN_ID}`.
 * Launcher renders Envoy config from `.devcontainer/envoy/envoy.yaml.template`.
 * Launcher starts Envoy sidecar detached with `--rm`.
-* Launcher does not publish Envoy admin to the host. Admin is accessible via `docker exec adda-dev-envoy-<RUN_ID> curl http://localhost:9901/`.
+* Launcher does not publish Envoy admin to the host. Admin is accessible via `docker exec` using bash's built-in TCP (the Envoy image has no HTTP client tools and runs as non-root): `docker exec adda-dev-envoy-<RUN_ID> bash -c 'exec 3<>/dev/tcp/127.0.0.1/9901; printf "GET /ready HTTP/1.1\r\nHost: localhost\r\n\r\n" >&3; cat <&3'`
 * Launcher waits for Envoy socket before starting ADDA Dev Runtime container.
 * Launcher creates two additional windows in the primary tmux session: `adda-dev shell` (interactive bash into ADDA Dev Runtime container) and `adda-dev envoy logs` (`docker logs -f ${ENVOY_CONTAINER}`).
 * Launcher starts ADDA Dev Runtime container interactively with `docker run --rm -it --name ${CLAUDE_CONTAINER}`.
