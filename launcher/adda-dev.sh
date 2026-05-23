@@ -440,6 +440,9 @@ prepare_envoy() {
 start_envoy() {
     prepare_envoy
 
+    echo "Pulling Envoy image: ${ENVOY_IMAGE}"
+    docker pull "${ENVOY_IMAGE}"
+
     echo "Starting Envoy proxy sidecar: ${ENVOY_CONTAINER}"
 
     docker run --rm -d \
@@ -558,6 +561,9 @@ fi
 start_envoy
 wait_for_envoy
 setup_tmux_windows
+
+echo "Pulling ADDA Dev Runtime image: ${ADDA_DEV_IMAGE}"
+docker pull "${ADDA_DEV_IMAGE}"
 
 echo "Starting ADDA Dev Runtime container..."
 docker "${DOCKER_ARGS[@]}"
