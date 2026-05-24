@@ -20,5 +20,6 @@ Scripts baked via proto-adda Dockerfile live under `proto-adda/overlay/scripts/`
 ## Dockerfiles
 
 - First line: `# syntax=docker/dockerfile:1.7`.
-- `# hadolint ignore=<rule>` requires a `# Why:` comment on the immediately following line.
+- `# hadolint ignore=<rule>` requires a `# Why:` comment on the immediately preceding line
+  (hadolint suppression must be the line immediately before the `RUN` instruction).
 - All `RUN` steps must pass `hadolint` (enforced in CI `base.yml`).
