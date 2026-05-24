@@ -12,6 +12,7 @@
 #   GitHub CLI:    2.91.0                        # Apr 22, 2026
 #   Micro:         2.0.15
 #   Delta:         0.19.2
+#   Bun:           1.3.14                        # 2026-05-24
 # ======================================================================
 
 
@@ -68,6 +69,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         socat \
         ripgrep \
         fd-find \
+        unzip \
     && sed -i '/^#.* en_US.UTF-8 /s/^#//' /etc/locale.gen \
     && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
@@ -116,6 +118,16 @@ RUN curl -fsSL "https://github.com/dandavison/delta/releases/download/${DELTA_VE
     && git config --system include.path /etc/delta/themes.gitconfig \
     && git config --system delta.features mellow-barbet \
     && git config --system delta.side-by-side false
+
+# ----------------------------------------------------------------------
+# Bun — JS runtime and package manager, from official GitHub release.
+# Static binary; no runtime dependencies.
+# ----------------------------------------------------------------------
+ENV BUN_VERSION=1.3.14
+RUN curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip" \
+        -o /tmp/bun.zip \
+    && unzip -j /tmp/bun.zip 'bun-linux-x64/bun' -d /usr/local/bin/ \
+    && rm /tmp/bun.zip
 
 # ----------------------------------------------------------------------
 # Bootstrap scripts — all Tier 1 scripts baked at build time.

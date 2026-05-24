@@ -122,7 +122,7 @@ A dependency may execute hostile code during install, test, build, or runtime.
 
 The design distinguishes two dependency classes:
 
-- **Container/toolchain dependencies** — OS packages, shell tools, language managers, `uv`, Node tooling, Claude Code, GitHub CLI, `socat`, and other infrastructure needed before the repository is cloned. These are baked into the image at build time and are not installed with root privileges at runtime.
+- **Container/toolchain dependencies** — OS packages, shell tools, language managers, `uv`, Bun, Claude Code, GitHub CLI, `socat`, and other infrastructure needed before the repository is cloned. These are baked into the image at build time and are not installed with root privileges at runtime.
 - **Project code dependencies** — dependencies declared by the repository after it is cloned, such as Python packages in `pyproject.toml` / `uv.lock`, Node packages in `package.json` / lockfiles, or analogous ecosystem dependencies. These may need package-registry access at runtime because the repository is not available during generic base-image build.
 
 Target-state mitigations:
@@ -252,8 +252,8 @@ All entries use the `adda-dev` service namespace. `account` identifies the targe
 Acquire the token using a throwaway container:
 
 ```bash
-docker run --rm -it node:20 \
-  sh -c "npm install -g @anthropic-ai/claude-code && claude setup-token"
+docker run --rm -it oven/bun:latest \
+  sh -c "BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code && claude setup-token"
 ```
 
 Procedure:
@@ -876,7 +876,7 @@ GitHub-aware operations happen inside the container.
 
 All external dependencies are pinned. Floating versions let upstream changes enter the environment without review — this policy eliminates that risk. Pinning operates at three layers:
 
-1. **Application and tool versions** — exact versions are pinned in the Dockerfile via `ENV` variables and hard-coded curl download URLs (GitHub CLI, Micro, Delta, Node.js, Claude Code). The version comment block at the top of `adda-dev-runtime/Dockerfile` is the single visible source of truth; bumps go through an explicit chore Issue.
+1. **Application and tool versions** — exact versions are pinned in the Dockerfile via `ENV` variables and hard-coded curl download URLs (GitHub CLI, Micro, Delta, Bun, Claude Code). The version comment block at the top of `adda-dev-runtime/Dockerfile` is the single visible source of truth; bumps go through an explicit chore Issue.
 
 2. **Base image** — the Tier 1 `FROM` line is pinned to the current Debian 12 point release (`debian:12.11-slim`) rather than the rolling `debian:bookworm-slim` tag. The version comment block tracks the pin date; bumping requires an explicit chore Issue.
 
