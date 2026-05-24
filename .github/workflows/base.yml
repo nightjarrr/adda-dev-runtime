@@ -12,14 +12,17 @@ jobs:
       - name: shellcheck
         run: |
           shellcheck \
-            docker/adda-dev-runtime/entrypoint.sh \
+            adda-dev-runtime/content/scripts/entrypoint.sh.source \
+            adda-dev-runtime/content/scripts/resolve-issue-branch.sh.source \
+            adda-dev-runtime/content/scripts/ci-watch.sh.source \
+            adda-dev-runtime/content/scripts/quality-gates.sh.source \
             launcher/adda-dev.sh \
-            proto-adda/overlay/entrypoint.d/10-claude-config.sh
+            proto-adda/content/entrypoint.d/10-claude-config.sh.source
 
       - name: hadolint (adda-dev-runtime)
         uses: hadolint/hadolint-action@v3.1.0
         with:
-          dockerfile: docker/adda-dev-runtime/Dockerfile
+          dockerfile: adda-dev-runtime/Dockerfile
 
       - name: hadolint (proto-adda)
         uses: hadolint/hadolint-action@v3.1.0
@@ -27,7 +30,7 @@ jobs:
           dockerfile: proto-adda/Dockerfile
 
       - name: Build adda-dev-runtime
-        run: docker build -t adda-dev-runtime:ci -f docker/adda-dev-runtime/Dockerfile .
+        run: docker build -t adda-dev-runtime:ci -f adda-dev-runtime/Dockerfile .
 
       - name: Tag adda-dev-runtime for proto-adda build
         run: docker tag adda-dev-runtime:ci ghcr.io/nightjarrr/adda-dev-runtime:ci
@@ -45,6 +48,9 @@ jobs:
             command -v gh >/dev/null
             command -v socat >/dev/null
             test -x /usr/local/libexec/adda-dev-runtime/entrypoint.sh
+            test -x /usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh
+            test -x /usr/local/libexec/adda-dev-runtime/ci-watch.sh
+            test -x /usr/local/libexec/adda-dev-runtime/quality-gates.sh
           '
 
       - name: Smoke test — proto-adda

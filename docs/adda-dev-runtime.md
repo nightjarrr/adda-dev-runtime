@@ -876,7 +876,7 @@ GitHub-aware operations happen inside the container.
 
 All external dependencies are pinned. Floating versions let upstream changes enter the environment without review — this policy eliminates that risk. Pinning operates at three layers:
 
-1. **Application and tool versions** — exact versions are pinned in the Dockerfile via `ENV` variables and hard-coded curl download URLs (GitHub CLI, Micro, Delta, Node.js, Claude Code). The version comment block at the top of `docker/adda-dev-runtime/Dockerfile` is the single visible source of truth; bumps go through an explicit chore Issue.
+1. **Application and tool versions** — exact versions are pinned in the Dockerfile via `ENV` variables and hard-coded curl download URLs (GitHub CLI, Micro, Delta, Node.js, Claude Code). The version comment block at the top of `adda-dev-runtime/Dockerfile` is the single visible source of truth; bumps go through an explicit chore Issue.
 
 2. **Base image** — the Tier 1 `FROM` line is pinned to the current Debian 12 point release (`debian:12.11-slim`) rather than the rolling `debian:bookworm-slim` tag. The version comment block tracks the pin date; bumping requires an explicit chore Issue.
 

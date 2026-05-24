@@ -13,9 +13,15 @@
 
 ## .sh.source files
 
-Scripts baked via proto-adda Dockerfile live under `proto-adda/overlay/scripts/` with a
-`.sh.source` extension. The Dockerfile strips `.source` on COPY to
-`/usr/local/libexec/adda-dev-runtime/`. Apply all bash conventions above.
+Scripts baked to `/usr/local/libexec/adda-dev-runtime/` carry a `.sh.source` extension in
+the repo and no exec bit. The Dockerfile `RUN` step renames them (strips `.source`) and
+sets the exec bit with `chmod`. This convention applies to all scripts baked to that path
+regardless of tier:
+
+- Tier 1 scripts live under `adda-dev-runtime/content/scripts/`.
+- Tier 2 scripts live under `proto-adda/content/entrypoint.d/`.
+
+Apply all bash conventions above.
 
 ## Dockerfiles
 

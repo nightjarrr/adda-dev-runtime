@@ -118,13 +118,15 @@ RUN curl -fsSL "https://github.com/dandavison/delta/releases/download/${DELTA_VE
     && git config --system delta.side-by-side false
 
 # ----------------------------------------------------------------------
-# Bootstrap entrypoint script
-# Copied from docker/adda-dev-runtime/entrypoint.sh into the image at
-# build time; invoked as the container's ENTRYPOINT (see COMMON section).
+# Bootstrap scripts — all Tier 1 scripts baked at build time.
+# .sh.source files have no exec bit in the repo; chmod is set here.
 # ----------------------------------------------------------------------
 RUN mkdir -p /usr/local/libexec/adda-dev-runtime/entrypoint.d
-COPY docker/adda-dev-runtime/entrypoint.sh /usr/local/libexec/adda-dev-runtime/entrypoint.sh
-RUN chmod +x /usr/local/libexec/adda-dev-runtime/entrypoint.sh
+COPY adda-dev-runtime/content/scripts/ /usr/local/libexec/adda-dev-runtime/
+RUN for f in /usr/local/libexec/adda-dev-runtime/*.sh.source; do \
+        mv "$f" "${f%.source}"; \
+    done \
+    && chmod +x /usr/local/libexec/adda-dev-runtime/*.sh
 
 
 # ======================================================================
