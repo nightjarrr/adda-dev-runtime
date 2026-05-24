@@ -3,6 +3,7 @@
 #
 # Usage:
 #   ci-watch.sh push --branch <name>    Resolve remote HEAD and monitor all push-triggered runs.
+#   ci-watch.sh push --tag <tag>        Resolve tag to commit SHA and monitor all push-triggered runs.
 #   ci-watch.sh push --commit <sha>     Monitor all push-triggered runs for an exact SHA.
 #   ci-watch.sh pr <pr-number>          Monitor all PR checks for a pull request.
 #
@@ -23,6 +24,7 @@ set -uo pipefail
 usage() {
     echo "Usage:" >&2
     echo "  ci-watch.sh push --branch <name>" >&2
+    echo "  ci-watch.sh push --tag <tag>" >&2
     echo "  ci-watch.sh push --commit <sha>" >&2
     echo "  ci-watch.sh pr <pr-number>" >&2
     exit 2
@@ -37,8 +39,9 @@ case "$MODE" in
         PUSH_MODE=""
         PUSH_ARG=""
         case "${1:-}" in
-            --branch) PUSH_MODE="branch"; PUSH_ARG="${2:-}"; [[ -z "$PUSH_ARG" ]] && usage ;;
-            --commit) PUSH_MODE="commit"; PUSH_ARG="${2:-}"; [[ -z "$PUSH_ARG" ]] && usage ;;
+            --branch) PUSH_MODE="branch"; PUSH_ARG="${2:-}"; [[ -z "$PUSH_ARG" ]] && usage; shift 2 ;;
+            --tag)    PUSH_MODE="tag";    PUSH_ARG="${2:-}"; [[ -z "$PUSH_ARG" ]] && usage; shift 2 ;;
+            --commit) PUSH_MODE="commit"; PUSH_ARG="${2:-}"; [[ -z "$PUSH_ARG" ]] && usage; shift 2 ;;
             *) usage ;;
         esac
         ;;
@@ -233,6 +236,12 @@ case "$MODE" in
             fi
             SHA=$(git ls-remote origin "$PUSH_ARG" 2>/dev/null | awk 'NR==1{print $1}')
             [[ -z "$SHA" ]] && { echo "Error: cannot resolve branch '$PUSH_ARG' on origin" >&2; exit 2; }
+        elif [[ "$PUSH_MODE" == "tag" ]]; then
+            SHA=$(git ls-remote origin "refs/tags/${PUSH_ARG}^{}" 2>/dev/null | awk 'NR==1{print $1}')
+            if [[ -z "$SHA" ]]; then
+                SHA=$(git ls-remote origin "refs/tags/${PUSH_ARG}" 2>/dev/null | awk 'NR==1{print $1}')
+            fi
+            [[ -z "$SHA" ]] && { echo "Error: cannot resolve tag '$PUSH_ARG' on origin" >&2; exit 2; }
         else
             SHA="$PUSH_ARG"
         fi
