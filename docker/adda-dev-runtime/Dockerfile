@@ -53,6 +53,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 #     container-internal HTTP proxy (e.g., 127.0.0.1:8080) to
 #     the sidecar proxy listening socket (mounted as Unix socket)
 # ----------------------------------------------------------------------
+# Why: apt package versions are intentionally not pinned. Debian stable's release policy
+# (security/bug-fix updates only within a minor release) is the structural version anchor;
+# pinning individual apt version strings would be brittle without improving reproducibility.
 # hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends \
         locales \
