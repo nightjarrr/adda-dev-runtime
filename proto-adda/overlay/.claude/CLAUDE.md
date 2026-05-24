@@ -65,6 +65,8 @@ Call the EnterPlanMode tool directly to enter the planning mode. This in-session
 
 **Work breakdown.** Ordered list of implementation steps. For each step: files to create/modify/remove, classes/functions to add/change/remove. Include test coverage plan and any risk areas.
 
+**Plans describe, not implement.** Include only descriptions and illustrative snippets — never complete, runnable implementations. Writing full code in the plan preempts implementation decisions that belong to Coder.
+
 Iterate with PO in plan mode until the plan is approved.
 
 ### 4. Post plan
