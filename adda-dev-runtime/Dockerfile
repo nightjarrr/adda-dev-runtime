@@ -127,7 +127,8 @@ ENV BUN_VERSION=1.3.14
 RUN curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip" \
         -o /tmp/bun.zip \
     && unzip -j /tmp/bun.zip 'bun-linux-x64/bun' -d /usr/local/bin/ \
-    && rm /tmp/bun.zip
+    && rm /tmp/bun.zip \
+    && ln -s /usr/local/bin/bun /usr/local/bin/node
 
 # ----------------------------------------------------------------------
 # Bootstrap scripts — all Tier 1 scripts baked at build time.
