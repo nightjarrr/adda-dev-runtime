@@ -6,7 +6,6 @@
 section "Running hook 10-claude-config.sh"
 
 # Validate AI harness tools (installed by this image)
-require_tool node
 require_tool claude
 
 # Validate AI harness env vars (Tier-2-specific; not checked by Tier 1)
