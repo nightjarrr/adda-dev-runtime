@@ -6,8 +6,8 @@ This repo *is* the dev runtime. Design and current state are in
 ## Repo layout
 
 - `adda-dev-runtime/` — Tier 1 base image (Dockerfile, content/scripts/).
-- `proto-adda/` — Tier 2 AI-harness image. Ships content that the Tier 1
-  entrypoint uses to initialize `~/.claude/` at container start.
+- `proto-adda/` — Tier 2 AI-harness image. Adds Node.js, Claude Code, the
+  Claude config, and the `10-claude-config.sh` bootstrap hook.
 - `launcher/adda-dev.sh` — host-side launcher.
 - `docker/envoy/` — Envoy proxy template.
 
