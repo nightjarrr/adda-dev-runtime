@@ -3,12 +3,10 @@
 # proto-adda — AI harness layer (Tier 2)
 #
 # FROM adda-dev-runtime (Tier 1). Adds:
-#   - Node.js 24 LTS (direct binary from nodejs.org)
-#   - Claude Code (npm global, version-pinned)
+#   - Claude Code (Bun global, version-pinned)
 #   - Bootstrap hook: Claude config init
 #
 # Pinned versions:
-#   Node.js:      24.1.0
 #   Claude Code:  2.1.112
 # ======================================================================
 
@@ -19,20 +17,12 @@ FROM ghcr.io/nightjarrr/adda-dev-runtime:${BASE_TAG}
 USER root
 
 # ----------------------------------------------------------------------
-# Node.js 24 LTS — direct binary from nodejs.org
-# ----------------------------------------------------------------------
-ENV NODE_VERSION=24.1.0
-RUN curl -fsSL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz" \
-        -o /tmp/node.tar.gz \
-    && tar -xzf /tmp/node.tar.gz -C /usr/local --strip-components=1 --no-same-owner \
-    && rm /usr/local/LICENSE /usr/local/CHANGELOG.md /usr/local/README.md \
-    && rm /tmp/node.tar.gz
-
-# ----------------------------------------------------------------------
-# Claude Code — official npm package, version-pinned
+# Claude Code — official Bun package, version-pinned.
+# BUN_INSTALL is set inline (not as a persistent ENV) so the global install
+# lands at /usr/local/bin/claude, which is already on PATH.
 # ----------------------------------------------------------------------
 ENV CLAUDE_CODE_VERSION=2.1.112
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
 # ----------------------------------------------------------------------
 # Bootstrap hook — sourced by Tier 1 entrypoint after BASE init

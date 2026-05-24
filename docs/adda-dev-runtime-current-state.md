@@ -12,8 +12,8 @@ Audience: AI agent or maintainer continuing implementation.
 
 `proto-adda` is the Tier 2 Docker image built `FROM adda-dev-runtime` (Tier 1). It adds:
 
-* Node.js 24 LTS — installed as a direct binary from `nodejs.org` (no NodeSource, no `xz-utils`). Pinned via `NODE_VERSION` build arg / `ENV`.
-* Claude Code — installed as a global npm package, version-pinned via `CLAUDE_CODE_VERSION` `ENV`.
+* Bun 1.3.14 — installed as a static binary from the official GitHub release (`oven-sh/bun`). Pinned via `BUN_VERSION` `ENV`.
+* Claude Code — installed as a global Bun package (`bun install -g`), version-pinned via `CLAUDE_CODE_VERSION` `ENV`.
 * A bootstrap hook that applies the Claude config at container start.
 
 Build context must be the repo root (not `proto-adda/`) because `COPY` paths reference `proto-adda/...`:
@@ -41,7 +41,7 @@ The Claude config is staged in the image at build time under `/usr/local/share/a
 
 | Artifact | Absolute path in container |
 |---|---|
-| Claude Code binary | `$(which claude)` (npm global, resolved via `PATH`) |
+| Claude Code binary | `/usr/local/bin/claude` (Bun global, `/usr/local/bin/claude`) |
 | quality-gates.sh | `/usr/local/libexec/adda-dev-runtime/quality-gates.sh` |
 | Config template dir | `/usr/local/share/adda-dev-runtime/.claude/` |
 | `.claude.json` template | `/usr/local/share/adda-dev-runtime/templates/.claude.json.template` |
