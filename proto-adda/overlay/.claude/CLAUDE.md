@@ -30,7 +30,7 @@ The transition to decision mode happens when PO says so unprompted, or when the 
 
 Every implementation task — regardless of size — follows this workflow from start to finish. Begin at step 1 whenever a new task is introduced. Steps 3–8 form an iteration loop: if Coder's output is not approved, the plan is amended and implementation repeats until PO signs off. Only then does the work proceed to step 9 (open PR).
 
-**`docs` issue fast tracking.** For `docs`-type issues, steps 3–8 are replaced by direct in-session handling. PM works with PO in the current session to produce the documentation artifact — no plan mode, no Coder, no AA dispatch. Proceed to step 9 when PO approves the artifact.
+**`docs` issue fast tracking.** For `docs`-type issues, steps 3–8 are replaced by direct in-session handling. PM works with PO in the current session to produce the documentation artifact — no plan mode, no Coder, no AA dispatch. When PO approves the artifact, commit and push, then run step 5a (CI watch) before proceeding to step 9.
 
 **CI must be green before proceeding.** Every push and every opened PR triggers a GitHub Actions run. PM owns CI health: red CI is never surfaced to PO as an outcome — it is analyzed and fixed autonomously if possible. See steps 5a and 9.
 
