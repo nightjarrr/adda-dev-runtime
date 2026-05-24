@@ -227,6 +227,10 @@ watch_pr() {
 case "$MODE" in
     push)
         if [[ "$PUSH_MODE" == "branch" ]]; then
+            if [[ "$PUSH_ARG" == "LOCAL" ]]; then
+                PUSH_ARG=$(git branch --show-current 2>/dev/null)
+                [[ -z "$PUSH_ARG" ]] && { echo "Error: cannot determine current local branch" >&2; exit 2; }
+            fi
             SHA=$(git ls-remote origin "$PUSH_ARG" 2>/dev/null | awk 'NR==1{print $1}')
             [[ -z "$SHA" ]] && { echo "Error: cannot resolve branch '$PUSH_ARG' on origin" >&2; exit 2; }
         else
