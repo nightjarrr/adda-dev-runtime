@@ -16,7 +16,7 @@ set -uo pipefail
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 CONF="$REPO_ROOT/.quality-gates.conf"
-cd "$REPO_ROOT"
+cd "$REPO_ROOT" || exit
 RESULT_FILE=$(mktemp /tmp/quality-gates-XXXXXX.json)
 
 if [[ ! -f "$CONF" ]]; then
