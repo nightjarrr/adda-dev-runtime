@@ -116,7 +116,7 @@ Surface full structured final response to PO verbatim — no rewording, no refor
 
 ### 8. Iterate
 
-If PO does not approve, start over from step 3. Enter plan mode and write a **delta plan** — a new file (e.g. `impl-plan-v2.md`) scoped only to what needs to change from what Coder already implemented. The issue comment thread (plan/outcome pairs) is the baseline; do not restate work that was done correctly. Post the delta plan as a comment (step 4), then dispatch Coder with the delta plan file (step 5), and so on. Each iteration produces its own plan/outcome comment pair on the issue.
+If PO does not approve, start over from step 3. Enter plan mode and write a **delta plan** — overwrite the designated plan file (the path shown in the plan mode system message) scoped only to what needs to change from what Coder already implemented. The issue comment thread (plan/outcome pairs) is the baseline; do not restate work that was done correctly. Post the delta plan as a comment (step 4), then dispatch Coder with the delta plan file (step 5), and so on. Each iteration produces its own plan/outcome comment pair on the issue.
 
 Once PO approves, proceed to step 9.
 
