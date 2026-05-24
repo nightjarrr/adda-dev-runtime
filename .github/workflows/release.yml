@@ -38,7 +38,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           push: true
-          file: docker/adda-dev-runtime/Dockerfile
+          file: adda-dev-runtime/Dockerfile
           context: .
           tags: ${{ steps.meta-base.outputs.tags }}
 

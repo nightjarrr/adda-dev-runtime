@@ -29,7 +29,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           push: true
-          file: docker/adda-dev-runtime/Dockerfile
+          file: adda-dev-runtime/Dockerfile
           context: .
           tags: ghcr.io/nightjarrr/adda-dev-runtime:edge
 

@@ -14,8 +14,7 @@ Audience: AI agent or maintainer continuing implementation.
 
 * Node.js 24 LTS — installed as a direct binary from `nodejs.org` (no NodeSource, no `xz-utils`). Pinned via `NODE_VERSION` build arg / `ENV`.
 * Claude Code — installed as a global npm package, version-pinned via `CLAUDE_CODE_VERSION` `ENV`.
-* A bootstrap hook that applies the overlay and initialises Claude config at container start.
-* `quality-gates.sh` baked at a fixed absolute path.
+* A bootstrap hook that applies the Claude config at container start.
 
 Build context must be the repo root (not `proto-adda/`) because `COPY` paths reference `proto-adda/...`:
 
@@ -29,12 +28,12 @@ Tier 1's entrypoint sources every `*.sh` file under `/usr/local/libexec/adda-dev
 
 Because hooks are sourced (not subprocessed), they can read and write environment variables that persist for downstream steps and the final CMD.
 
-### Overlay semantics
+### Config initialization semantics
 
-The overlay is staged in the image at build time under `/usr/local/share/adda-dev-runtime/.claude/`. At container start, `10-claude-config.sh`:
+The Claude config is staged in the image at build time under `/usr/local/share/adda-dev-runtime/.claude/`. At container start, `10-claude-config.sh`:
 
 1. Dies (non-silently) if `~/.claude/` already exists and is non-empty.
-2. `cp -r`s the staged overlay to `~/.claude/`.
+2. `cp -r`s the staged config to `~/.claude/`.
 3. Stamps `~/.claude.json` from `/usr/local/share/adda-dev-runtime/templates/.claude.json.template`, substituting `__CLAUDE_CODE_VERSION__` with `$CLAUDE_CODE_VERSION`.
 4. Creates `/workspace/.claude/memory`.
 
@@ -44,7 +43,7 @@ The overlay is staged in the image at build time under `/usr/local/share/adda-de
 |---|---|
 | Claude Code binary | `$(which claude)` (npm global, resolved via `PATH`) |
 | quality-gates.sh | `/usr/local/libexec/adda-dev-runtime/quality-gates.sh` |
-| Overlay template dir | `/usr/local/share/adda-dev-runtime/.claude/` |
+| Config template dir | `/usr/local/share/adda-dev-runtime/.claude/` |
 | `.claude.json` template | `/usr/local/share/adda-dev-runtime/templates/.claude.json.template` |
 | Bootstrap hook | `/usr/local/libexec/adda-dev-runtime/entrypoint.d/10-claude-config.sh` |
 
@@ -75,8 +74,8 @@ The overlay is staged in the image at build time under `/usr/local/share/adda-de
 * Host launcher: `launcher/adda-dev.sh`.
 * Launcher config: `launcher/adda-dev.env` (gitignored; from `adda-dev.env.example`).
 * Tmux seed config: `launcher/adda-dev.tmux.conf`.
-* ADDA Dev Runtime container Dockerfile: `docker/adda-dev-runtime/Dockerfile`.
-* ADDA Dev Runtime container entrypoint: `docker/adda-dev-runtime/entrypoint.sh`.
+* ADDA Dev Runtime container Dockerfile: `adda-dev-runtime/Dockerfile`.
+* ADDA Dev Runtime container entrypoint: `adda-dev-runtime/content/scripts/entrypoint.sh.source`.
 * Envoy config template: `docker/envoy/envoy.yaml.template`.
 
 ---
@@ -262,7 +261,7 @@ Policy clarification:
 * Clones repo into `/workspace`.
 * Resolves linked GitHub issue branch via GraphQL `linkedBranches(first: 2)`.
 * Initializes `~/.claude.json` from template using `CLAUDE_CODE_VERSION`.
-* `~/.claude/settings.json` ships via overlay (no separate template path); `autoMemoryDirectory` is set to `/workspace/.claude/memory`.
+* `~/.claude/settings.json` ships via content (no separate template path); `autoMemoryDirectory` is set to `/workspace/.claude/memory`.
 * Runs project bootstrap currently via `uv sync --frozen`.
 * Runs CMD (`claude` by default), then drops to interactive bash.
 * On exit, prints git status and commits ahead of upstream/main.

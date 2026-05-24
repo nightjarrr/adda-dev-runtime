@@ -5,10 +5,9 @@ This repo *is* the dev runtime. Design and current state are in
 
 ## Repo layout
 
-- `docker/adda-dev-runtime/` — Tier 1 base image (Dockerfile, entrypoint.sh).
-- `proto-adda/` — Tier 2 AI-harness image. Ships an overlay
-  (`proto-adda/overlay/`) that the Tier 1 entrypoint applies to `~/.claude/`
-  at container start.
+- `adda-dev-runtime/` — Tier 1 base image (Dockerfile, content/scripts/).
+- `proto-adda/` — Tier 2 AI-harness image. Ships content that the Tier 1
+  entrypoint uses to initialize `~/.claude/` at container start.
 - `launcher/adda-dev.sh` — host-side launcher.
 - `docker/envoy/` — Envoy proxy template.
 
@@ -24,13 +23,13 @@ container built from this same repo. Two consequences:
 
 ## Tier architecture
 
-**Tier 1** (`docker/adda-dev-runtime/`) — generic, AI-tool-agnostic base. Ships
-`entrypoint.sh`, system tools (git, gh, socat, rg, fdfind, etc.), and an empty
+**Tier 1** (`adda-dev-runtime/`) — generic, AI-tool-agnostic base. Ships
+`entrypoint.sh`, `resolve-issue-branch.sh`, `ci-watch.sh`, `quality-gates.sh`,
+system tools (git, gh, socat, rg, fdfind, etc.), and an empty
 `entrypoint.d/` hook directory.
 
 **Tier 2** (`proto-adda/`) — AI harness. Builds `FROM` Tier 1. Ships Node.js,
-Claude Code, Tier 2-owned scripts, the Claude config overlay, and the
-`10-claude-config.sh` bootstrap hook.
+Claude Code, the Claude config, and the `10-claude-config.sh` bootstrap hook.
 
 ## Path model
 
@@ -50,23 +49,21 @@ not the running container.
 
 | Artifact | Repo source | Image-baked path | Bootstrapped to |
 |---|---|---|---|
-| Tier 1 entrypoint | `docker/adda-dev-runtime/entrypoint.sh` | `/usr/local/libexec/adda-dev-runtime/entrypoint.sh` | — |
-| Tier 2 bootstrap hook | `proto-adda/overlay/entrypoint.d/10-claude-config.sh` | `/usr/local/libexec/adda-dev-runtime/entrypoint.d/10-claude-config.sh` | — |
-| `quality-gates.sh` | `proto-adda/overlay/scripts/quality-gates.sh.source` | `/usr/local/libexec/adda-dev-runtime/quality-gates.sh` | — |
-| `ci-watch.sh` | `proto-adda/overlay/scripts/ci-watch.sh.source` | `/usr/local/libexec/adda-dev-runtime/ci-watch.sh` | — |
-| `resolve-issue-branch.sh` | `proto-adda/overlay/scripts/resolve-issue-branch.sh.source` | `/usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh` | — |
-| Claude overlay (CLAUDE.md, settings.json, agents/, skills/) | `proto-adda/overlay/.claude/` | `/usr/local/share/adda-dev-runtime/.claude/` | `~/.claude/` (ephemeral) |
+| Tier 1 entrypoint | `adda-dev-runtime/content/scripts/entrypoint.sh.source` | `/usr/local/libexec/adda-dev-runtime/entrypoint.sh` | — |
+| `resolve-issue-branch.sh` | `adda-dev-runtime/content/scripts/resolve-issue-branch.sh.source` | `/usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh` | — |
+| `ci-watch.sh` | `adda-dev-runtime/content/scripts/ci-watch.sh.source` | `/usr/local/libexec/adda-dev-runtime/ci-watch.sh` | — |
+| `quality-gates.sh` | `adda-dev-runtime/content/scripts/quality-gates.sh.source` | `/usr/local/libexec/adda-dev-runtime/quality-gates.sh` | — |
+| Tier 2 bootstrap hook | `proto-adda/content/entrypoint.d/10-claude-config.sh.source` | `/usr/local/libexec/adda-dev-runtime/entrypoint.d/10-claude-config.sh` | — |
+| Claude config (CLAUDE.md, settings.json, agents/, skills/) | `proto-adda/content/.claude/` | `/usr/local/share/adda-dev-runtime/.claude/` | `~/.claude/` (ephemeral) |
 
-Scripts under `proto-adda/overlay/scripts/` use a `.sh.source` extension in the
-repo; the Dockerfile strips `.source` on COPY. `resolve-issue-branch.sh` is
-Tier 2-owned but called by Tier 1 `entrypoint.sh` — known issue #94.
+Scripts baked to `/usr/local/libexec/` use a `.sh.source` extension in the repo
+and carry no exec bit; the Dockerfile `RUN chmod` sets the exec bit at build time.
 
 ## CI/build pipeline
 
-`base.yml` builds Tier 1, then Tier 2 `FROM` Tier 1. Lints: shellcheck on
-`entrypoint.sh`, `launcher/adda-dev.sh`, `10-claude-config.sh`; hadolint on both
-Dockerfiles. Changes reach production: PR → CI → edge image on main merge →
-versioned release on tag.
+`base.yml` builds Tier 1, then Tier 2 `FROM` Tier 1. Lints: shellcheck on all
+six scripts; hadolint on both Dockerfiles. Changes reach production: PR → CI →
+edge image on main merge → versioned release on tag.
 
 ## Conventions
 

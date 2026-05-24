@@ -5,8 +5,7 @@
 # FROM adda-dev-runtime (Tier 1). Adds:
 #   - Node.js 24 LTS (direct binary from nodejs.org)
 #   - Claude Code (npm global, version-pinned)
-#   - Bootstrap hook: overlay-apply + Claude config init
-#   - quality-gates.sh at fixed absolute path
+#   - Bootstrap hook: Claude config init
 #
 # Pinned versions:
 #   Node.js:      24.1.0
@@ -38,25 +37,17 @@ RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 # ----------------------------------------------------------------------
 # Bootstrap hook — sourced by Tier 1 entrypoint after BASE init
 # ----------------------------------------------------------------------
-COPY proto-adda/overlay/entrypoint.d/ /usr/local/libexec/adda-dev-runtime/entrypoint.d/
-RUN chmod +x /usr/local/libexec/adda-dev-runtime/entrypoint.d/*.sh
+COPY proto-adda/content/entrypoint.d/ /usr/local/libexec/adda-dev-runtime/entrypoint.d/
+RUN for f in /usr/local/libexec/adda-dev-runtime/entrypoint.d/*.sh.source; do \
+        mv "$f" "${f%.source}"; \
+    done \
+    && chmod +x /usr/local/libexec/adda-dev-runtime/entrypoint.d/*.sh
 
 # ----------------------------------------------------------------------
-# Overlay — staged in image; hook copies to ~/.claude/ at container start
+# Claude config — staged in image; hook copies to ~/.claude/ at container start
 # ----------------------------------------------------------------------
-COPY proto-adda/overlay/.claude/ /usr/local/share/adda-dev-runtime/.claude/
-COPY proto-adda/.claude.json.template /usr/local/share/adda-dev-runtime/templates/.claude.json.template
-
-# ----------------------------------------------------------------------
-# quality-gates.sh — baked at fixed absolute path; overlay/scripts/ is
-# the source-of-truth in the repo but ships here, not to ~/
-# ----------------------------------------------------------------------
-COPY proto-adda/overlay/scripts/quality-gates.sh.source /usr/local/libexec/adda-dev-runtime/quality-gates.sh
-RUN chmod +x /usr/local/libexec/adda-dev-runtime/quality-gates.sh
-COPY proto-adda/overlay/scripts/ci-watch.sh.source /usr/local/libexec/adda-dev-runtime/ci-watch.sh
-RUN chmod +x /usr/local/libexec/adda-dev-runtime/ci-watch.sh
-COPY proto-adda/overlay/scripts/resolve-issue-branch.sh.source /usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh
-RUN chmod +x /usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh
+COPY proto-adda/content/.claude/ /usr/local/share/adda-dev-runtime/.claude/
+COPY proto-adda/content/templates/.claude.json.template /usr/local/share/adda-dev-runtime/templates/.claude.json.template
 
 # Restore runtime user before handoff.
 USER adda

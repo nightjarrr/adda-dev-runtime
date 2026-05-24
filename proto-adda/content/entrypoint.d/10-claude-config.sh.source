@@ -1,5 +1,5 @@
 #!/bin/bash
-# Apply proto-adda overlay and initialize Claude config.
+# Bootstrap Claude config.
 # Sourced by Tier 1 entrypoint; require_env/require_tool/section/success/die
 # helpers are in scope from the parent shell.
 
@@ -36,7 +36,7 @@ esac
 
 # Die if ~/.claude already exists and is non-empty
 if [[ -d "${HOME}/.claude" ]] && [[ -n "$(ls -A "${HOME}/.claude" 2>/dev/null)" ]]; then
-    die "${HOME}/.claude already exists and is non-empty; overlay cannot be applied."
+    die "${HOME}/.claude already exists and is non-empty; Claude config cannot be initialized."
 fi
 
 mkdir -p "${HOME}/.claude"
