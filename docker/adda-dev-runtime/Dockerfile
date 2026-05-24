@@ -54,6 +54,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 #     the sidecar proxy listening socket (mounted as Unix socket)
 # ----------------------------------------------------------------------
 # hadolint ignore=DL3008
+# Why: apt package versions are intentionally not pinned. Debian stable's release policy
+# (security/bug-fix updates only within a minor release) is the structural version anchor;
+# pinning individual apt version strings would be brittle without improving reproducibility.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         locales \
         tzdata \
