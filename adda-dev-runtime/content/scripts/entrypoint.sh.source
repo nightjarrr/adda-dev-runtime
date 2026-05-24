@@ -103,6 +103,7 @@ require_tool fdfind
 require_tool bwrap
 require_tool micro
 require_tool delta
+require_tool bun
 
 # ----------------------------------------------------------------------
 # Issue ID handling
