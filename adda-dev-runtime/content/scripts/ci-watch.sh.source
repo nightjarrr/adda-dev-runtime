@@ -12,7 +12,7 @@
 #   1 — one or more runs failed; JSON summary written to stdout.
 #   2 — usage error or missing input.
 #
-# Stdout on exit 0: silent.
+# Stdout on exit 0: JSON object with conclusion "success" and empty runs array.
 # Stdout on exit 1: JSON object describing failing runs (see Requirements).
 
 set -uo pipefail
@@ -147,6 +147,7 @@ watch_push() {
     done
 
     if [[ ${#failing_run_ids[@]} -eq 0 ]]; then
+        jq -n '{conclusion: "success", runs: []}'
         exit 0
     fi
 
@@ -183,6 +184,7 @@ watch_pr() {
     fail_count=$(echo "$checks_json" | jq '[.[] | select(.state != "SUCCESS" and .state != "success")] | length')
 
     if [[ "$fail_count" -eq 0 ]]; then
+        jq -n '{conclusion: "success", runs: []}'
         exit 0
     fi
 
