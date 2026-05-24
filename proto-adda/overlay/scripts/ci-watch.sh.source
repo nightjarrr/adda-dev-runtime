@@ -62,7 +62,7 @@ collect_failing_runs() {
     local -n _run_ids="$1"
     local -n _runs_json_out="$2"
 
-    local runs_json="[]"
+    local _result="[]"
     for run_id in "${_run_ids[@]}"; do
         local run_url run_event run_conclusion log_file
         run_url=$(gh run view "$run_id" --json url -q .url 2>/dev/null || echo "")
@@ -72,9 +72,9 @@ collect_failing_runs() {
         log_file=$(mktemp /tmp/ci-watch-logs-XXXXXX.txt)
         gh run view "$run_id" --log-failed >"$log_file" 2>&1 || true
 
-        runs_json=$(
+        _result=$(
             jq -n \
-                --argjson runs "$runs_json" \
+                --argjson runs "$_result" \
                 --arg runId "$run_id" \
                 --arg event "$run_event" \
                 --arg url "$run_url" \
@@ -92,7 +92,7 @@ collect_failing_runs() {
         )
     done
 
-    _runs_json_out="$runs_json"
+    _runs_json_out="$_result"
 }
 
 # ----------------------------------------------------------------------
