@@ -76,7 +76,7 @@ The Claude config is staged in the image at build time under `/usr/local/share/a
 * Tmux seed config: `launcher/adda-dev.tmux.conf`.
 * ADDA Dev Runtime container Dockerfile: `adda-dev-runtime/Dockerfile`.
 * ADDA Dev Runtime container entrypoint: `adda-dev-runtime/content/scripts/entrypoint.sh.source`.
-* Envoy config template: `docker/envoy/envoy.yaml.template`.
+* Envoy config template: `launcher/envoy.yaml.template`.
 
 ---
 

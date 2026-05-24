@@ -27,11 +27,9 @@ set -euo pipefail
 # ----------------------------------------------------------------------
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 SCRIPT_PATH="${SCRIPT_DIR}/$(basename "${BASH_SOURCE[0]}")"
-PROJECT_DIR="$( cd "${SCRIPT_DIR}/.." && pwd )"
 
 ENV_FILE="${SCRIPT_DIR}/adda-dev.env"
-ENVOY_DIR="${PROJECT_DIR}/docker/envoy"
-ENVOY_TEMPLATE="${ENVOY_DIR}/envoy.yaml.template"
+ENVOY_TEMPLATE="${SCRIPT_DIR}/envoy.yaml.template"
 
 TMUX_SEED_CONFIG="${SCRIPT_DIR}/adda-dev.tmux.conf"
 TMUX_USER_CONFIG="${HOME}/.tmux.conf"
