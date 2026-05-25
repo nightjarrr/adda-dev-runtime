@@ -34,8 +34,14 @@ jobs:
         with:
           bun-version: "1.3.14"
 
+      - name: Install tsc and @types/bun globally
+        run: BUN_INSTALL=/usr/local bun install -g typescript@6.0.3 @types/bun@1.3.14
+
       - name: Lint (biome)
         run: bunx @biomejs/biome@2.4.15 check adda-dev-runtime/src/
+
+      - name: Type check (tsc)
+        run: tsc --noEmit
 
       - name: Test
         run: bun test --coverage

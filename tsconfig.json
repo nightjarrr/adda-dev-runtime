@@ -6,6 +6,7 @@
     "module": "ESNext",
     "moduleResolution": "bundler",
     "skipLibCheck": true,
-    "types": ["bun"]
+    "types": ["bun"],
+    "typeRoots": ["/usr/local/install/global/node_modules/@types"]
   }
 }

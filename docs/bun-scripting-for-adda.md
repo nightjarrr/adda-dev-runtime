@@ -166,8 +166,8 @@ No shebang or exec bit in TypeScript sources.
 Two distinct layers:
 
 **Local (`.quality-gates.conf`, runs in container):**
-- Session 1: `bun test --coverage`, `bun build`
-- Session 2: `tsc --noEmit`, `biome check` (tools not available until Session 1 image merges)
+- `bun test --coverage`, `bun build`
+- `tsc --noEmit`, `biome check adda-dev-runtime/src/`
 
 **CI-only (`.github/workflows/base.yml`, not in container):**
 - `shellcheck` — pre-installed on `ubuntu-latest` runner
@@ -192,9 +192,9 @@ Tier 1 made the Bun runtime choice; bundling its verification toolchain is consi
 
 ## Package manifest
 
-- `package.json` + `bun.lockb` at repo root — settled convention; available for future use
-- Current sole devDep: `@types/bun` — CI type-checking anchor (`bun install` in CI workflow satisfies `tsc`)
+- `package.json` at repo root — settled convention; available for future use
+- `@types/bun` is globally installed in the Tier 1 image; CI installs it the same way via `BUN_INSTALL=/usr/local bun install -g`
 - Biome is globally installed; not a devDep
-- `tsconfig.json`: strict, `noEmit`, `ESNext` target/module, `moduleResolution: bundler`, `skipLibCheck`, `types: ["bun-types"]`
+- `tsconfig.json`: strict, `noEmit`, `ESNext` target/module, `moduleResolution: bundler`, `skipLibCheck`, `types: ["bun"]`, `typeRoots: ["/usr/local/install/global/node_modules/@types"]`
 - `bunfig.toml`: `coverageThreshold` line/function/statement = 90
 - `biome.json`: recommended TS rules + `no-console` enforcement on `adda-dev-runtime/src/`
