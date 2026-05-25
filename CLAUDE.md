@@ -6,8 +6,8 @@ This repo *is* the dev runtime. Design and current state are in
 ## Repo layout
 
 - `adda-dev-runtime/` — Tier 1 base image (Dockerfile, content/scripts/).
-- `proto-adda/` — Tier 2 AI-harness image. Adds Node.js, Claude Code, the
-  Claude config, and the `10-claude-config.sh` bootstrap hook.
+- `proto-adda/` — Tier 2 AI-harness image. Adds Claude Code, the Claude
+  config, and the `10-claude-config.sh` bootstrap hook.
 - `launcher/` — host-side launcher script, config, and Envoy proxy template.
 
 ## Working on the runtime from inside the runtime
@@ -25,10 +25,12 @@ container built from this same repo. Two consequences:
 **Tier 1** (`adda-dev-runtime/`) — generic, AI-tool-agnostic base. Ships
 `entrypoint.sh`, `resolve-issue-branch.sh`, `ci-watch.sh`, `quality-gates.sh`,
 system tools (git, gh, socat, rg, fdfind, etc.), and an empty
-`entrypoint.d/` hook directory.
+`entrypoint.d/` hook directory. Also ships Bun, tsc, and Biome — making
+TypeScript a first-class scripting language for Tier 1 scripts; see
+`docs/bun-scripting-for-adda.md`.
 
-**Tier 2** (`proto-adda/`) — AI harness. Builds `FROM` Tier 1. Ships Node.js,
-Claude Code, the Claude config, and the `10-claude-config.sh` bootstrap hook.
+**Tier 2** (`proto-adda/`) — AI harness. Builds `FROM` Tier 1. Ships Claude
+Code, the Claude config, and the `10-claude-config.sh` bootstrap hook.
 
 ## Path model
 
