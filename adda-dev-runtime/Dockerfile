@@ -169,9 +169,9 @@ RUN BUN_INSTALL=/usr/local bun install -g typescript@${TYPESCRIPT_VERSION} @type
 # Bootstrap scripts — all Tier 1 scripts baked at build time.
 # .sh.source files have no exec bit in the repo; chmod is set here.
 # ----------------------------------------------------------------------
-RUN mkdir -p /usr/local/libexec/adda-dev-runtime/entrypoint.d
 COPY adda-dev-runtime/content/scripts/ /usr/local/libexec/adda-dev-runtime/
-RUN for f in /usr/local/libexec/adda-dev-runtime/*.sh.source; do \
+RUN mkdir -p /usr/local/libexec/adda-dev-runtime/entrypoint.d \
+    && for f in /usr/local/libexec/adda-dev-runtime/*.sh.source; do \
         mv "$f" "${f%.source}"; \
     done \
     && chmod +x /usr/local/libexec/adda-dev-runtime/*.sh
