@@ -9,7 +9,6 @@ Design reference for Tier 1 scripts written in TypeScript and executed by Bun.
 - Already installed in Tier 1 image; zero additional runtime cost
 - Native TypeScript execution — no transpile step at dev time
 - Built-in test runner, coverage reporter, and bundler
-- `node` symlink provided; no separate Node installation needed
 
 ---
 
@@ -53,7 +52,7 @@ if (import.meta.main) process.exit(await MyScript.create().run(process.argv));
 | 1 | Uncaught exception / runtime error |
 | 2 | Argument parsing error |
 
-Additional codes expressed via typed exception hierarchy extending a base `ScriptError`.
+Additional codes: scripts throw subclasses of `ScriptError` (base error class defined in `lib/ScriptBase.ts`); `run()` catches them and maps each to its designated exit code.
 
 ---
 
@@ -68,7 +67,7 @@ Capabilities are interfaces representing external services. A script declares ex
 | `Shell` | Execute subprocesses |
 | `FileReader` | Read file contents |
 | `FileWriter` | Write file contents |
-| `Stdio` | Write to stdout / stderr |
+| `Stdio` | Read from stdin; write to stdout / stderr |
 | `Env` | Read environment variables |
 
 **Bun implementations:**
@@ -78,7 +77,7 @@ Capabilities are interfaces representing external services. A script declares ex
 | `Shell` | `BunShell` | Bun `$` template tag |
 | `FileReader` | `BunFileReader` | `Bun.file().text()` |
 | `FileWriter` | `BunFileWriter` | `Bun.write()` |
-| `Stdio` | `BunStdio` | `process.stdout` / `process.stderr` |
+| `Stdio` | `BunStdio` | `process.stdin` / `process.stdout` / `process.stderr` |
 | `Env` | `BunEnv` | `process.env` |
 
 **`TDeps extends Stdio`** — `Stdio` is always mandatory; `ScriptBase` uses it for error output.
@@ -88,6 +87,8 @@ Capabilities are interfaces representing external services. A script declares ex
 ```typescript
 class Deploy extends ScriptBase<Shell & FileReader & Stdio> { ... }
 ```
+
+`& Stdio` in the type argument is mandatory, not decorative — `TDeps extends Stdio` is enforced at compile time, so `ScriptBase<Shell & FileReader>` alone would be a type error.
 
 **`static create()` factory** wires production implementations. Constructor accepts `TDeps` directly — used for test injection.
 
@@ -109,7 +110,7 @@ new Deploy({ shell: mockShell, fileReader: mockFileReader, stdio: mockStdio });
 | Each capability implementation | Integration | Tests against real Bun APIs in isolation |
 | Script descendants | Unit | Constructor injection with mocked capabilities |
 
-Dynamic `import()` inside test functions is required when the module under test must be loaded after `mock.module()` is registered. Static imports are fine for pure functions that do not touch Bun built-ins.
+Dynamic `import()` inside test functions applies only to capability implementation integration tests — when `mock.module()` must be registered before the module loads. Script descendant tests use constructor injection exclusively; dynamic imports are never required there.
 
 ---
 
