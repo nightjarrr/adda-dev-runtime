@@ -29,6 +29,20 @@ jobs:
         with:
           dockerfile: proto-adda/Dockerfile
 
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: "1.3.14"
+
+      - name: Lint (biome)
+        run: bunx @biomejs/biome@2.4.15 check adda-dev-runtime/src/
+
+      - name: Test
+        run: bun test --coverage
+
+      - name: Build (pre-check)
+        run: bun build adda-dev-runtime/src/*.ts --outdir /tmp/ci-build-check/ --target bun
+
       - name: Build adda-dev-runtime
         run: docker build -t adda-dev-runtime:ci -f adda-dev-runtime/Dockerfile .
 
@@ -51,6 +65,7 @@ jobs:
             test -x /usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh
             test -x /usr/local/libexec/adda-dev-runtime/ci-watch.sh
             test -x /usr/local/libexec/adda-dev-runtime/quality-gates.sh
+            test -x /usr/local/libexec/adda-dev-runtime/hello
           '
 
       - name: Smoke test — proto-adda
