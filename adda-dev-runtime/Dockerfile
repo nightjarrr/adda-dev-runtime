@@ -150,20 +150,17 @@ RUN curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERS
 
 # ----------------------------------------------------------------------
 # Biome — standalone binary linter/formatter, from official GitHub release.
-# ----------------------------------------------------------------------
-ENV BIOME_VERSION=2.4.15
-RUN curl -fsSL \
-        "https://github.com/biomejs/biome/releases/download/%40biomejs%2Fbiome%40${BIOME_VERSION}/biome-linux-x64-musl" \
-        -o /usr/local/bin/biome \
-    && chmod +x /usr/local/bin/biome
-
-# ----------------------------------------------------------------------
 # TypeScript + @types/bun — installed globally via bun for tsc and type
 # checking in container sessions; BUN_INSTALL sets the global prefix.
 # @types/bun version matches BUN_VERSION (same runtime).
 # ----------------------------------------------------------------------
-ENV TYPESCRIPT_VERSION=6.0.3
-RUN BUN_INSTALL=/usr/local bun install -g typescript@${TYPESCRIPT_VERSION} @types/bun@${BUN_VERSION}
+ENV BIOME_VERSION=2.4.15 \
+    TYPESCRIPT_VERSION=6.0.3
+RUN curl -fsSL \
+        "https://github.com/biomejs/biome/releases/download/%40biomejs%2Fbiome%40${BIOME_VERSION}/biome-linux-x64-musl" \
+        -o /usr/local/bin/biome \
+    && chmod +x /usr/local/bin/biome \
+    && BUN_INSTALL=/usr/local bun install -g typescript@${TYPESCRIPT_VERSION} @types/bun@${BUN_VERSION}
 
 # ----------------------------------------------------------------------
 # Bootstrap scripts — all Tier 1 scripts baked at build time.
