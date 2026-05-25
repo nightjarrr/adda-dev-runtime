@@ -153,7 +153,7 @@ RUN curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERS
 # ----------------------------------------------------------------------
 ENV BIOME_VERSION=2.4.15
 RUN curl -fsSL \
-        "https://github.com/biomejs/biome/releases/download/cli%2Fv${BIOME_VERSION}/biome-linux-x64-musl" \
+        "https://github.com/biomejs/biome/releases/download/%40biomejs%2Fbiome%40${BIOME_VERSION}/biome-linux-x64-musl" \
         -o /usr/local/bin/biome \
     && chmod +x /usr/local/bin/biome
 
