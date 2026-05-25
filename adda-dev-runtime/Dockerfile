@@ -13,8 +13,25 @@
 #   Micro:         2.0.15
 #   Delta:         0.19.2
 #   Bun:           1.3.14                        # 2026-05-24
+#   Biome:         2.4.15
+#   TypeScript:    6.0.3
 # ======================================================================
 
+ARG BUN_VERSION=1.3.14
+
+# ======================================================================
+# BUN BUILDER — compile TypeScript scripts to extensionless executables
+# ======================================================================
+FROM oven/bun:${BUN_VERSION}-slim AS bun-builder
+WORKDIR /build
+COPY adda-dev-runtime/src/ /build/
+RUN bun build /build/*.ts \
+        --outdir /build/out/ \
+        --target bun \
+        --sourcemap=inline \
+        --banner '#!/usr/bin/env bun' \
+    && for f in /build/out/*.js; do mv "$f" "${f%.js}"; done \
+    && chmod +x /build/out/*
 
 # ======================================================================
 # BASE — generic dev runtime (project-agnostic, AI-tool-agnostic)
@@ -123,12 +140,30 @@ RUN curl -fsSL "https://github.com/dandavison/delta/releases/download/${DELTA_VE
 # Bun — JS runtime and package manager, from official GitHub release.
 # Static binary; no runtime dependencies.
 # ----------------------------------------------------------------------
-ENV BUN_VERSION=1.3.14
+ARG BUN_VERSION
+ENV BUN_VERSION=${BUN_VERSION}
 RUN curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64-baseline.zip" \
         -o /tmp/bun.zip \
     && unzip -j /tmp/bun.zip 'bun-linux-x64-baseline/bun' -d /usr/local/bin/ \
     && rm /tmp/bun.zip \
     && ln -s /usr/local/bin/bun /usr/local/bin/node
+
+# ----------------------------------------------------------------------
+# Biome — standalone binary linter/formatter, from official GitHub release.
+# ----------------------------------------------------------------------
+ENV BIOME_VERSION=2.4.15
+RUN curl -fsSL \
+        "https://github.com/biomejs/biome/releases/download/cli%2Fv${BIOME_VERSION}/biome-linux-x64-musl" \
+        -o /usr/local/bin/biome \
+    && chmod +x /usr/local/bin/biome
+
+# ----------------------------------------------------------------------
+# TypeScript + @types/bun — installed globally via bun for tsc and type
+# checking in container sessions; BUN_INSTALL sets the global prefix.
+# @types/bun version matches BUN_VERSION (same runtime).
+# ----------------------------------------------------------------------
+ENV TYPESCRIPT_VERSION=6.0.3
+RUN BUN_INSTALL=/usr/local bun install -g typescript@${TYPESCRIPT_VERSION} @types/bun@${BUN_VERSION}
 
 # ----------------------------------------------------------------------
 # Bootstrap scripts — all Tier 1 scripts baked at build time.
@@ -140,6 +175,7 @@ RUN for f in /usr/local/libexec/adda-dev-runtime/*.sh.source; do \
         mv "$f" "${f%.source}"; \
     done \
     && chmod +x /usr/local/libexec/adda-dev-runtime/*.sh
+COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/
 
 
 # ======================================================================
