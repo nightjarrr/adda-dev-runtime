@@ -180,5 +180,9 @@ describe("ScriptBase", () => {
             const err = new ScriptError("default code");
             expect(err.exitCode).toBe(1);
         });
+
+        test("throws RangeError when exitCode is 0", () => {
+            expect(() => new ScriptError("msg", 0)).toThrow(RangeError);
+        });
     });
 });

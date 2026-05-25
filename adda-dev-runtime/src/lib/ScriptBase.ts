@@ -6,6 +6,10 @@ export class ScriptError extends Error {
 
     constructor(message: string, exitCode = 1) {
         super(message);
+        if (exitCode < 1)
+            throw new RangeError(
+                `ScriptError exitCode must be >= 1, got ${exitCode}`,
+            );
         this.name = "ScriptError";
         this.exitCode = exitCode;
     }
