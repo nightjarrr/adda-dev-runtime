@@ -1,2 +1,2 @@
 [test]
-coverageThreshold = { line = 0.70, function = 1.00, statement = 0.70 }
+coverageThreshold = { line = 0.95, statement = 0.90 }
