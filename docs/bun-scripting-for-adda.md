@@ -182,7 +182,7 @@ Bun resolves path aliases from `tsconfig.json` at runtime — no separate bundle
 ## Coverage
 
 - Target: 95%
-- Enforced floor: 90% (line / function / statement) via `bunfig.toml` `coverageThreshold`
+- Enforced floor: 95% line, 90% statement via `bunfig.toml` `coverageThreshold` (function metric excluded — non-deterministic for implicit constructors)
 
 ---
 
