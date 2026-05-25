@@ -1,17 +1,17 @@
 import { parseArgs } from "node:util";
-import type { Stdio } from "./capabilities";
+import type { StdioDep } from "./capabilities";
 
 export class ScriptError extends Error {
     readonly exitCode: number;
 
-    constructor(message: string, exitCode: number) {
+    constructor(message: string, exitCode = 1) {
         super(message);
         this.name = "ScriptError";
         this.exitCode = exitCode;
     }
 }
 
-export abstract class ScriptBase<TDeps extends Stdio> {
+export abstract class ScriptBase<TDeps extends StdioDep> {
     protected readonly deps: TDeps;
 
     constructor(deps: TDeps) {
@@ -32,7 +32,7 @@ export abstract class ScriptBase<TDeps extends Stdio> {
             parsed = parseArgs({ ...this.argDefinitions(), args: sliced });
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            await this.deps.writeErr(`Error: ${message}\n`);
+            this.deps.stdio.stderr.write(`Error: ${message}\n`);
             return 2;
         }
 
@@ -41,11 +41,11 @@ export abstract class ScriptBase<TDeps extends Stdio> {
             return 0;
         } catch (err) {
             if (err instanceof ScriptError) {
-                await this.deps.writeErr(`Error: ${err.message}\n`);
+                this.deps.stdio.stderr.write(`Error: ${err.message}\n`);
                 return err.exitCode;
             }
             const message = err instanceof Error ? err.message : String(err);
-            await this.deps.writeErr(`Unexpected error: ${message}\n`);
+            this.deps.stdio.stderr.write(`Unexpected error: ${message}\n`);
             return 1;
         }
     }

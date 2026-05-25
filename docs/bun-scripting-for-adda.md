@@ -24,7 +24,7 @@ adda-dev-runtime/src/<name>.test.ts     # unit tests
 **Class skeleton:**
 
 ```typescript
-class MyScript extends ScriptBase<Shell & Stdio> {
+class MyScript extends ScriptBase<ShellDep & StdioDep> {
     static create(): MyScript {
         return new MyScript({ shell: new BunShell(), stdio: new BunStdio() });
     }
@@ -36,7 +36,9 @@ class MyScript extends ScriptBase<Shell & Stdio> {
     }
 }
 
-if (import.meta.main) process.exit(await MyScript.create().run(process.argv));
+// c8 ignore next 2
+if (import.meta.main)
+    process.exit(await MyScript.create().run(process.argv));
 ```
 
 **`run(argv)`** (implemented in `ScriptBase`):
@@ -44,6 +46,8 @@ if (import.meta.main) process.exit(await MyScript.create().run(process.argv));
 2. Parses args via `util.parseArgs` using `argDefinitions()`
 3. Calls `execute()`
 4. Returns exit code
+
+**`import.meta.main` convention:** The `// c8 ignore next 2` annotation is mandatory on all script entrypoints. The block is two lines (`if` and `process.exit` call), and it is always excluded from coverage because it cannot be exercised in unit tests.
 
 **Exit codes:**
 | Code | Meaning |
@@ -74,27 +78,43 @@ Capabilities are interfaces representing external services. A script declares ex
 
 | Interface | Implementation | Backing API |
 |-----------|---------------|-------------|
-| `Shell` | `BunShell` | Bun `$` template tag |
+| `Shell` | `BunShell` | `Bun.spawn()` — direct process execution, no shell features |
 | `FileReader` | `BunFileReader` | `Bun.file().text()` |
 | `FileWriter` | `BunFileWriter` | `Bun.write()` |
-| `Stdio` | `BunStdio` | `process.stdin` / `process.stdout` / `process.stderr` |
+| `Stdio` | `BunStdio` | `Bun.stdin`, `process.stdout`, `process.stderr` exposed directly as properties |
 | `Env` | `BunEnv` | `process.env` |
 
-**`TDeps extends Stdio`** — `Stdio` is always mandatory; `ScriptBase` uses it for error output.
+**Shell note:** `BunShell` uses `Bun.spawn()` — no shell features (no pipes, globs, redirects). Callers needing shell features must invoke a shell explicitly, e.g. `shell.run(["sh", "-c", "cmd1 | cmd2 > out.txt"])`.
+
+**Dep interfaces:** Each capability has a paired Dep interface that names the property used in the script's deps object:
+
+```typescript
+interface ShellDep    { shell:      Shell      }
+interface FileReaderDep { fileReader: FileReader }
+interface FileWriterDep { fileWriter: FileWriter }
+interface StdioDep    { stdio:      Stdio      }
+interface EnvDep      { env:        Env        }
+```
+
+**`TDeps extends StdioDep`** — `StdioDep` is always mandatory; `ScriptBase` uses `this.deps.stdio.stderr` for error output.
 
 **Composition example:**
 
 ```typescript
-class Deploy extends ScriptBase<Shell & FileReader & Stdio> { ... }
+type DeployDeps = ShellDep & FileReaderDep & StdioDep;
+
+class Deploy extends ScriptBase<DeployDeps> { ... }
 ```
 
-`& Stdio` in the type argument is mandatory, not decorative — `TDeps extends Stdio` is enforced at compile time, so `ScriptBase<Shell & FileReader>` alone would be a type error.
+`& StdioDep` in the type argument is mandatory, not decorative — `TDeps extends StdioDep` is enforced at compile time.
 
-**`static create()` factory** wires production implementations. Constructor accepts `TDeps` directly — used for test injection.
+**Constructor injection** — no `static create()` factory on capability classes. The `static create()` factory on each script wires production implementations. Constructor accepts `TDeps` directly — used for test injection.
 
 ```typescript
 // production
-static create() { return new Deploy({ shell: new BunShell(), fileReader: new BunFileReader(), stdio: new BunStdio() }); }
+static create() {
+    return new Deploy({ shell: new BunShell(), fileReader: new BunFileReader(), stdio: new BunStdio() });
+}
 
 // test
 new Deploy({ shell: mockShell, fileReader: mockFileReader, stdio: mockStdio });
@@ -122,11 +142,40 @@ Mocks satisfy interfaces via structural typing; no `implements` declaration need
 
 ```typescript
 const mockShell: Shell = {
-    run: mock(async () => ({ stdout: "ok", exitCode: 0 }))
+    run: mock(async () => ({ stdout: "ok", stderr: "", exitCode: 0 }))
+};
+
+const mockStdio: Stdio = {
+    stdin: { text: mock(async () => "") },
+    stdout: { write: mock((_text: string) => {}) },
+    stderr: { write: mock((_text: string) => {}) },
 };
 ```
 
 `mock.module()` (top-level, before imports) is reserved for wrapping Bun built-in APIs in capability implementations when integration-testing those implementations in isolation.
+
+---
+
+## Path alias
+
+All scripts in both tiers import from `@adda/lib`:
+
+```typescript
+import type { ShellDep, StdioDep } from "@adda/lib";
+import { BunShell, BunStdio, ScriptBase, ScriptError } from "@adda/lib";
+```
+
+The alias is configured in `tsconfig.json`:
+
+```json
+"baseUrl": ".",
+"paths": {
+    "@adda/lib": ["adda-dev-runtime/src/lib"],
+    "@adda/lib/*": ["adda-dev-runtime/src/lib/*"]
+}
+```
+
+Bun resolves path aliases from `tsconfig.json` at runtime — no separate bundler configuration needed.
 
 ---
 
@@ -195,6 +244,6 @@ Tier 1 made the Bun runtime choice; bundling its verification toolchain is consi
 - `package.json` at repo root — settled convention; available for future use
 - `@types/bun` is globally installed in the Tier 1 image; CI installs it the same way via `BUN_INSTALL=/usr/local bun install -g`
 - Biome is globally installed; not a devDep
-- `tsconfig.json`: strict, `noEmit`, `ESNext` target/module, `moduleResolution: bundler`, `skipLibCheck`, `types: ["bun"]`, `typeRoots: ["/usr/local/install/global/node_modules/@types"]`
+- `tsconfig.json`: strict, `noEmit`, `ESNext` target/module, `moduleResolution: bundler`, `skipLibCheck`, `types: ["bun"]`, `typeRoots: ["/usr/local/install/global/node_modules/@types"]`, `baseUrl: "."`, `paths` for `@adda/lib`
 - `bunfig.toml`: `coverageThreshold` line/function/statement = 90
 - `biome.json`: recommended TS rules + `no-console` enforcement on `adda-dev-runtime/src/`

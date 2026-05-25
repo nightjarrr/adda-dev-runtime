@@ -1,20 +1,15 @@
 import type { parseArgs } from "node:util";
-import type { Shell, Stdio } from "./lib/index";
-import { BunShell, BunStdio, ScriptBase, ScriptError } from "./lib/index";
+import type { ShellDep, StdioDep } from "@adda/lib";
+import { BunShell, BunStdio, ScriptBase, ScriptError } from "@adda/lib";
 
-type VersionDeps = Shell & Stdio;
+type VersionDeps = ShellDep & StdioDep;
 
 export class VersionScript extends ScriptBase<VersionDeps> {
     static create(): VersionScript {
-        const shell = new BunShell();
-        const stdio = new BunStdio();
-        const deps: VersionDeps = {
-            run: shell.run.bind(shell),
-            readLine: stdio.readLine.bind(stdio),
-            writeOut: stdio.writeOut.bind(stdio),
-            writeErr: stdio.writeErr.bind(stdio),
-        };
-        return new VersionScript(deps);
+        return new VersionScript({
+            shell: new BunShell(),
+            stdio: new BunStdio(),
+        });
     }
 
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
@@ -23,9 +18,9 @@ export class VersionScript extends ScriptBase<VersionDeps> {
 
     protected async execute(): Promise<void> {
         const [bunResult, gitResult, ghResult] = await Promise.all([
-            this.deps.run(["bun", "--version"]),
-            this.deps.run(["git", "--version"]),
-            this.deps.run(["gh", "--version"]),
+            this.deps.shell.run(["bun", "--version"]),
+            this.deps.shell.run(["git", "--version"]),
+            this.deps.shell.run(["gh", "--version"]),
         ]);
 
         if (bunResult.exitCode !== 0) {
@@ -38,11 +33,12 @@ export class VersionScript extends ScriptBase<VersionDeps> {
             throw new ScriptError("gh --version failed", 1);
         }
 
-        await this.deps.writeOut(`bun ${bunResult.stdout.trim()}\n`);
-        await this.deps.writeOut(`${gitResult.stdout.trim()}\n`);
-        await this.deps.writeOut(`${ghResult.stdout.trim()}\n`);
+        this.deps.stdio.stdout.write(`bun ${bunResult.stdout.trim()}\n`);
+        this.deps.stdio.stdout.write(`${gitResult.stdout.trim()}\n`);
+        this.deps.stdio.stdout.write(`${ghResult.stdout.trim()}\n`);
     }
 }
 
+// c8 ignore next 2
 if (import.meta.main)
     process.exit(await VersionScript.create().run(process.argv));

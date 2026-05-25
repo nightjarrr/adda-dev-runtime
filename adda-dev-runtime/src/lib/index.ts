@@ -1,10 +1,15 @@
 export type {
     Env,
+    EnvDep,
     FileReader,
+    FileReaderDep,
     FileWriter,
+    FileWriterDep,
     Shell,
+    ShellDep,
     ShellResult,
     Stdio,
+    StdioDep,
 } from "./capabilities";
 
 export {

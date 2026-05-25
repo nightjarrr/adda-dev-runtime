@@ -7,6 +7,12 @@
     "moduleResolution": "bundler",
     "skipLibCheck": true,
     "types": ["bun"],
-    "typeRoots": ["/usr/local/install/global/node_modules/@types"]
+    "typeRoots": ["/usr/local/install/global/node_modules/@types"],
+    "ignoreDeprecations": "6.0",
+    "baseUrl": ".",
+    "paths": {
+      "@adda/lib": ["adda-dev-runtime/src/lib"],
+      "@adda/lib/*": ["adda-dev-runtime/src/lib/*"]
+    }
   }
 }

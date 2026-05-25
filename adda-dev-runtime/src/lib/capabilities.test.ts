@@ -2,7 +2,6 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Readable } from "node:stream";
 import {
     BunEnv,
     BunFileReader,
@@ -14,15 +13,11 @@ import {
 // --- BunShell ---
 
 describe("BunShell", () => {
-    test("create() returns a BunShell instance", () => {
-        const shell = BunShell.create();
-        expect(shell).toBeInstanceOf(BunShell);
-    });
-
-    test("runs a subprocess and returns stdout and exit code 0", async () => {
+    test("runs a subprocess and returns stdout, stderr, and exit code 0", async () => {
         const shell = new BunShell();
         const result = await shell.run(["echo", "hello shell"]);
         expect(result.stdout.trim()).toBe("hello shell");
+        expect(result.stderr).toBe("");
         expect(result.exitCode).toBe(0);
     });
 
@@ -30,6 +25,13 @@ describe("BunShell", () => {
         const shell = new BunShell();
         const result = await shell.run(["false"]);
         expect(result.exitCode).not.toBe(0);
+    });
+
+    test("captures stderr output", async () => {
+        const shell = new BunShell();
+        const result = await shell.run(["sh", "-c", "echo error-text >&2"]);
+        expect(result.stderr.trim()).toBe("error-text");
+        expect(result.exitCode).toBe(0);
     });
 });
 
@@ -40,11 +42,6 @@ describe("BunFileReader", () => {
 
     afterEach(async () => {
         if (tmpDir) await rm(tmpDir, { recursive: true, force: true });
-    });
-
-    test("create() returns a BunFileReader instance", () => {
-        const reader = BunFileReader.create();
-        expect(reader).toBeInstanceOf(BunFileReader);
     });
 
     test("reads file content written to a temp path", async () => {
@@ -67,11 +64,6 @@ describe("BunFileWriter", () => {
         if (tmpDir) await rm(tmpDir, { recursive: true, force: true });
     });
 
-    test("create() returns a BunFileWriter instance", () => {
-        const writer = BunFileWriter.create();
-        expect(writer).toBeInstanceOf(BunFileWriter);
-    });
-
     test("writes content to a temp path and it is readable", async () => {
         tmpDir = await mkdtemp(join(tmpdir(), "adda-test-"));
         const filePath = join(tmpDir, "out.txt");
@@ -87,44 +79,25 @@ describe("BunFileWriter", () => {
 // --- BunStdio ---
 
 describe("BunStdio", () => {
-    test("create() returns a BunStdio instance", () => {
-        const stdio = BunStdio.create();
-        expect(stdio).toBeInstanceOf(BunStdio);
-    });
-
-    test("readLine returns the first line from the input stream", async () => {
-        const input = Readable.from(["hello world\n"]);
-        const stdio = new BunStdio(input);
-        const line = await stdio.readLine();
-        expect(line).toBe("hello world");
-    });
-
-    test("readLine returns empty string when input stream is empty", async () => {
-        const input = Readable.from([]);
-        const stdio = new BunStdio(input);
-        const line = await stdio.readLine();
-        expect(line).toBe("");
-    });
-
-    test("writeOut completes without throwing", async () => {
+    test("stdin property is Bun.stdin", () => {
         const stdio = new BunStdio();
-        await expect(stdio.writeOut("test output\n")).resolves.toBeUndefined();
+        expect(stdio.stdin).toBe(Bun.stdin);
     });
 
-    test("writeErr completes without throwing", async () => {
+    test("stdout property is process.stdout", () => {
         const stdio = new BunStdio();
-        await expect(stdio.writeErr("test error\n")).resolves.toBeUndefined();
+        expect(stdio.stdout).toBe(process.stdout);
+    });
+
+    test("stderr property is process.stderr", () => {
+        const stdio = new BunStdio();
+        expect(stdio.stderr).toBe(process.stderr);
     });
 });
 
 // --- BunEnv ---
 
 describe("BunEnv", () => {
-    test("create() returns a BunEnv instance", () => {
-        const env = BunEnv.create();
-        expect(env).toBeInstanceOf(BunEnv);
-    });
-
     test("reads a known environment variable (PATH)", () => {
         const env = new BunEnv();
         const path = env.get("PATH");
