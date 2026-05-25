@@ -25,6 +25,7 @@ ARG BUN_VERSION=1.3.14
 FROM oven/bun:${BUN_VERSION}-slim AS bun-builder
 WORKDIR /build
 COPY adda-dev-runtime/src/ /build/
+COPY tsconfig.json /build/
 RUN bun build /build/*.ts \
         --outdir /build/out/ \
         --target bun \
