@@ -17,16 +17,16 @@ container built from this same repo. Two consequences:
 
 - **No Docker in the container.** Image builds and launch tests are run by
   PO on the host, not by the agent. Verification inside the container is
-  limited to file/path checks and `quality-gates.sh`.
+  limited to file/path checks and `quality-gates`.
 - **`/workspace` is the only durable path.** See *Path model* below.
 
 ## Tier architecture
 
 **Tier 1** (`adda-dev-runtime/`) — generic, AI-tool-agnostic base. Ships
 `entrypoint.sh`, `resolve-issue-branch.sh`, `ci-watch.sh`, `quality-gates.sh`,
-system tools (git, gh, socat, rg, fdfind, etc.), and an empty
-`entrypoint.d/` hook directory. Also ships Bun, tsc, and Biome — making
-TypeScript a first-class scripting language for Tier 1 scripts; see
+`quality-gates` (TS binary), system tools (git, gh, socat, rg, fdfind, etc.),
+and an empty `entrypoint.d/` hook directory. Also ships Bun, tsc, and Biome —
+making TypeScript a first-class scripting language for Tier 1 scripts; see
 `docs/bun-scripting-for-adda.md`.
 
 **Tier 2** (`proto-adda/`) — AI harness. Builds `FROM` Tier 1. Ships Claude
@@ -54,6 +54,7 @@ not the running container.
 | `resolve-issue-branch.sh` | `adda-dev-runtime/content/scripts/resolve-issue-branch.sh.source` | `/usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh` | — |
 | `ci-watch.sh` | `adda-dev-runtime/content/scripts/ci-watch.sh.source` | `/usr/local/libexec/adda-dev-runtime/ci-watch.sh` | — |
 | `quality-gates.sh` | `adda-dev-runtime/content/scripts/quality-gates.sh.source` | `/usr/local/libexec/adda-dev-runtime/quality-gates.sh` | — |
+| `quality-gates` (TS binary) | `adda-dev-runtime/src/quality-gates.ts` | `/usr/local/libexec/adda-dev-runtime/quality-gates` | — |
 | Tier 2 bootstrap hook | `proto-adda/content/entrypoint.d/10-claude-config.sh.source` | `/usr/local/libexec/adda-dev-runtime/entrypoint.d/10-claude-config.sh` | — |
 | Claude config (CLAUDE.md, settings.json, agents/, skills/) | `proto-adda/content/.claude/` | `/usr/local/share/adda-dev-runtime/.claude/` | `~/.claude/` (ephemeral) |
 

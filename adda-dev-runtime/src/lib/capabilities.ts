@@ -1,3 +1,6 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+
 // --- Interfaces ---
 
 export interface ShellResult {
@@ -8,6 +11,7 @@ export interface ShellResult {
 
 export interface Shell {
     run(command: string[]): Promise<ShellResult>;
+    runSh(command: string): Promise<ShellResult>;
 }
 
 export interface ShellDep {
@@ -48,6 +52,15 @@ export interface EnvDep {
     env: Env;
 }
 
+export interface Tmp {
+    tempFilePath(prefix?: string, suffix?: string): string;
+    makeTempDir(prefix?: string): string;
+}
+
+export interface TmpDep {
+    tmp: Tmp;
+}
+
 // --- Bun implementations ---
 
 export class BunShell implements Shell {
@@ -59,6 +72,10 @@ export class BunShell implements Shell {
             stderr: await new Response(proc.stderr).text(),
             exitCode: proc.exitCode ?? 1,
         };
+    }
+
+    async runSh(command: string): Promise<ShellResult> {
+        return this.run(["sh", "-c", command]);
     }
 }
 
@@ -83,5 +100,15 @@ export class BunStdio implements Stdio {
 export class BunEnv implements Env {
     get(name: string): string | undefined {
         return process.env[name];
+    }
+}
+
+export class BunTmp implements Tmp {
+    tempFilePath(prefix = "tmp", suffix = ""): string {
+        return `${tmpdir()}/${prefix}-${crypto.randomUUID()}${suffix}`;
+    }
+
+    makeTempDir(prefix = "tmp"): string {
+        return mkdtempSync(`${tmpdir()}/${prefix}-`);
     }
 }

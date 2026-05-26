@@ -1,23 +1,8 @@
 import { parseArgs } from "node:util";
 import type { StdioDep } from "./capabilities";
+import { ScriptError } from "./errors";
 
-export class ScriptError extends Error {
-    readonly exitCode: number;
-
-    constructor(message: string, exitCode = 1) {
-        super(message);
-        if (exitCode < 1) throw new RangeError(`ScriptError exitCode must be >= 1, got ${exitCode}`);
-        this.name = "ScriptError";
-        this.exitCode = exitCode;
-    }
-}
-
-export class ScriptArgsError extends ScriptError {
-    constructor(details: string) {
-        super(`Invalid arguments: ${details}`, 2);
-        this.name = "ScriptArgsError";
-    }
-}
+export { ScriptArgsError, ScriptError } from "./errors";
 
 export abstract class ScriptBase<TDeps extends StdioDep> {
     protected readonly deps: TDeps;

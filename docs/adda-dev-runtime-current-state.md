@@ -42,7 +42,8 @@ The Claude config is staged in the image at build time under `/usr/local/share/a
 | Artifact | Absolute path in container |
 |---|---|
 | Claude Code binary | `/usr/local/bin/claude` (Bun global install) |
-| quality-gates.sh | `/usr/local/libexec/adda-dev-runtime/quality-gates.sh` |
+| quality-gates (primary) | `/usr/local/libexec/adda-dev-runtime/quality-gates` |
+| quality-gates.sh (fallback) | `/usr/local/libexec/adda-dev-runtime/quality-gates.sh` |
 | Config template dir | `/usr/local/share/adda-dev-runtime/.claude/` |
 | `.claude.json` template | `/usr/local/share/adda-dev-runtime/templates/.claude.json.template` |
 | Bootstrap hook | `/usr/local/libexec/adda-dev-runtime/entrypoint.d/10-claude-config.sh` |

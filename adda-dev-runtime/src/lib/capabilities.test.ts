@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BunEnv, BunFileReader, BunFileWriter, BunShell, BunStdio } from "./capabilities";
+import { BunEnv, BunFileReader, BunFileWriter, BunShell, BunStdio, BunTmp } from "./capabilities";
 
 // --- BunShell ---
 
@@ -26,6 +26,28 @@ describe("BunShell", () => {
         const result = await shell.run(["sh", "-c", "echo error-text >&2"]);
         expect(result.stderr.trim()).toBe("error-text");
         expect(result.exitCode).toBe(0);
+    });
+
+    describe("runSh", () => {
+        test("invokes run with ['sh', '-c', cmd]", async () => {
+            const shell = new BunShell();
+            let capturedCommand: string[] | undefined;
+            shell.run = async (command: string[]) => {
+                capturedCommand = command;
+                return { stdout: "mocked", stderr: "", exitCode: 0 };
+            };
+
+            await shell.runSh("echo hello");
+
+            expect(capturedCommand).toEqual(["sh", "-c", "echo hello"]);
+        });
+
+        test("returns the result from run", async () => {
+            const shell = new BunShell();
+            const result = await shell.runSh("echo runSh-output");
+            expect(result.stdout.trim()).toBe("runSh-output");
+            expect(result.exitCode).toBe(0);
+        });
     });
 });
 
@@ -103,5 +125,78 @@ describe("BunEnv", () => {
         const env = new BunEnv();
         const val = env.get("__ADDA_NO_SUCH_VAR_12345__");
         expect(val).toBeUndefined();
+    });
+});
+
+// --- BunTmp ---
+
+describe("BunTmp", () => {
+    const createdDirs: string[] = [];
+
+    afterEach(async () => {
+        for (const dir of createdDirs) {
+            await rm(dir, { recursive: true, force: true });
+        }
+        createdDirs.length = 0;
+    });
+
+    describe("tempFilePath", () => {
+        test("returns a string path under os.tmpdir()", () => {
+            const tmp = new BunTmp();
+            const path = tmp.tempFilePath();
+            expect(path.startsWith(tmpdir())).toBe(true);
+        });
+
+        test("contains the given prefix", () => {
+            const tmp = new BunTmp();
+            const path = tmp.tempFilePath("myprefix");
+            expect(path).toContain("myprefix");
+        });
+
+        test("ends with the given suffix", () => {
+            const tmp = new BunTmp();
+            const path = tmp.tempFilePath("pre", ".json");
+            expect(path.endsWith(".json")).toBe(true);
+        });
+
+        test("uses default prefix 'tmp' when not provided", () => {
+            const tmp = new BunTmp();
+            const path = tmp.tempFilePath();
+            const basename = path.slice(tmpdir().length + 1);
+            expect(basename.startsWith("tmp-")).toBe(true);
+        });
+
+        test("returns a unique path each call", () => {
+            const tmp = new BunTmp();
+            const a = tmp.tempFilePath();
+            const b = tmp.tempFilePath();
+            expect(a).not.toBe(b);
+        });
+    });
+
+    describe("makeTempDir", () => {
+        test("creates a directory under os.tmpdir()", async () => {
+            const tmp = new BunTmp();
+            const dir = tmp.makeTempDir("adda-test");
+            createdDirs.push(dir);
+            expect(dir.startsWith(tmpdir())).toBe(true);
+            const info = await stat(dir);
+            expect(info.isDirectory()).toBe(true);
+        });
+
+        test("directory name contains the given prefix", () => {
+            const tmp = new BunTmp();
+            const dir = tmp.makeTempDir("mypfx");
+            createdDirs.push(dir);
+            expect(dir).toContain("mypfx");
+        });
+
+        test("uses default prefix 'tmp' when not provided", () => {
+            const tmp = new BunTmp();
+            const dir = tmp.makeTempDir();
+            createdDirs.push(dir);
+            const basename = dir.slice(tmpdir().length + 1);
+            expect(basename.startsWith("tmp-")).toBe(true);
+        });
     });
 });
