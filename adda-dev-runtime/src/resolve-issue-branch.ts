@@ -1,6 +1,6 @@
 import type { parseArgs } from "node:util";
 import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
-import { BunEnv, BunShell, BunStdio, ScriptBase, ScriptError } from "@adda/lib";
+import { BunEnv, BunShell, BunStdio, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
 
 type ResolveIssueBranchDeps = ShellDep & EnvDep & StdioDep;
 
@@ -69,7 +69,7 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps>
     protected async execute(parsed: ReturnType<typeof parseArgs>): Promise<void> {
         if (parsed.positionals.length !== 1) {
             this.emit("", "error", "", "", "usage: resolve-issue-branch <issue_id>");
-            throw new ScriptError("usage: resolve-issue-branch <issue_id>", 2);
+            throw new ScriptArgsError("usage: resolve-issue-branch <issue_id>");
         }
 
         const issueId = parsed.positionals[0];

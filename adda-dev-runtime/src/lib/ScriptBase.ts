@@ -12,6 +12,13 @@ export class ScriptError extends Error {
     }
 }
 
+export class ScriptArgsError extends ScriptError {
+    constructor(details: string) {
+        super(`Invalid arguments: ${details}`, 2);
+        this.name = "ScriptArgsError";
+    }
+}
+
 export abstract class ScriptBase<TDeps extends StdioDep> {
     protected readonly deps: TDeps;
 

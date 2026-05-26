@@ -20,4 +20,4 @@ export {
     BunStdio,
 } from "./capabilities";
 
-export { ScriptBase, ScriptError } from "./ScriptBase";
+export { ScriptArgsError, ScriptBase, ScriptError } from "./ScriptBase";
