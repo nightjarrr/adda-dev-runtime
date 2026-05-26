@@ -4,9 +4,7 @@ import { VersionScript } from "./version";
 
 type VersionDeps = ShellDep & StdioDep;
 
-function makeMockDeps(
-    runOverride?: (command: string[]) => Promise<ShellResult>,
-): {
+function makeMockDeps(runOverride?: (command: string[]) => Promise<ShellResult>): {
     deps: VersionDeps;
     outLines: string[];
     errLines: string[];
@@ -15,10 +13,8 @@ function makeMockDeps(
     const errLines: string[] = [];
 
     const defaultRun = async (command: string[]): Promise<ShellResult> => {
-        if (command[0] === "bun")
-            return { stdout: "1.3.14\n", stderr: "", exitCode: 0 };
-        if (command[0] === "git")
-            return { stdout: "git version 2.43.0\n", stderr: "", exitCode: 0 };
+        if (command[0] === "bun") return { stdout: "1.3.14\n", stderr: "", exitCode: 0 };
+        if (command[0] === "git") return { stdout: "git version 2.43.0\n", stderr: "", exitCode: 0 };
         if (command[0] === "gh")
             return {
                 stdout: "gh version 2.65.0 (2025-01-01)\n",
@@ -88,8 +84,7 @@ describe("VersionScript", () => {
 
     test("returns exit code 1 when bun --version fails", async () => {
         const { deps } = makeMockDeps(async (command) => {
-            if (command[0] === "bun")
-                return { stdout: "", stderr: "", exitCode: 1 };
+            if (command[0] === "bun") return { stdout: "", stderr: "", exitCode: 1 };
             return { stdout: "ok\n", stderr: "", exitCode: 0 };
         });
         const script = new VersionScript(deps);
@@ -99,8 +94,7 @@ describe("VersionScript", () => {
 
     test("returns exit code 1 when git --version fails", async () => {
         const { deps } = makeMockDeps(async (command) => {
-            if (command[0] === "git")
-                return { stdout: "", stderr: "", exitCode: 1 };
+            if (command[0] === "git") return { stdout: "", stderr: "", exitCode: 1 };
             return { stdout: "1.0\n", stderr: "", exitCode: 0 };
         });
         const script = new VersionScript(deps);
@@ -110,8 +104,7 @@ describe("VersionScript", () => {
 
     test("returns exit code 1 when gh --version fails", async () => {
         const { deps } = makeMockDeps(async (command) => {
-            if (command[0] === "gh")
-                return { stdout: "", stderr: "", exitCode: 1 };
+            if (command[0] === "gh") return { stdout: "", stderr: "", exitCode: 1 };
             return { stdout: "1.0\n", stderr: "", exitCode: 0 };
         });
         const script = new VersionScript(deps);

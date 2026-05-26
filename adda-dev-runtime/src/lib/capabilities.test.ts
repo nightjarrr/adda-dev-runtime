@@ -2,13 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-    BunEnv,
-    BunFileReader,
-    BunFileWriter,
-    BunShell,
-    BunStdio,
-} from "./capabilities";
+import { BunEnv, BunFileReader, BunFileWriter, BunShell, BunStdio } from "./capabilities";
 
 // --- BunShell ---
 

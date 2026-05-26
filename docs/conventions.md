@@ -46,7 +46,7 @@ Every script extends `ScriptBase<TDeps>`. A minimal skeleton:
 ```typescript
 import type { parseArgs } from "node:util";
 import type { ShellDep, StdioDep } from "@adda/lib";
-import { BunShell, BunStdio, ScriptBase, ScriptError } from "@adda/lib";
+import { BunShell, BunStdio, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
 
 type ExampleDeps = ShellDep & StdioDep;
 
@@ -70,7 +70,7 @@ export class ExampleScript extends ScriptBase<ExampleDeps> {
     protected async execute(args: ReturnType<typeof parseArgs>): Promise<void> {
         const target = args.values.target as string | undefined;
         if (!target)
-            throw new ScriptError("--target is required", 2);
+            throw new ScriptArgsError("--target is required");
 
         const result = await this.deps.shell.run(["sometool", target]);
         if (result.exitCode !== 0)
@@ -80,7 +80,6 @@ export class ExampleScript extends ScriptBase<ExampleDeps> {
     }
 }
 
-// c8 ignore next 2
 if (import.meta.main)
     process.exit(await ExampleScript.create().run(process.argv));
 ```
@@ -91,10 +90,8 @@ if (import.meta.main)
   for test injection.
 - `strict: true` in `argDefinitions()` causes `parseArgs` to throw on unknown options;
   `ScriptBase` catches this and returns exit code 2. Required-option presence still needs
-  explicit validation in `execute()`, as shown above.
-- `// c8 ignore` is permitted **only** on the entrypoint block above. Do not suppress
-  coverage on business logic — gaps indicate dead code or missing tests, not annotation
-  candidates.
+  explicit validation in `execute()`, as shown above — use `ScriptArgsError` rather than
+  `new ScriptError("...", 2)` for argument validation errors.
 - Import via the `@adda/lib` alias as shown; use `import type` for type-only imports.
 
 ## Testing (Bun)

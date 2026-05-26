@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { parseArgs } from "node:util";
 import type { StdioDep } from "./capabilities";
-import { ScriptBase, ScriptError } from "./ScriptBase";
+import { ScriptArgsError, ScriptBase, ScriptError } from "./ScriptBase";
 
 // --- Test helpers ---
 
@@ -35,10 +35,7 @@ type ParsedArgs = ReturnType<typeof parseArgs>;
 class NoArgScript extends ScriptBase<StdioDep> {
     private readonly executeFn: (args: ParsedArgs) => Promise<void>;
 
-    constructor(
-        deps: StdioDep,
-        executeFn: (args: ParsedArgs) => Promise<void>,
-    ) {
+    constructor(deps: StdioDep, executeFn: (args: ParsedArgs) => Promise<void>) {
         super(deps);
         this.executeFn = executeFn;
     }
@@ -55,10 +52,7 @@ class NoArgScript extends ScriptBase<StdioDep> {
 class FlagScript extends ScriptBase<StdioDep> {
     private readonly executeFn: (args: ParsedArgs) => Promise<void>;
 
-    constructor(
-        deps: StdioDep,
-        executeFn: (args: ParsedArgs) => Promise<void>,
-    ) {
+    constructor(deps: StdioDep, executeFn: (args: ParsedArgs) => Promise<void>) {
         super(deps);
         this.executeFn = executeFn;
     }
@@ -183,6 +177,28 @@ describe("ScriptBase", () => {
 
         test("throws RangeError when exitCode is 0", () => {
             expect(() => new ScriptError("msg", 0)).toThrow(RangeError);
+        });
+    });
+
+    describe("ScriptArgsError", () => {
+        test("is an instance of ScriptError", () => {
+            const err = new ScriptArgsError("bad input");
+            expect(err).toBeInstanceOf(ScriptError);
+        });
+
+        test("always has exit code 2", () => {
+            const err = new ScriptArgsError("bad input");
+            expect(err.exitCode).toBe(2);
+        });
+
+        test("prefixes message with 'Invalid arguments:'", () => {
+            const err = new ScriptArgsError("bad input");
+            expect(err.message).toBe("Invalid arguments: bad input");
+        });
+
+        test("name is 'ScriptArgsError'", () => {
+            const err = new ScriptArgsError("bad input");
+            expect(err.name).toBe("ScriptArgsError");
         });
     });
 });
