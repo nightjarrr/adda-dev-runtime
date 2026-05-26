@@ -35,10 +35,7 @@ type ParsedArgs = ReturnType<typeof parseArgs>;
 class NoArgScript extends ScriptBase<StdioDep> {
     private readonly executeFn: (args: ParsedArgs) => Promise<void>;
 
-    constructor(
-        deps: StdioDep,
-        executeFn: (args: ParsedArgs) => Promise<void>,
-    ) {
+    constructor(deps: StdioDep, executeFn: (args: ParsedArgs) => Promise<void>) {
         super(deps);
         this.executeFn = executeFn;
     }
@@ -55,10 +52,7 @@ class NoArgScript extends ScriptBase<StdioDep> {
 class FlagScript extends ScriptBase<StdioDep> {
     private readonly executeFn: (args: ParsedArgs) => Promise<void>;
 
-    constructor(
-        deps: StdioDep,
-        executeFn: (args: ParsedArgs) => Promise<void>,
-    ) {
+    constructor(deps: StdioDep, executeFn: (args: ParsedArgs) => Promise<void>) {
         super(deps);
         this.executeFn = executeFn;
     }

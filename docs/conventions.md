@@ -80,7 +80,6 @@ export class ExampleScript extends ScriptBase<ExampleDeps> {
     }
 }
 
-// c8 ignore next 2
 if (import.meta.main)
     process.exit(await ExampleScript.create().run(process.argv));
 ```
@@ -92,9 +91,6 @@ if (import.meta.main)
 - `strict: true` in `argDefinitions()` causes `parseArgs` to throw on unknown options;
   `ScriptBase` catches this and returns exit code 2. Required-option presence still needs
   explicit validation in `execute()`, as shown above.
-- `// c8 ignore` is permitted **only** on the entrypoint block above. Do not suppress
-  coverage on business logic — gaps indicate dead code or missing tests, not annotation
-  candidates.
 - Import via the `@adda/lib` alias as shown; use `import type` for type-only imports.
 
 ## Testing (Bun)

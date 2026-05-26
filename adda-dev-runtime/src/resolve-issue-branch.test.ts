@@ -1,12 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type {
-    Env,
-    EnvDep,
-    Shell,
-    ShellDep,
-    ShellResult,
-    StdioDep,
-} from "./lib/index";
+import type { Env, EnvDep, Shell, ShellDep, ShellResult, StdioDep } from "./lib/index";
 import { ResolveIssueBranchScript } from "./resolve-issue-branch";
 
 type ResolveIssueBranchDeps = ShellDep & EnvDep & StdioDep;
@@ -36,12 +29,13 @@ function makeGraphQLResponse(issue: GraphQLIssue | null): string {
     });
 }
 
+function makeRawResponse(obj: unknown): string {
+    return JSON.stringify(obj);
+}
+
 // --- Mock helpers ---
 
-function makeMockDeps(options: {
-    shellRun?: (command: string[]) => Promise<ShellResult>;
-    envVars?: Record<string, string>;
-}): {
+function makeMockDeps(options: { shellRun?: (command: string[]) => Promise<ShellResult>; envVars?: Record<string, string> }): {
     deps: ResolveIssueBranchDeps;
     outLines: string[];
     errLines: string[];
@@ -105,24 +99,19 @@ describe("ResolveIssueBranchScript", () => {
     });
 
     describe("argument validation", () => {
-        test("no positional arg — exits 1 with error status", async () => {
+        test("no positional arg — exits 2 with error status", async () => {
             const { deps, outLines } = makeMockDeps({});
             const script = new ResolveIssueBranchScript(deps);
             const code = await script.run(["bun", "resolve-issue-branch.ts"]);
-            expect(code).toBe(1);
+            expect(code).toBe(2);
             expect(parseStdoutJson(outLines).status).toBe("error");
         });
 
-        test("too many args (2) — exits 1 with error status", async () => {
+        test("too many args (2) — exits 2 with error status", async () => {
             const { deps, outLines } = makeMockDeps({});
             const script = new ResolveIssueBranchScript(deps);
-            const code = await script.run([
-                "bun",
-                "resolve-issue-branch.ts",
-                "123",
-                "456",
-            ]);
-            expect(code).toBe(1);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "123", "456"]);
+            expect(code).toBe(2);
             expect(parseStdoutJson(outLines).status).toBe("error");
         });
     });
@@ -133,11 +122,7 @@ describe("ResolveIssueBranchScript", () => {
                 envVars: { GITHUB_REPO: "testrepo" },
             });
             const script = new ResolveIssueBranchScript(deps);
-            const code = await script.run([
-                "bun",
-                "resolve-issue-branch.ts",
-                "132",
-            ]);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
             expect(code).toBe(1);
             expect(parseStdoutJson(outLines).status).toBe("error");
             expect(parseStdoutJson(outLines).details).toContain("GITHUB_OWNER");
@@ -148,11 +133,7 @@ describe("ResolveIssueBranchScript", () => {
                 envVars: { GITHUB_OWNER: "testowner" },
             });
             const script = new ResolveIssueBranchScript(deps);
-            const code = await script.run([
-                "bun",
-                "resolve-issue-branch.ts",
-                "132",
-            ]);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
             expect(code).toBe(1);
             expect(parseStdoutJson(outLines).status).toBe("error");
             expect(parseStdoutJson(outLines).details).toContain("GITHUB_REPO");
@@ -169,16 +150,10 @@ describe("ResolveIssueBranchScript", () => {
                 }),
             });
             const script = new ResolveIssueBranchScript(deps);
-            const code = await script.run([
-                "bun",
-                "resolve-issue-branch.ts",
-                "132",
-            ]);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
             expect(code).toBe(1);
             expect(parseStdoutJson(outLines).status).toBe("error");
-            expect(parseStdoutJson(outLines).details).toContain(
-                "GraphQL API call failed",
-            );
+            expect(parseStdoutJson(outLines).details).toContain("GraphQL API call failed");
         });
     });
 
@@ -192,15 +167,119 @@ describe("ResolveIssueBranchScript", () => {
                 }),
             });
             const script = new ResolveIssueBranchScript(deps);
-            const code = await script.run([
-                "bun",
-                "resolve-issue-branch.ts",
-                "99999",
-            ]);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "99999"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("error");
             expect(out.details).toContain("99999");
+        });
+    });
+
+    describe("structural validation", () => {
+        test("data is null — exits 1 with error status", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async () => ({
+                    stdout: makeRawResponse({ data: null }),
+                    stderr: "",
+                    exitCode: 0,
+                }),
+            });
+            const script = new ResolveIssueBranchScript(deps);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
+            expect(code).toBe(1);
+            expect(parseStdoutJson(outLines).status).toBe("error");
+        });
+
+        test("data.repository is null — exits 1 with error status", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async () => ({
+                    stdout: makeRawResponse({ data: { repository: null } }),
+                    stderr: "",
+                    exitCode: 0,
+                }),
+            });
+            const script = new ResolveIssueBranchScript(deps);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
+            expect(code).toBe(1);
+            expect(parseStdoutJson(outLines).status).toBe("error");
+        });
+
+        test("data.repository.issue is null — exits 1 with error status", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async () => ({
+                    stdout: makeRawResponse({ data: { repository: { issue: null } } }),
+                    stderr: "",
+                    exitCode: 0,
+                }),
+            });
+            const script = new ResolveIssueBranchScript(deps);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
+            expect(code).toBe(1);
+            expect(parseStdoutJson(outLines).status).toBe("error");
+        });
+
+        test("linkedBranches is null — exits 1 with error status", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async () => ({
+                    stdout: makeRawResponse({
+                        data: { repository: { issue: { linkedBranches: null, timelineItems: { nodes: [] } } } },
+                    }),
+                    stderr: "",
+                    exitCode: 0,
+                }),
+            });
+            const script = new ResolveIssueBranchScript(deps);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
+            expect(code).toBe(1);
+            expect(parseStdoutJson(outLines).status).toBe("error");
+        });
+
+        test("linkedBranches.nodes is null — exits 1 with error status", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async () => ({
+                    stdout: makeRawResponse({
+                        data: { repository: { issue: { linkedBranches: { nodes: null }, timelineItems: { nodes: [] } } } },
+                    }),
+                    stderr: "",
+                    exitCode: 0,
+                }),
+            });
+            const script = new ResolveIssueBranchScript(deps);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
+            expect(code).toBe(1);
+            expect(parseStdoutJson(outLines).status).toBe("error");
+        });
+
+        test("timelineItems is null — exits 1 with error status", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async () => ({
+                    stdout: makeRawResponse({
+                        data: { repository: { issue: { linkedBranches: { nodes: [] }, timelineItems: null } } },
+                    }),
+                    stderr: "",
+                    exitCode: 0,
+                }),
+            });
+            const script = new ResolveIssueBranchScript(deps);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
+            expect(code).toBe(1);
+            expect(parseStdoutJson(outLines).status).toBe("error");
+        });
+
+        test("timelineItems.nodes is null — exits 1 with error status", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async () => ({
+                    stdout: makeRawResponse({
+                        data: { repository: { issue: { linkedBranches: { nodes: [] }, timelineItems: { nodes: null } } } },
+                    }),
+                    stderr: "",
+                    exitCode: 0,
+                }),
+            });
+            const script = new ResolveIssueBranchScript(deps);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
+            expect(code).toBe(1);
+            expect(parseStdoutJson(outLines).status).toBe("error");
         });
     });
 
@@ -219,11 +298,7 @@ describe("ResolveIssueBranchScript", () => {
                 }),
             });
             const script = new ResolveIssueBranchScript(deps);
-            const code = await script.run([
-                "bun",
-                "resolve-issue-branch.ts",
-                "132",
-            ]);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
             expect(code).toBe(0);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("feature_branch");
@@ -236,10 +311,7 @@ describe("ResolveIssueBranchScript", () => {
                 shellRun: async () => ({
                     stdout: makeGraphQLResponse({
                         linkedBranches: {
-                            nodes: [
-                                { ref: { name: "feature/132-branch-a" } },
-                                { ref: { name: "feature/132-branch-b" } },
-                            ],
+                            nodes: [{ ref: { name: "feature/132-branch-a" } }, { ref: { name: "feature/132-branch-b" } }],
                         },
                         timelineItems: { nodes: [] },
                     }),
@@ -248,11 +320,7 @@ describe("ResolveIssueBranchScript", () => {
                 }),
             });
             const script = new ResolveIssueBranchScript(deps);
-            const code = await script.run([
-                "bun",
-                "resolve-issue-branch.ts",
-                "132",
-            ]);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
             expect(code).toBe(1);
             expect(parseStdoutJson(outLines).status).toBe("ambiguous");
         });
@@ -271,11 +339,7 @@ describe("ResolveIssueBranchScript", () => {
                 }),
             });
             const script = new ResolveIssueBranchScript(deps);
-            const code = await script.run([
-                "bun",
-                "resolve-issue-branch.ts",
-                "126",
-            ]);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "126"]);
             expect(code).toBe(0);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("main");
@@ -305,11 +369,7 @@ describe("ResolveIssueBranchScript", () => {
                 }),
             });
             const script = new ResolveIssueBranchScript(deps);
-            const code = await script.run([
-                "bun",
-                "resolve-issue-branch.ts",
-                "132",
-            ]);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
             expect(code).toBe(0);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("feature_branch");
@@ -346,11 +406,7 @@ describe("ResolveIssueBranchScript", () => {
                 }),
             });
             const script = new ResolveIssueBranchScript(deps);
-            const code = await script.run([
-                "bun",
-                "resolve-issue-branch.ts",
-                "132",
-            ]);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
             expect(code).toBe(1);
             expect(parseStdoutJson(outLines).status).toBe("ambiguous");
         });
@@ -384,11 +440,7 @@ describe("ResolveIssueBranchScript", () => {
                 }),
             });
             const script = new ResolveIssueBranchScript(deps);
-            const code = await script.run([
-                "bun",
-                "resolve-issue-branch.ts",
-                "132",
-            ]);
+            const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
             expect(code).toBe(0);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("feature_branch");

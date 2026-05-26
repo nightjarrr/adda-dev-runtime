@@ -14,21 +14,19 @@ interface ResolveResult {
     details: string;
 }
 
-interface GraphQLIssue {
-    linkedBranches: { nodes: Array<{ ref: { name: string } }> };
-    timelineItems: {
-        nodes: Array<{
-            subject: { number: number; state: string; headRefName: string };
-        }>;
-    };
-}
-
 interface GraphQLResponse {
-    data: {
-        repository: {
-            issue: GraphQLIssue | null;
-        };
-    };
+    data?: {
+        repository?: {
+            issue?: {
+                linkedBranches?: { nodes?: Array<{ ref: { name: string } }> };
+                timelineItems?: {
+                    nodes?: Array<{
+                        subject: { number: number; state: string; headRefName: string };
+                    }>;
+                };
+            } | null;
+        } | null;
+    } | null;
 }
 
 const GRAPHQL_QUERY = `
@@ -68,48 +66,24 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps>
         return { options: {}, allowPositionals: true };
     }
 
-    protected async execute(
-        parsed: ReturnType<typeof parseArgs>,
-    ): Promise<void> {
+    protected async execute(parsed: ReturnType<typeof parseArgs>): Promise<void> {
         if (parsed.positionals.length !== 1) {
-            this.emit(
-                "",
-                "error",
-                "",
-                "",
-                "usage: resolve-issue-branch <issue_id>",
-            );
-            throw new ScriptError("usage: resolve-issue-branch <issue_id>");
+            this.emit("", "error", "", "", "usage: resolve-issue-branch <issue_id>");
+            throw new ScriptError("usage: resolve-issue-branch <issue_id>", 2);
         }
 
         const issueId = parsed.positionals[0];
 
         const owner = this.deps.env.get("GITHUB_OWNER");
         if (!owner) {
-            this.emit(
-                issueId,
-                "error",
-                "",
-                "",
-                "required environment variable 'GITHUB_OWNER' is not set",
-            );
-            throw new ScriptError(
-                "required environment variable 'GITHUB_OWNER' is not set",
-            );
+            this.emit(issueId, "error", "", "", "required environment variable 'GITHUB_OWNER' is not set");
+            throw new ScriptError("required environment variable 'GITHUB_OWNER' is not set");
         }
 
         const repo = this.deps.env.get("GITHUB_REPO");
         if (!repo) {
-            this.emit(
-                issueId,
-                "error",
-                "",
-                "",
-                "required environment variable 'GITHUB_REPO' is not set",
-            );
-            throw new ScriptError(
-                "required environment variable 'GITHUB_REPO' is not set",
-            );
+            this.emit(issueId, "error", "", "", "required environment variable 'GITHUB_REPO' is not set");
+            throw new ScriptError("required environment variable 'GITHUB_REPO' is not set");
         }
 
         const ghResult = await this.deps.shell.run([
@@ -133,49 +107,53 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps>
         }
 
         const response: GraphQLResponse = JSON.parse(ghResult.stdout);
+
+        if (response.data == null) {
+            this.emit(issueId, "error", "", "", "unexpected API response: missing data");
+            throw new ScriptError("unexpected API response: missing data");
+        }
+        if (response.data.repository == null) {
+            this.emit(issueId, "error", "", "", `repository ${owner}/${repo} not found`);
+            throw new ScriptError(`repository ${owner}/${repo} not found`);
+        }
+        if (response.data.repository.issue == null) {
+            this.emit(issueId, "error", "", "", `issue #${issueId} not found in ${owner}/${repo}`);
+            throw new ScriptError(`issue #${issueId} not found in ${owner}/${repo}`);
+        }
+
         const issue = response.data.repository.issue;
 
-        if (issue === null) {
-            this.emit(
-                issueId,
-                "error",
-                "",
-                "",
-                `issue #${issueId} not found in ${owner}/${repo}`,
-            );
-            throw new ScriptError(
-                `issue #${issueId} not found in ${owner}/${repo}`,
-            );
+        if (issue.linkedBranches == null) {
+            this.emit(issueId, "error", "", "", "unexpected API response: missing linkedBranches");
+            throw new ScriptError("unexpected API response: missing linkedBranches");
+        }
+        if (issue.linkedBranches.nodes == null) {
+            this.emit(issueId, "error", "", "", "unexpected API response: missing linkedBranches.nodes");
+            throw new ScriptError("unexpected API response: missing linkedBranches.nodes");
+        }
+        if (issue.timelineItems == null) {
+            this.emit(issueId, "error", "", "", "unexpected API response: missing timelineItems");
+            throw new ScriptError("unexpected API response: missing timelineItems");
+        }
+        if (issue.timelineItems.nodes == null) {
+            this.emit(issueId, "error", "", "", "unexpected API response: missing timelineItems.nodes");
+            throw new ScriptError("unexpected API response: missing timelineItems.nodes");
         }
 
         // Resolution tier 1 — linkedBranches
         const linkedNodes = issue.linkedBranches.nodes;
         if (linkedNodes.length === 1) {
-            this.emit(
-                issueId,
-                "feature_branch",
-                linkedNodes[0].ref.name,
-                "",
-                "",
-            );
+            this.emit(issueId, "feature_branch", linkedNodes[0].ref.name, "", "");
             return;
         }
         if (linkedNodes.length > 1) {
             const names = linkedNodes.map((n) => n.ref.name).join(", ");
-            this.emit(
-                issueId,
-                "ambiguous",
-                "",
-                "",
-                `multiple linked branches: ${names}`,
-            );
+            this.emit(issueId, "ambiguous", "", "", `multiple linked branches: ${names}`);
             throw new ScriptError(`multiple linked branches: ${names}`);
         }
 
         // Resolution tier 2 — CONNECTED_EVENT open PRs
-        const openPrs = issue.timelineItems.nodes.filter(
-            (n) => n.subject.state === "OPEN",
-        );
+        const openPrs = issue.timelineItems.nodes.filter((n) => n.subject.state === "OPEN");
 
         if (openPrs.length === 0) {
             this.emit(issueId, "main", "", "", "");
@@ -183,34 +161,16 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps>
         }
         if (openPrs.length === 1) {
             const pr = openPrs[0].subject;
-            this.emit(
-                issueId,
-                "feature_branch",
-                pr.headRefName,
-                String(pr.number),
-                "",
-            );
+            this.emit(issueId, "feature_branch", pr.headRefName, String(pr.number), "");
             return;
         }
 
         const branches = openPrs.map((n) => n.subject.headRefName).join(", ");
-        this.emit(
-            issueId,
-            "ambiguous",
-            "",
-            "",
-            `multiple open PRs with branches: ${branches}`,
-        );
+        this.emit(issueId, "ambiguous", "", "", `multiple open PRs with branches: ${branches}`);
         throw new ScriptError(`multiple open PRs with branches: ${branches}`);
     }
 
-    private emit(
-        issueId: string,
-        status: Status,
-        branch: string,
-        pr: string,
-        details: string,
-    ): void {
+    private emit(issueId: string, status: Status, branch: string, pr: string, details: string): void {
         const result: ResolveResult = {
             issue_id: issueId,
             status,
@@ -222,6 +182,4 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps>
     }
 }
 
-// c8 ignore next 2
-if (import.meta.main)
-    process.exit(await ResolveIssueBranchScript.create().run(process.argv));
+if (import.meta.main) process.exit(await ResolveIssueBranchScript.create().run(process.argv));

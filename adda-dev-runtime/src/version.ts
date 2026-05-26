@@ -39,6 +39,4 @@ export class VersionScript extends ScriptBase<VersionDeps> {
     }
 }
 
-// c8 ignore next 2
-if (import.meta.main)
-    process.exit(await VersionScript.create().run(process.argv));
+if (import.meta.main) process.exit(await VersionScript.create().run(process.argv));

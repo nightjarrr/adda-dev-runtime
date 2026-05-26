@@ -36,7 +36,6 @@ class MyScript extends ScriptBase<ShellDep & StdioDep> {
     }
 }
 
-// c8 ignore next 2
 if (import.meta.main)
     process.exit(await MyScript.create().run(process.argv));
 ```
@@ -47,7 +46,7 @@ if (import.meta.main)
 3. Calls `execute()`
 4. Returns exit code
 
-**`import.meta.main` convention:** The `// c8 ignore next 2` annotation is mandatory on all script entrypoints. The block is two lines (`if` and `process.exit` call), and it is always excluded from coverage because it cannot be exercised in unit tests.
+**`import.meta.main` convention:** The `import.meta.main` block cannot be exercised in unit tests and will appear as uncovered in coverage reports.
 
 **Exit codes:**
 | Code | Meaning |
@@ -183,6 +182,7 @@ Bun resolves path aliases from `tsconfig.json` at runtime — no separate bundle
 
 - Target: 95%
 - Enforced floor: 95% line, 90% statement via `bunfig.toml` `coverageThreshold` (function metric excluded — non-deterministic for implicit constructors)
+- Bun supports no line-level coverage ignore annotations; factor this in when setting coverage targets.
 
 ---
 

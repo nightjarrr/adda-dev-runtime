@@ -6,10 +6,7 @@ export class ScriptError extends Error {
 
     constructor(message: string, exitCode = 1) {
         super(message);
-        if (exitCode < 1)
-            throw new RangeError(
-                `ScriptError exitCode must be >= 1, got ${exitCode}`,
-            );
+        if (exitCode < 1) throw new RangeError(`ScriptError exitCode must be >= 1, got ${exitCode}`);
         this.name = "ScriptError";
         this.exitCode = exitCode;
     }
@@ -24,9 +21,7 @@ export abstract class ScriptBase<TDeps extends StdioDep> {
 
     protected abstract argDefinitions(): Parameters<typeof parseArgs>[0];
 
-    protected abstract execute(
-        args: ReturnType<typeof parseArgs>,
-    ): Promise<void>;
+    protected abstract execute(args: ReturnType<typeof parseArgs>): Promise<void>;
 
     async run(argv: string[]): Promise<number> {
         const sliced = argv.slice(2);
