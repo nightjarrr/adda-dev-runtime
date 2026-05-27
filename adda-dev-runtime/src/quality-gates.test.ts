@@ -359,10 +359,10 @@ describe("QualityGatesScript", () => {
             expect(result.checks[0].output).toContain("hello from stdout");
         });
 
-        test("stderr from runSh appears in checks[].output", async () => {
+        test("stderr from runSh appears in checks[].output (merged via 2>&1 in shell)", async () => {
             const { deps, writtenFiles } = makeMockDeps({
                 confContent: "my-cmd\n",
-                runShResults: [makeShellFailure("", "error on stderr")],
+                runShResults: [makeShellFailure("error on stderr", "")],
             });
             const script = new QualityGatesScript(deps);
             await script.run(["bun", "quality-gates.ts"]);
@@ -370,15 +370,15 @@ describe("QualityGatesScript", () => {
             expect(result.checks[0].output).toContain("error on stderr");
         });
 
-        test("stdout+stderr are concatenated in checks[].output", async () => {
+        test("output is result.stdout only (streams merged at shell level via 2>&1)", async () => {
             const { deps, writtenFiles } = makeMockDeps({
                 confContent: "my-cmd\n",
-                runShResults: [makeShellSuccess("out-part", "err-part")],
+                runShResults: [makeShellSuccess("out-part", "")],
             });
             const script = new QualityGatesScript(deps);
             await script.run(["bun", "quality-gates.ts"]);
             const result = readWrittenJson(writtenFiles);
-            expect(result.checks[0].output).toBe("out-parterr-part");
+            expect(result.checks[0].output).toBe("out-part");
         });
     });
 });

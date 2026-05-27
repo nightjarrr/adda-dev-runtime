@@ -62,13 +62,13 @@ export class QualityGatesScript extends ScriptBase<QualityGatesDeps> {
             const cmd = commands[i];
             this.deps.stdio.stdout.write(`[${i + 1}/${total}] ${cmd}\n`);
 
-            const result = await this.deps.shell.runSh(cmd);
+            const result = await this.deps.shell.runSh(`${cmd} 2>&1`);
             const status: "PASS" | "FAIL" = result.exitCode === 0 ? "PASS" : "FAIL";
 
             if (status === "FAIL") overall = "FAIL";
 
             this.deps.stdio.stdout.write(`${status}\n`);
-            checks.push({ command: cmd, status, output: result.stdout + result.stderr });
+            checks.push({ command: cmd, status, output: result.stdout });
         }
 
         const resultPath = this.deps.tmp.tempFilePath("quality-gates", ".json");

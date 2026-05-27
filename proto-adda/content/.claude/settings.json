@@ -19,6 +19,7 @@
       "Bash(gh release view *)",
       "Bash(printenv *)",
       "Bash(/usr/local/libexec/adda-dev-runtime/quality-gates)",
+      "Bash(bash /usr/local/libexec/adda-dev-runtime/quality-gates)",
       "Bash(/usr/local/libexec/adda-dev-runtime/quality-gates.sh)",
       "Bash(bash /usr/local/libexec/adda-dev-runtime/quality-gates.sh)",
       "Bash(/usr/local/libexec/adda-dev-runtime/ci-watch.sh *)",

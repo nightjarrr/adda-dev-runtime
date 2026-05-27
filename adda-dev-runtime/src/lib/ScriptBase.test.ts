@@ -1,7 +1,8 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { parseArgs } from "node:util";
 import type { StdioDep } from "./capabilities";
-import { ScriptBase, ScriptError } from "./ScriptBase";
+import { ScriptError } from "./errors";
+import { ScriptBase } from "./ScriptBase";
 
 // --- Test helpers ---
 

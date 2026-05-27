@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, stat } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunEnv, BunFileReader, BunFileWriter, BunShell, BunStdio, BunTmp } from "./capabilities";
@@ -47,6 +47,21 @@ describe("BunShell", () => {
             const result = await shell.runSh("echo runSh-output");
             expect(result.stdout.trim()).toBe("runSh-output");
             expect(result.exitCode).toBe(0);
+        });
+
+        test("executes shell features (glob expansion)", async () => {
+            const tmpDir = await mkdtemp(join(tmpdir(), "adda-runsh-"));
+            try {
+                await writeFile(join(tmpDir, "a.txt"), "");
+                await writeFile(join(tmpDir, "b.txt"), "");
+                const shell = new BunShell();
+                const result = await shell.runSh(`echo ${tmpDir}/*.txt`);
+                expect(result.exitCode).toBe(0);
+                expect(result.stdout).toContain("a.txt");
+                expect(result.stdout).toContain("b.txt");
+            } finally {
+                await rm(tmpDir, { recursive: true, force: true });
+            }
         });
     });
 });

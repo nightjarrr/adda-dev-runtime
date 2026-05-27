@@ -2,8 +2,6 @@ import { parseArgs } from "node:util";
 import type { StdioDep } from "./capabilities";
 import { ScriptError } from "./errors";
 
-export { ScriptArgsError, ScriptError } from "./errors";
-
 export abstract class ScriptBase<TDeps extends StdioDep> {
     protected readonly deps: TDeps;
 
