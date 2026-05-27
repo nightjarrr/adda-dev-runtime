@@ -94,11 +94,6 @@ function parseStdoutJson(outLines: string[]): Record<string, string> {
 // --- Tests ---
 
 describe("ResolveIssueBranchScript", () => {
-    test("create() returns a ResolveIssueBranchScript instance", () => {
-        const script = ResolveIssueBranchScript.create();
-        expect(script).toBeInstanceOf(ResolveIssueBranchScript);
-    });
-
     describe("argument validation", () => {
         test("no positional arg — exits 2 with error status", async () => {
             const { deps, outLines } = makeMockDeps({});

@@ -112,3 +112,12 @@ export class BunTmp implements Tmp {
         return mkdtempSync(`${tmpdir()}/${prefix}-`);
     }
 }
+
+export const defaultDeps: ShellDep & FileReaderDep & FileWriterDep & StdioDep & EnvDep & TmpDep = {
+    shell: new BunShell(),
+    fileReader: new BunFileReader(),
+    fileWriter: new BunFileWriter(),
+    stdio: new BunStdio(),
+    env: new BunEnv(),
+    tmp: new BunTmp(),
+};

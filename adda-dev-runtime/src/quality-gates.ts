@@ -1,6 +1,6 @@
 import type { parseArgs } from "node:util";
 import type { FileReaderDep, FileWriterDep, ShellDep, StdioDep, TmpDep } from "@adda/lib";
-import { BunFileReader, BunFileWriter, BunShell, BunStdio, BunTmp, ConfigError, ScriptBase, ScriptError } from "@adda/lib";
+import { ConfigError, defaultDeps, ScriptBase, ScriptError } from "@adda/lib";
 
 type QualityGatesDeps = ShellDep & FileReaderDep & FileWriterDep & TmpDep & StdioDep;
 
@@ -16,16 +16,6 @@ interface QualityGatesResult {
 }
 
 export class QualityGatesScript extends ScriptBase<QualityGatesDeps> {
-    static create(): QualityGatesScript {
-        return new QualityGatesScript({
-            shell: new BunShell(),
-            fileReader: new BunFileReader(),
-            fileWriter: new BunFileWriter(),
-            tmp: new BunTmp(),
-            stdio: new BunStdio(),
-        });
-    }
-
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return { options: {}, strict: true };
     }
@@ -85,4 +75,4 @@ export class QualityGatesScript extends ScriptBase<QualityGatesDeps> {
     }
 }
 
-if (import.meta.main) process.exit(await QualityGatesScript.create().run(process.argv));
+if (import.meta.main) process.exit(await new QualityGatesScript(defaultDeps).run(process.argv));

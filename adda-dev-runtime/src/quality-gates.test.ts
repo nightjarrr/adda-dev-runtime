@@ -112,11 +112,6 @@ function readWrittenJson(writtenFiles: Map<string, string>): ReturnType<typeof J
 // --- Tests ---
 
 describe("QualityGatesScript", () => {
-    test("create() returns a QualityGatesScript instance", () => {
-        const script = QualityGatesScript.create();
-        expect(script).toBeInstanceOf(QualityGatesScript);
-    });
-
     describe("git failure", () => {
         test("git rev-parse non-zero — exits 1", async () => {
             const { deps } = makeMockDeps({
