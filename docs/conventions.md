@@ -46,18 +46,11 @@ Every script extends `ScriptBase<TDeps>`. A minimal skeleton:
 ```typescript
 import type { parseArgs } from "node:util";
 import type { ShellDep, StdioDep } from "@adda/lib";
-import { BunShell, BunStdio, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
+import { defaultDeps, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
 
 type ExampleDeps = ShellDep & StdioDep;
 
 export class ExampleScript extends ScriptBase<ExampleDeps> {
-    static create(): ExampleScript {
-        return new ExampleScript({
-            shell: new BunShell(),
-            stdio: new BunStdio(),
-        });
-    }
-
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return {
             strict: true,
@@ -81,13 +74,13 @@ export class ExampleScript extends ScriptBase<ExampleDeps> {
 }
 
 if (import.meta.main)
-    process.exit(await ExampleScript.create().run(process.argv));
+    process.exit(await new ExampleScript(defaultDeps).run(process.argv));
 ```
 
 - `TDeps` is an intersection of capability dep interfaces. `StdioDep` is always required —
   `ScriptBase` uses `this.deps.stdio.stderr` for error output.
-- `static create()` wires production deps. The constructor accepts `TDeps` directly — used
-  for test injection.
+- `defaultDeps` (exported from `@adda/lib`) provides the production implementations. The
+  constructor accepts `TDeps` directly — used for test injection.
 - `strict: true` in `argDefinitions()` causes `parseArgs` to throw on unknown options;
   `ScriptBase` catches this and returns exit code 2. Required-option presence still needs
   explicit validation in `execute()`, as shown above — use `ScriptArgsError` rather than

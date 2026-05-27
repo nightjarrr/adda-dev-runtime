@@ -14,14 +14,7 @@ export type {
     TmpDep,
 } from "./capabilities";
 
-export {
-    BunEnv,
-    BunFileReader,
-    BunFileWriter,
-    BunShell,
-    BunStdio,
-    BunTmp,
-} from "./capabilities";
+export { defaultDeps } from "./capabilities";
 
 export { ConfigError, ScriptArgsError, ScriptError } from "./errors";
 export { ScriptBase } from "./ScriptBase";

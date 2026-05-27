@@ -1,6 +1,6 @@
 import type { parseArgs } from "node:util";
 import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
-import { BunEnv, BunShell, BunStdio, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
+import { defaultDeps, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
 
 type ResolveIssueBranchDeps = ShellDep & EnvDep & StdioDep;
 
@@ -54,14 +54,6 @@ const GRAPHQL_QUERY = `
     }`;
 
 export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps> {
-    static create(): ResolveIssueBranchScript {
-        return new ResolveIssueBranchScript({
-            shell: new BunShell(),
-            env: new BunEnv(),
-            stdio: new BunStdio(),
-        });
-    }
-
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return { options: {}, allowPositionals: true };
     }
@@ -182,4 +174,4 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps>
     }
 }
 
-if (import.meta.main) process.exit(await ResolveIssueBranchScript.create().run(process.argv));
+if (import.meta.main) process.exit(await new ResolveIssueBranchScript(defaultDeps).run(process.argv));

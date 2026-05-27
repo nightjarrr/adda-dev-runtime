@@ -50,11 +50,6 @@ function makeMockDeps(runOverride?: (command: string[]) => Promise<ShellResult>)
 }
 
 describe("VersionScript", () => {
-    test("create() returns a VersionScript instance", () => {
-        const script = VersionScript.create();
-        expect(script).toBeInstanceOf(VersionScript);
-    });
-
     test("returns exit code 0 on success", async () => {
         const { deps } = makeMockDeps();
         const script = new VersionScript(deps);

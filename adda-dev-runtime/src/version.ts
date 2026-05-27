@@ -1,17 +1,10 @@
 import type { parseArgs } from "node:util";
 import type { ShellDep, StdioDep } from "@adda/lib";
-import { BunShell, BunStdio, ScriptBase, ScriptError } from "@adda/lib";
+import { defaultDeps, ScriptBase, ScriptError } from "@adda/lib";
 
 type VersionDeps = ShellDep & StdioDep;
 
 export class VersionScript extends ScriptBase<VersionDeps> {
-    static create(): VersionScript {
-        return new VersionScript({
-            shell: new BunShell(),
-            stdio: new BunStdio(),
-        });
-    }
-
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return { options: {} };
     }
@@ -39,4 +32,4 @@ export class VersionScript extends ScriptBase<VersionDeps> {
     }
 }
 
-if (import.meta.main) process.exit(await VersionScript.create().run(process.argv));
+if (import.meta.main) process.exit(await new VersionScript(defaultDeps).run(process.argv));
