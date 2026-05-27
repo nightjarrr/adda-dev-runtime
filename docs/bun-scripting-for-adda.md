@@ -25,10 +25,6 @@ adda-dev-runtime/src/<name>.test.ts     # unit tests
 
 ```typescript
 class MyScript extends ScriptBase<ShellDep & StdioDep> {
-    static create(): MyScript {
-        return new MyScript({ shell: new BunShell(), stdio: new BunStdio() });
-    }
-
     protected argDefinitions() { /* util.parseArgs options */ }
 
     protected async execute(): Promise<void> {
@@ -37,7 +33,7 @@ class MyScript extends ScriptBase<ShellDep & StdioDep> {
 }
 
 if (import.meta.main)
-    process.exit(await MyScript.create().run(process.argv));
+    process.exit(await new MyScript(defaultDeps).run(process.argv));
 ```
 
 **`run(argv)`** (implemented in `ScriptBase`):
@@ -73,17 +69,18 @@ Capabilities are interfaces representing external services. A script declares ex
 | `Stdio` | Read from stdin; write to stdout / stderr |
 | `Env` | Read environment variables |
 
-**Bun implementations:**
+**Bun implementations** are bundled in `defaultDeps` (exported from `@adda/lib`), used for production wiring:
 
-| Interface | Implementation | Backing API |
-|-----------|---------------|-------------|
-| `Shell` | `BunShell` | `Bun.spawn()` — direct process execution, no shell features |
-| `FileReader` | `BunFileReader` | `Bun.file().text()` |
-| `FileWriter` | `BunFileWriter` | `Bun.write()` |
-| `Stdio` | `BunStdio` | `Bun.stdin`, `process.stdout`, `process.stderr` exposed directly as properties |
-| `Env` | `BunEnv` | `process.env` |
+| Interface | Backing API |
+|-----------|-------------|
+| `Shell` | `Bun.spawn()` — direct process execution, no shell features |
+| `FileReader` | `Bun.file().text()` |
+| `FileWriter` | `Bun.write()` |
+| `Stdio` | `Bun.stdin`, `process.stdout`, `process.stderr` |
+| `Env` | `process.env` |
+| `Tmp` | `crypto.randomUUID()` / `mkdtempSync()` |
 
-**Shell note:** `BunShell` uses `Bun.spawn()` — no shell features (no pipes, globs, redirects). Callers needing shell features must invoke a shell explicitly, e.g. `shell.run(["sh", "-c", "cmd1 | cmd2 > out.txt"])`.
+**Shell note:** `Bun.spawn()` provides no shell features (no pipes, globs, redirects). Callers needing shell features must invoke a shell explicitly, e.g. `shell.run(["sh", "-c", "cmd1 | cmd2 > out.txt"])`.
 
 **Dep interfaces:** Each capability has a paired Dep interface that names the property used in the script's deps object:
 
@@ -107,13 +104,11 @@ class Deploy extends ScriptBase<DeployDeps> { ... }
 
 `& StdioDep` in the type argument is mandatory, not decorative — `TDeps extends StdioDep` is enforced at compile time.
 
-**Constructor injection** — no `static create()` factory on capability classes. The `static create()` factory on each script wires production implementations. Constructor accepts `TDeps` directly — used for test injection.
+**Constructor injection** — `defaultDeps` (from `@adda/lib`) wires production implementations. The constructor accepts `TDeps` directly — used for test injection.
 
 ```typescript
 // production
-static create() {
-    return new Deploy({ shell: new BunShell(), fileReader: new BunFileReader(), stdio: new BunStdio() });
-}
+new Deploy(defaultDeps);
 
 // test
 new Deploy({ shell: mockShell, fileReader: mockFileReader, stdio: mockStdio });
@@ -161,7 +156,7 @@ All scripts in both tiers import from `@adda/lib`:
 
 ```typescript
 import type { ShellDep, StdioDep } from "@adda/lib";
-import { BunShell, BunStdio, ScriptBase, ScriptError } from "@adda/lib";
+import { defaultDeps, ScriptBase, ScriptError } from "@adda/lib";
 ```
 
 The alias is configured in `tsconfig.json`:
