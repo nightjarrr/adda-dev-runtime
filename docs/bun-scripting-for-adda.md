@@ -73,14 +73,14 @@ Capabilities are interfaces representing external services. A script declares ex
 
 | Interface | Backing API |
 |-----------|-------------|
-| `Shell` | `Bun.spawn()` — direct process execution, no shell features |
+| `Shell` | `run()`: `Bun.spawn()` — direct process execution; `runSh()`: via `sh -c` |
 | `FileReader` | `Bun.file().text()` |
 | `FileWriter` | `Bun.write()` |
 | `Stdio` | `Bun.stdin`, `process.stdout`, `process.stderr` |
 | `Env` | `process.env` |
 | `Tmp` | `crypto.randomUUID()` / `mkdtempSync()` |
 
-**Shell note:** `Bun.spawn()` provides no shell features (no pipes, globs, redirects). Callers needing shell features must invoke a shell explicitly, e.g. `shell.run(["sh", "-c", "cmd1 | cmd2 > out.txt"])`.
+**Shell note:** `run()` uses `Bun.spawn()` directly — no shell features (no pipes, globs, redirects). `runSh()` wraps `sh -c` and has full shell features.
 
 **Dep interfaces:** Each capability has a paired Dep interface that names the property used in the script's deps object:
 
