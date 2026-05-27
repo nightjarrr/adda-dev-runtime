@@ -585,7 +585,7 @@ section "Resolving working branch"
 if [[ -z "${ISSUE_ID:-}" ]]; then
     success "No ISSUE_ID; staying on main."
 else
-    resolve_result="$(/usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh "${ISSUE_ID}" || true)"
+    resolve_result="$(/usr/local/libexec/adda-dev-runtime/resolve-issue-branch "${ISSUE_ID}" || true)"
     resolve_status="$(echo "${resolve_result}" | jq -r '.status')"
     resolve_branch="$(echo "${resolve_result}" | jq -r '.branch')"
     resolve_pr="$(echo "${resolve_result}"    | jq -r '.pr')"
