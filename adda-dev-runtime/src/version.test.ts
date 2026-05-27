@@ -26,6 +26,7 @@ function makeMockDeps(runOverride?: (command: string[]) => Promise<ShellResult>)
 
     const mockShell: Shell = {
         run: mock(runOverride ?? defaultRun),
+        runSh: mock(async (_cmd: string) => ({ stdout: "", stderr: "", exitCode: 0 })),
     };
 
     const deps: VersionDeps = {

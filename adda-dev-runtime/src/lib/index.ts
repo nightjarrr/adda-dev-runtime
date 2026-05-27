@@ -10,6 +10,8 @@ export type {
     ShellResult,
     Stdio,
     StdioDep,
+    Tmp,
+    TmpDep,
 } from "./capabilities";
 
 export {
@@ -18,6 +20,8 @@ export {
     BunFileWriter,
     BunShell,
     BunStdio,
+    BunTmp,
 } from "./capabilities";
 
-export { ScriptArgsError, ScriptBase, ScriptError } from "./ScriptBase";
+export { ConfigError, ScriptArgsError, ScriptError } from "./errors";
+export { ScriptBase } from "./ScriptBase";
