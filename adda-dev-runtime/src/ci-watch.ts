@@ -45,10 +45,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
             const commit = parsed.values.commit as string | undefined;
 
             const setCount = [branch, tag, commit].filter((v) => v !== undefined).length;
-            if (setCount === 0) {
-                throw new ScriptArgsError("push mode requires exactly one of --branch, --tag, or --commit");
-            }
-            if (setCount > 1) {
+            if (setCount !== 1) {
                 throw new ScriptArgsError("push mode requires exactly one of --branch, --tag, or --commit");
             }
 
@@ -63,6 +60,15 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         } else {
             throw new ScriptArgsError(`unknown mode '${mode}': expected 'push' or 'pr'`);
         }
+    }
+
+    private async resolveRemoteSha(ref: string): Promise<string> {
+        const result = await this.deps.shell.run(["git", "ls-remote", "origin", ref]);
+        if (result.exitCode !== 0) {
+            throw new ScriptError(`git ls-remote failed: ${result.stderr.trim()}`, 1);
+        }
+        const sha = result.stdout.trim().split("\t")[0] ?? "";
+        return sha;
     }
 
     private async resolvePushSha(
@@ -84,8 +90,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
                 }
             }
 
-            const lsResult = await this.deps.shell.run(["git", "ls-remote", "origin", resolvedBranch]);
-            const sha = lsResult.stdout.trim().split("\t")[0] ?? "";
+            const sha = await this.resolveRemoteSha(resolvedBranch);
             if (!sha) {
                 throw new ScriptArgsError(`cannot resolve branch '${resolvedBranch}' on origin`);
             }
@@ -95,14 +100,12 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         // tag is defined (setCount === 1 guarantees one of branch/tag/commit is set)
         const tagName = tag as string;
 
-        const peeledResult = await this.deps.shell.run(["git", "ls-remote", "origin", `refs/tags/${tagName}^{}`]);
-        const peeledSha = peeledResult.stdout.trim().split("\t")[0] ?? "";
+        const peeledSha = await this.resolveRemoteSha(`refs/tags/${tagName}^{}`);
         if (peeledSha) {
             return peeledSha;
         }
 
-        const tagResult = await this.deps.shell.run(["git", "ls-remote", "origin", `refs/tags/${tagName}`]);
-        const tagSha = tagResult.stdout.trim().split("\t")[0] ?? "";
+        const tagSha = await this.resolveRemoteSha(`refs/tags/${tagName}`);
         if (!tagSha) {
             throw new ScriptArgsError(`cannot resolve tag '${tagName}' on origin`);
         }
@@ -112,17 +115,9 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
     private async watchPush(sha: string): Promise<void> {
         let elapsed = 0;
 
-        const listResult = await this.deps.shell.run([
-            "gh",
-            "run",
-            "list",
-            "--commit",
-            sha,
-            "--event",
-            "push",
-            "--json",
-            "databaseId",
-        ]);
+        const runListArgs = ["gh", "run", "list", "--commit", sha, "--event", "push", "--json", "databaseId"];
+
+        const listResult = await this.deps.shell.run(runListArgs);
         let runsJson = listResult.stdout.trim();
         let runIds: string[] = this.parseRunIds(runsJson);
 
@@ -133,49 +128,22 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
             await this.deps.sleep.sleep(POLL_INTERVAL_MS);
             elapsed += POLL_INTERVAL_MS;
 
-            const retryResult = await this.deps.shell.run([
-                "gh",
-                "run",
-                "list",
-                "--commit",
-                sha,
-                "--event",
-                "push",
-                "--json",
-                "databaseId",
-            ]);
+            const retryResult = await this.deps.shell.run(runListArgs);
             runsJson = retryResult.stdout.trim();
             runIds = this.parseRunIds(runsJson);
         }
 
-        for (const runId of runIds) {
-            await this.deps.shell.run(["gh", "run", "watch", runId]);
-        }
+        await Promise.all(runIds.map((id) => this.deps.shell.run(["gh", "run", "watch", id])));
 
-        const failingRunIds: string[] = [];
-        for (const runId of runIds) {
-            const viewResult = await this.deps.shell.run([
-                "gh",
-                "run",
-                "view",
-                runId,
-                "--json",
-                "conclusion",
-                "-q",
-                ".conclusion",
-            ]);
-            const conclusion = viewResult.stdout.trim();
-            if (conclusion !== "success") {
-                failingRunIds.push(runId);
-            }
-        }
+        const conclusions = await Promise.all(runIds.map((id) => this.fetchRunConclusion(id)));
+        const failingRuns = conclusions.filter((c) => c.conclusion !== "success");
 
-        if (failingRunIds.length === 0) {
+        if (failingRuns.length === 0) {
             this.emit({ conclusion: "success", runs: [] });
             return;
         }
 
-        const runs = await this.collectFailingRuns(failingRunIds);
+        const runs = await this.collectFailingRuns(failingRuns);
         this.emit({ conclusion: "failure", runs });
         throw new ScriptError("CI runs failed", 1);
     }
@@ -184,6 +152,9 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         await this.deps.shell.run(["gh", "pr", "checks", prNumber, "--watch"]);
 
         const checksResult = await this.deps.shell.run(["gh", "pr", "checks", prNumber, "--json", "name,state,link"]);
+        if (checksResult.exitCode !== 0) {
+            throw new ScriptError(`gh pr checks failed: ${checksResult.stderr.trim() || checksResult.stdout.trim()}`, 1);
+        }
 
         interface CheckEntry {
             name: string;
@@ -210,41 +181,29 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         }
 
         const runIds = Array.from(runIdSet);
-        const runs = await this.collectFailingRuns(runIds);
+        const runsWithConclusion = await Promise.all(runIds.map((id) => this.fetchRunConclusion(id)));
+        const runs = await this.collectFailingRuns(runsWithConclusion);
         this.emit({ conclusion: "failure", runs });
         throw new ScriptError("CI runs failed", 1);
     }
 
-    private async collectFailingRuns(runIds: string[]): Promise<RunRecord[]> {
-        const records: RunRecord[] = [];
+    private async fetchRunConclusion(runId: string): Promise<{ runId: string; conclusion: string }> {
+        const r = await this.deps.shell.run(["gh", "run", "view", runId, "--json", "conclusion", "-q", ".conclusion"]);
+        return { runId, conclusion: r.stdout.trim() };
+    }
 
-        for (const runId of runIds) {
-            const urlResult = await this.deps.shell.run(["gh", "run", "view", runId, "--json", "url", "-q", ".url"]);
-            const eventResult = await this.deps.shell.run(["gh", "run", "view", runId, "--json", "event", "-q", ".event"]);
-            const conclusionResult = await this.deps.shell.run([
-                "gh",
-                "run",
-                "view",
-                runId,
-                "--json",
-                "conclusion",
-                "-q",
-                ".conclusion",
-            ]);
-
-            const logFile = this.deps.tmp.tempFilePath("ci-watch-logs", ".txt");
-            await this.deps.shell.runSh(`gh run view ${runId} --log-failed > ${logFile} 2>&1 || true`);
-
-            records.push({
-                runId,
-                event: eventResult.stdout.trim(),
-                url: urlResult.stdout.trim(),
-                conclusion: conclusionResult.stdout.trim(),
-                logFile,
-            });
-        }
-
-        return records;
+    private async collectFailingRuns(runs: Array<{ runId: string; conclusion: string }>): Promise<RunRecord[]> {
+        return Promise.all(
+            runs.map(async ({ runId, conclusion }) => {
+                const [urlResult, eventResult] = await Promise.all([
+                    this.deps.shell.run(["gh", "run", "view", runId, "--json", "url", "-q", ".url"]),
+                    this.deps.shell.run(["gh", "run", "view", runId, "--json", "event", "-q", ".event"]),
+                ]);
+                const logFile = this.deps.tmp.tempFilePath("ci-watch-logs", ".txt");
+                await this.deps.shell.runSh(`gh run view ${runId} --log-failed > ${logFile} 2>&1 || true`);
+                return { runId, conclusion, url: urlResult.stdout.trim(), event: eventResult.stdout.trim(), logFile };
+            }),
+        );
     }
 
     private parseRunIds(json: string): string[] {

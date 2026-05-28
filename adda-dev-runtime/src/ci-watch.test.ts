@@ -182,6 +182,16 @@ describe("CiWatchScript", () => {
             expect(errLines.join("")).toContain("nonexistent");
         });
 
+        test("--branch with ls-remote non-zero exit — exits 1 (infra failure, not args error)", async () => {
+            const { deps, errLines } = makeMockDeps({
+                runQueue: [makeShellResult("", 128, "fatal: repository not found")],
+            });
+            const script = new CiWatchScript(deps);
+            const code = await script.run(["bun", "ci-watch.ts", "push", "--branch", "main"]);
+            expect(code).toBe(1);
+            expect(errLines.join("")).toContain("git ls-remote failed");
+        });
+
         test("--branch LOCAL resolves local branch name first, then remote SHA", async () => {
             const sha = "localsha123";
             const { deps, runCalls } = makeMockDeps({
@@ -259,6 +269,16 @@ describe("CiWatchScript", () => {
             const script = new CiWatchScript(deps);
             const code = await script.run(["bun", "ci-watch.ts", "push", "--tag", "v1.0"]);
             expect(code).toBe(2);
+        });
+
+        test("--tag with ls-remote non-zero exit (peeled) — exits 1 (infra failure)", async () => {
+            const { deps, errLines } = makeMockDeps({
+                runQueue: [makeShellResult("", 128, "fatal: unable to connect")],
+            });
+            const script = new CiWatchScript(deps);
+            const code = await script.run(["bun", "ci-watch.ts", "push", "--tag", "v1.0"]);
+            expect(code).toBe(1);
+            expect(errLines.join("")).toContain("git ls-remote failed");
         });
     });
 
@@ -367,12 +387,11 @@ describe("CiWatchScript", () => {
             const { deps, outLines, errLines, runShCalls } = makeMockDeps({
                 runQueue: [
                     makeShellResult(makeRunListJson([333])), // run list
-                    makeShellResult(""), // run watch
-                    makeShellResult("failure\n"), // conclusion — not success
-                    // collectFailingRuns for run 333:
+                    makeShellResult(""), // run watch (Promise.all)
+                    makeShellResult("failure\n"), // fetchRunConclusion (Promise.all)
+                    // collectFailingRuns for run 333 (url and event in parallel):
                     makeShellResult("https://github.com/repo/actions/runs/333\n"), // url
                     makeShellResult("push\n"), // event
-                    makeShellResult("failure\n"), // conclusion
                 ],
                 runShQueue: [makeShellResult("")], // log fetch
             });
@@ -387,11 +406,30 @@ describe("CiWatchScript", () => {
             expect(out.runs[0].runId).toBe("333");
             expect(out.runs[0].event).toBe("push");
             expect(out.runs[0].url).toBe("https://github.com/repo/actions/runs/333");
+            // conclusion comes from fetchRunConclusion, not re-fetched in collectFailingRuns
             expect(out.runs[0].conclusion).toBe("failure");
             expect(out.runs[0].logFile).toMatch(/^\/tmp\/ci-watch-logs-.+\.txt$/);
 
             // runSh called with correct command
             expect(runShCalls[0]).toMatch(/gh run view 333 --log-failed > .+ 2>&1 \|\| true/);
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // watchPr — gh pr checks --json non-zero exit
+    // ---------------------------------------------------------------
+    describe("watchPr — gh pr checks --json failure", () => {
+        test("gh pr checks --json non-zero exit — exits 1 (not silent success)", async () => {
+            const { deps, errLines } = makeMockDeps({
+                runQueue: [
+                    makeShellResult(""), // gh pr checks --watch
+                    makeShellResult("", 1, "API error: GraphQL error"), // gh pr checks --json non-zero
+                ],
+            });
+            const script = new CiWatchScript(deps);
+            const code = await script.run(["bun", "ci-watch.ts", "pr", "42"]);
+            expect(code).toBe(1);
+            expect(errLines.join("")).toContain("gh pr checks failed");
         });
     });
 
@@ -436,10 +474,11 @@ describe("CiWatchScript", () => {
                 runQueue: [
                     makeShellResult(""), // gh pr checks --watch
                     makeShellResult(checksJson), // gh pr checks --json
-                    // collectFailingRuns for run 500:
+                    // fetchRunConclusion for run 500 (Promise.all):
+                    makeShellResult("failure\n"),
+                    // collectFailingRuns for run 500 (url and event in parallel):
                     makeShellResult("https://github.com/repo/actions/runs/500\n"),
                     makeShellResult("pull_request\n"),
-                    makeShellResult("failure\n"),
                 ],
                 runShQueue: [makeShellResult("")],
             });
@@ -451,6 +490,8 @@ describe("CiWatchScript", () => {
             expect(out.conclusion).toBe("failure");
             expect(out.runs).toHaveLength(1);
             expect(out.runs[0].runId).toBe("500");
+            // conclusion comes from fetchRunConclusion, not re-fetched in collectFailingRuns
+            expect(out.runs[0].conclusion).toBe("failure");
         });
 
         test("deduplicates run IDs (two failing checks same run)", async () => {
@@ -462,10 +503,11 @@ describe("CiWatchScript", () => {
                 runQueue: [
                     makeShellResult(""), // gh pr checks --watch
                     makeShellResult(checksJson), // gh pr checks --json
-                    // collectFailingRuns for run 600 only once:
+                    // fetchRunConclusion for run 600 only once (Promise.all):
+                    makeShellResult("failure\n"),
+                    // collectFailingRuns for run 600 only once (url and event in parallel):
                     makeShellResult("https://github.com/repo/actions/runs/600\n"),
                     makeShellResult("push\n"),
-                    makeShellResult("failure\n"),
                 ],
                 runShQueue: [makeShellResult("")],
             });
@@ -505,17 +547,17 @@ describe("CiWatchScript", () => {
     // collectFailingRuns
     // ---------------------------------------------------------------
     describe("collectFailingRuns", () => {
-        test("fetches url/event/conclusion per run, runSh called with correct command, logFile has correct shape", async () => {
+        test("fetches url/event per run (conclusion passed in), runSh called with correct command, logFile has correct shape", async () => {
             const runId = "789";
             const { deps, outLines, runShCalls } = makeMockDeps({
                 runQueue: [
                     makeShellResult(makeRunListJson([Number(runId)])), // run list
-                    makeShellResult(""), // run watch
-                    makeShellResult("failure\n"), // conclusion check → failing
-                    // collectFailingRuns:
+                    makeShellResult(""), // run watch (Promise.all)
+                    makeShellResult("failure\n"), // fetchRunConclusion (Promise.all)
+                    // collectFailingRuns — url and event in parallel:
                     makeShellResult("https://github.com/repo/actions/runs/789\n"), // url
                     makeShellResult("push\n"), // event
-                    makeShellResult("failure\n"), // conclusion
+                    // no conclusion re-fetch
                 ],
                 runShQueue: [makeShellResult("")],
             });
@@ -528,6 +570,8 @@ describe("CiWatchScript", () => {
 
             const out = getStdoutJson(outLines);
             expect(out.runs[0].logFile).toMatch(/^\/tmp\/ci-watch-logs-.+\.txt$/);
+            // conclusion in output comes from fetchRunConclusion, not a re-fetch
+            expect(out.runs[0].conclusion).toBe("failure");
         });
     });
 });
