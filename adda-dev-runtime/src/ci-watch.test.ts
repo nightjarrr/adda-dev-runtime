@@ -44,10 +44,13 @@ function makeMockDeps(options: MockDepsOptions = {}): {
             }
             return result;
         }),
-        runSh: mock(async (command: string, _opts?: { strict?: boolean }) => {
+        runSh: mock(async (command: string, opts?: { strict?: boolean }) => {
             runShCalls.push(command);
-            const result = runShQueue.shift();
-            return result ?? makeShellResult("");
+            const result = runShQueue.shift() ?? makeShellResult("");
+            if ((opts?.strict ?? true) && result.exitCode !== 0) {
+                throw new ScriptShellError(command, result.exitCode, result.stdout, result.stderr);
+            }
+            return result;
         }),
     };
 
@@ -424,7 +427,7 @@ describe("CiWatchScript", () => {
             expect(out.runs[0].logFile).toMatch(/^\/tmp\/ci-watch-logs-.+\.txt$/);
 
             // runSh called with correct command
-            expect(runShCalls[0]).toMatch(/gh run view 333 --log-failed > .+ 2>&1 \|\| true/);
+            expect(runShCalls[0]).toMatch(/gh run view 333 --log-failed > .+/);
         });
     });
 
@@ -611,7 +614,7 @@ describe("CiWatchScript", () => {
 
             // runSh called with gh run view <id> --log-failed > <path> 2>&1 || true
             expect(runShCalls).toHaveLength(1);
-            expect(runShCalls[0]).toMatch(/^gh run view 789 --log-failed > \/tmp\/ci-watch-logs-.+\.txt 2>&1 \|\| true$/);
+            expect(runShCalls[0]).toMatch(/^gh run view 789 --log-failed > \/tmp\/ci-watch-logs-.+\.txt$/);
 
             const out = getStdoutJson(outLines);
             expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);

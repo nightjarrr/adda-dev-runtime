@@ -216,7 +216,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
                     this.deps.shell.run(["gh", "run", "view", runId, "--json", "event", "-q", ".event"]),
                 ]);
                 const logFile = this.deps.tmp.tempFilePath("ci-watch-logs", ".txt");
-                await this.deps.shell.runSh(`gh run view ${runId} --log-failed > ${logFile} 2>&1 || true`, { strict: false });
+                await this.deps.shell.runSh(`gh run view ${runId} --log-failed > ${logFile}`);
                 return { runId, conclusion, url: urlResult.stdout.trim(), event: eventResult.stdout.trim(), logFile };
             }),
         );
