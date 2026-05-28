@@ -141,15 +141,15 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         const conclusions = await Promise.all(runIds.map((id) => this.fetchRunConclusion(id)));
         const failingRuns = conclusions.filter((c) => c.conclusion !== "success");
 
-        const elapsed = Math.round((Date.now() - startMs) / 1000);
+        const getElapsed = () => Math.round((Date.now() - startMs) / 1000);
 
         if (failingRuns.length === 0) {
-            this.emit({ conclusion: "success", elapsed });
+            this.emit({ conclusion: "success", elapsed: getElapsed() });
             return;
         }
 
         const runs = await this.collectFailingRuns(failingRuns);
-        this.emit({ conclusion: "failure", elapsed, runs });
+        this.emit({ conclusion: "failure", elapsed: getElapsed(), runs });
         throw new ScriptError("CI runs failed", 1);
     }
 
@@ -172,10 +172,10 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         const checks: CheckEntry[] = JSON.parse(checksResult.stdout.trim() || "[]");
         const failingChecks = checks.filter((c) => c.state.toLowerCase() !== "success");
 
-        const elapsed = Math.round((Date.now() - startMs) / 1000);
+        const getElapsed = () => Math.round((Date.now() - startMs) / 1000);
 
         if (failingChecks.length === 0) {
-            this.emit({ conclusion: "success", elapsed });
+            this.emit({ conclusion: "success", elapsed: getElapsed() });
             return;
         }
 
@@ -192,7 +192,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         const runIds = Array.from(runIdSet);
         const runsWithConclusion = await Promise.all(runIds.map((id) => this.fetchRunConclusion(id)));
         const runs = await this.collectFailingRuns(runsWithConclusion);
-        this.emit({ conclusion: "failure", elapsed, runs });
+        this.emit({ conclusion: "failure", elapsed: getElapsed(), runs });
         throw new ScriptError("CI runs failed", 1);
     }
 
