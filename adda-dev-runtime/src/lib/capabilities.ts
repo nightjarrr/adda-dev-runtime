@@ -1,5 +1,6 @@
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
+import { ScriptShellError } from "./errors";
 
 // --- Interfaces ---
 
@@ -10,8 +11,8 @@ export interface ShellResult {
 }
 
 export interface Shell {
-    run(command: string[]): Promise<ShellResult>;
-    runSh(command: string): Promise<ShellResult>;
+    run(command: string[], opts?: { strict?: boolean }): Promise<ShellResult>;
+    runSh(command: string, opts?: { strict?: boolean }): Promise<ShellResult>;
 }
 
 export interface ShellDep {
@@ -64,18 +65,20 @@ export interface TmpDep {
 // --- Bun implementations ---
 
 export class BunShell implements Shell {
-    async run(command: string[]): Promise<ShellResult> {
+    async run(command: string[], opts?: { strict?: boolean }): Promise<ShellResult> {
         const proc = Bun.spawn(command, { stdout: "pipe", stderr: "pipe" });
         await proc.exited;
-        return {
-            stdout: await new Response(proc.stdout).text(),
-            stderr: await new Response(proc.stderr).text(),
-            exitCode: proc.exitCode ?? 1,
-        };
+        const stdout = await new Response(proc.stdout).text();
+        const stderr = await new Response(proc.stderr).text();
+        const exitCode = proc.exitCode ?? 1;
+        if ((opts?.strict ?? true) && exitCode !== 0) {
+            throw new ScriptShellError(command.join(" "), exitCode, stdout, stderr);
+        }
+        return { stdout, stderr, exitCode };
     }
 
-    async runSh(command: string): Promise<ShellResult> {
-        return this.run(["sh", "-c", command]);
+    async runSh(command: string, opts?: { strict?: boolean }): Promise<ShellResult> {
+        return this.run(["sh", "-c", command], opts);
     }
 }
 

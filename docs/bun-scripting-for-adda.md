@@ -51,7 +51,7 @@ if (import.meta.main)
 | 1 | Uncaught exception / runtime error |
 | 2 | Argument parsing error |
 
-Additional codes: scripts throw subclasses of `ScriptError` (base error class defined in `lib/ScriptBase.ts`); `run()` catches them and maps each to its designated exit code.
+Additional codes: scripts throw subclasses of `ScriptError` (base error class defined in `lib/ScriptBase.ts`); `run()` catches them and maps each to its designated exit code. `ScriptShellError` (exit code 1) is thrown automatically by `Shell.run`/`Shell.runSh` when a spawned command exits non-zero (strict mode, on by default); pass `{ strict: false }` to suppress this and handle the exit code manually.
 
 ---
 

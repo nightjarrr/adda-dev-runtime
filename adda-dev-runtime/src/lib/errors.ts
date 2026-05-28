@@ -22,3 +22,15 @@ export class ConfigError extends ScriptError {
         this.name = "ConfigError";
     }
 }
+
+export class ScriptShellError extends ScriptError {
+    constructor(cmdline: string, shellExitCode: number, stdout: string, stderr: string) {
+        const stdoutText = stdout.trim() || "(empty)";
+        const stderrText = stderr.trim() || "(empty)";
+        super(
+            `shell command failed (exit ${shellExitCode})\n  cmd:    ${cmdline}\n  stdout: ${stdoutText}\n  stderr: ${stderrText}`,
+            1,
+        );
+        this.name = "ScriptShellError";
+    }
+}

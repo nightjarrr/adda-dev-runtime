@@ -3,6 +3,7 @@ import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { BunEnv, BunFileReader, BunFileWriter, BunShell, BunStdio, BunTmp } from "./capabilities";
+import { ScriptShellError } from "./errors";
 
 // --- BunShell ---
 
@@ -17,8 +18,40 @@ describe("BunShell", () => {
 
     test("returns non-zero exit code for failing command", async () => {
         const shell = new BunShell();
-        const result = await shell.run(["false"]);
+        const result = await shell.run(["false"], { strict: false });
         expect(result.exitCode).not.toBe(0);
+    });
+
+    test("strict default throws ScriptShellError on non-zero exit", async () => {
+        const shell = new BunShell();
+        await expect(shell.run(["false"])).rejects.toBeInstanceOf(ScriptShellError);
+    });
+
+    test("strict: true throws ScriptShellError on non-zero exit", async () => {
+        const shell = new BunShell();
+        await expect(shell.run(["false"], { strict: true })).rejects.toBeInstanceOf(ScriptShellError);
+    });
+
+    test("strict: false returns ShellResult on non-zero exit", async () => {
+        const shell = new BunShell();
+        const result = await shell.run(["false"], { strict: false });
+        expect(result.exitCode).not.toBe(0);
+    });
+
+    test("ScriptShellError message includes cmd, stdout, stderr fields", async () => {
+        const shell = new BunShell();
+        let err: ScriptShellError | undefined;
+        try {
+            await shell.run(["sh", "-c", "echo out; echo err >&2; exit 3"]);
+        } catch (e) {
+            err = e as ScriptShellError;
+        }
+        expect(err).toBeInstanceOf(ScriptShellError);
+        expect(err?.message).toContain("shell command failed (exit 3)");
+        expect(err?.message).toContain("cmd:");
+        expect(err?.message).toContain("sh -c echo out; echo err >&2; exit 3");
+        expect(err?.message).toContain("stdout: out");
+        expect(err?.message).toContain("stderr: err");
     });
 
     test("captures stderr output", async () => {
@@ -62,6 +95,17 @@ describe("BunShell", () => {
             } finally {
                 await rm(tmpDir, { recursive: true, force: true });
             }
+        });
+
+        test("strict default throws ScriptShellError on non-zero exit", async () => {
+            const shell = new BunShell();
+            await expect(shell.runSh("exit 1")).rejects.toBeInstanceOf(ScriptShellError);
+        });
+
+        test("strict: false returns ShellResult on non-zero exit", async () => {
+            const shell = new BunShell();
+            const result = await shell.runSh("exit 2", { strict: false });
+            expect(result.exitCode).toBe(2);
         });
     });
 });
