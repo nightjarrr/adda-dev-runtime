@@ -361,6 +361,21 @@ describe("CiWatchScript", () => {
             expect(code).toBe(1);
             expect(errLines.join("")).toContain("Error:");
         });
+
+        test("run list returns malformed JSON — treated as no runs, retries and succeeds", async () => {
+            const { deps, sleepCalls } = makeMockDeps({
+                runQueue: [
+                    makeShellResult("not-valid-json"), // first fetchPushRunIds: bad JSON → []
+                    makeShellResult(makeRunListJson([99999])), // second poll: valid
+                    makeShellResult(""), // run watch
+                    makeShellResult("success\n"), // run view conclusion
+                ],
+            });
+            const script = new CiWatchScript(deps);
+            const code = await script.run(["bun", "ci-watch.ts", "push", "--commit", "abc123"]);
+            expect(code).toBe(0);
+            expect(sleepCalls.length).toBe(1);
+        });
     });
 
     // ---------------------------------------------------------------
