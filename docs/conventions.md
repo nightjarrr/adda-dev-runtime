@@ -46,7 +46,7 @@ Every script extends `ScriptBase<TDeps>`. A minimal skeleton:
 ```typescript
 import type { parseArgs } from "node:util";
 import type { ShellDep, StdioDep } from "@adda/lib";
-import { defaultDeps, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
+import { defaultDeps, ScriptArgsError, ScriptBase } from "@adda/lib";
 
 type ExampleDeps = ShellDep & StdioDep;
 
@@ -66,9 +66,6 @@ export class ExampleScript extends ScriptBase<ExampleDeps> {
             throw new ScriptArgsError("--target is required");
 
         const result = await this.deps.shell.run(["sometool", target]);
-        if (result.exitCode !== 0)
-            throw new ScriptError(`sometool failed: ${result.stderr.trim()}`, 1);
-
         this.deps.stdio.stdout.write(result.stdout);
     }
 }
@@ -85,6 +82,10 @@ if (import.meta.main)
   `ScriptBase` catches this and returns exit code 2. Required-option presence still needs
   explicit validation in `execute()`, as shown above — use `ScriptArgsError` rather than
   `new ScriptError("...", 2)` for argument validation errors.
+- `Shell.run` and `Shell.runSh` throw `ScriptShellError` (a `ScriptError` subclass, exit
+  code 1) when the command exits non-zero — no manual exit code check needed. Pass
+  `{ strict: false }` for calls where a non-zero exit is expected and handled by the
+  caller (e.g. a command whose exit code encodes a status, or a `|| true` shell pipeline).
 - Import via the `@adda/lib` alias as shown; use `import type` for type-only imports.
 
 ## Testing (Bun)
