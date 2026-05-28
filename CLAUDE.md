@@ -53,6 +53,7 @@ not the running container.
 | Tier 1 entrypoint | `adda-dev-runtime/content/scripts/entrypoint.sh.source` | `/usr/local/libexec/adda-dev-runtime/entrypoint.sh` | — |
 | `resolve-issue-branch.sh` | `adda-dev-runtime/content/scripts/resolve-issue-branch.sh.source` | `/usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh` | — |
 | `ci-watch.sh` | `adda-dev-runtime/content/scripts/ci-watch.sh.source` | `/usr/local/libexec/adda-dev-runtime/ci-watch.sh` | — |
+| `ci-watch` (Bun executable) | `adda-dev-runtime/src/ci-watch.ts` | `/usr/local/libexec/adda-dev-runtime/ci-watch` | — |
 | `quality-gates.sh` | `adda-dev-runtime/content/scripts/quality-gates.sh.source` | `/usr/local/libexec/adda-dev-runtime/quality-gates.sh` | — |
 | `quality-gates` (Bun executable) | `adda-dev-runtime/src/quality-gates.ts` | `/usr/local/libexec/adda-dev-runtime/quality-gates` | — |
 | Tier 2 bootstrap hook | `proto-adda/content/entrypoint.d/10-claude-config.sh.source` | `/usr/local/libexec/adda-dev-runtime/entrypoint.d/10-claude-config.sh` | — |

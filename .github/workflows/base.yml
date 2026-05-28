@@ -13,7 +13,6 @@ jobs:
         run: |
           shellcheck \
             adda-dev-runtime/content/scripts/entrypoint.sh.source \
-            adda-dev-runtime/content/scripts/ci-watch.sh.source \
             adda-dev-runtime/content/scripts/quality-gates.sh.source \
             launcher/adda-dev.sh \
             proto-adda/content/entrypoint.d/10-claude-config.sh.source
@@ -69,6 +68,7 @@ jobs:
             test -x /usr/local/libexec/adda-dev-runtime/entrypoint.sh
             test -x /usr/local/libexec/adda-dev-runtime/resolve-issue-branch
             test -x /usr/local/libexec/adda-dev-runtime/ci-watch.sh
+            test -x /usr/local/libexec/adda-dev-runtime/ci-watch
             test -x /usr/local/libexec/adda-dev-runtime/quality-gates.sh
             test -x /usr/local/libexec/adda-dev-runtime/quality-gates
             test -x /usr/local/libexec/adda-dev-runtime/version

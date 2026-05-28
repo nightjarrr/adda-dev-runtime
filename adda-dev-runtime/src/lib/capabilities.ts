@@ -113,11 +113,26 @@ export class BunTmp implements Tmp {
     }
 }
 
-export const defaultDeps: ShellDep & FileReaderDep & FileWriterDep & StdioDep & EnvDep & TmpDep = {
+export interface Sleep {
+    sleep(ms: number): Promise<void>;
+}
+
+export interface SleepDep {
+    sleep: Sleep;
+}
+
+export class BunSleep implements Sleep {
+    sleep(ms: number): Promise<void> {
+        return Bun.sleep(ms);
+    }
+}
+
+export const defaultDeps: ShellDep & FileReaderDep & FileWriterDep & StdioDep & EnvDep & TmpDep & SleepDep = {
     shell: new BunShell(),
     fileReader: new BunFileReader(),
     fileWriter: new BunFileWriter(),
     stdio: new BunStdio(),
     env: new BunEnv(),
     tmp: new BunTmp(),
+    sleep: new BunSleep(),
 };
