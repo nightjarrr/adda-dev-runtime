@@ -88,7 +88,7 @@ Dispatch the Coder agent (name for `Agent` tool: `coder`) with: issue id, issue 
 After Coder pushes, call:
 
 ```bash
-/usr/local/libexec/adda-dev-runtime/ci-watch.sh push --branch LOCAL
+/usr/local/libexec/adda-dev-runtime/ci-watch push --branch LOCAL
 ```
 
 Exit 0: proceed to step 6.
@@ -133,7 +133,7 @@ gh pr create --title "..." --body "..."
 After the PR is opened, monitor all checks to completion:
 
 ```bash
-/usr/local/libexec/adda-dev-runtime/ci-watch.sh pr {pr-number}
+/usr/local/libexec/adda-dev-runtime/ci-watch pr {pr-number}
 ```
 
 Exit 0: step 9 is complete.
@@ -147,7 +147,7 @@ This step is triggered only if PO explicitly reports that the PR was merged. PM 
 If PO does report the merge, monitor all runs triggered by the merge commit on main:
 
 ```bash
-/usr/local/libexec/adda-dev-runtime/ci-watch.sh push --branch main
+/usr/local/libexec/adda-dev-runtime/ci-watch push --branch main
 ```
 
 Exit 0: main is healthy; the task is complete.
