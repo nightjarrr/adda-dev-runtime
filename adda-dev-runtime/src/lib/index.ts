@@ -8,6 +8,8 @@ export type {
     Shell,
     ShellDep,
     ShellResult,
+    Sleep,
+    SleepDep,
     Stdio,
     StdioDep,
     Tmp,
