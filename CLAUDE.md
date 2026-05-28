@@ -32,6 +32,18 @@ making TypeScript a first-class scripting language for Tier 1 scripts; see
 **Tier 2** (`proto-adda/`) — AI harness. Builds `FROM` Tier 1. Ships Claude
 Code, the Claude config, and the `10-claude-config.sh` bootstrap hook.
 
+## Toolchain
+
+Bun, Biome, and tsc are pre-installed globals. Never use `bunx` for any of
+them — `bunx` downloads on demand and risks version mismatches.
+
+Correct invocations:
+
+- `bun test --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=<output dir>`
+- `bun build <source dir> --outdir <output dir> --target bun --banner '#!/usr/bin/env bun'`
+- `biome check <source dir>`
+- `tsc --noEmit`
+
 ## Path model
 
 | Path | Nature | Persistence |
