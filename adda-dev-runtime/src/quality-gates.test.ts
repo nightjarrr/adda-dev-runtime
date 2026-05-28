@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+import { ScriptShellError } from "./lib/errors";
 import type {
     FileReader,
     FileReaderDep,
@@ -53,8 +54,13 @@ function makeMockDeps(options: MockDepsOptions = {}): {
     let runShCallCount = 0;
 
     const mockShell: Shell = {
-        run: mock(async (): Promise<ShellResult> => gitResult),
-        runSh: mock(async (): Promise<ShellResult> => {
+        run: mock(async (_command: string[], opts?: { strict?: boolean }): Promise<ShellResult> => {
+            if ((opts?.strict ?? true) && gitResult.exitCode !== 0) {
+                throw new ScriptShellError(_command.join(" "), gitResult.exitCode, gitResult.stdout, gitResult.stderr);
+            }
+            return gitResult;
+        }),
+        runSh: mock(async (_command: string, _opts?: { strict?: boolean }): Promise<ShellResult> => {
             const result = runShResults[runShCallCount] ?? makeShellSuccess();
             runShCallCount++;
             return result;

@@ -72,11 +72,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
 
     private async resolveRemoteSha(ref: string): Promise<string> {
         const result = await this.deps.shell.run(["git", "ls-remote", "origin", ref]);
-        if (result.exitCode !== 0) {
-            throw new ScriptError(`git ls-remote failed: ${result.stderr.trim()}`, 1);
-        }
-        const sha = result.stdout.trim().split("\t")[0] ?? "";
-        return sha;
+        return result.stdout.trim().split("\t")[0] ?? "";
     }
 
     private async resolvePushSha(
@@ -136,7 +132,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
             runIds = await this.fetchPushRunIds(sha);
         }
 
-        await Promise.all(runIds.map((id) => this.deps.shell.run(["gh", "run", "watch", id])));
+        await Promise.all(runIds.map((id) => this.deps.shell.run(["gh", "run", "watch", id], { strict: false })));
 
         const conclusions = await Promise.all(runIds.map((id) => this.fetchRunConclusion(id)));
         const failingRuns = conclusions.filter((c) => c.conclusion !== "success");
@@ -156,12 +152,9 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
     private async watchPr(prNumber: string): Promise<void> {
         const startMs = Date.now();
 
-        await this.deps.shell.run(["gh", "pr", "checks", prNumber, "--watch"]);
+        await this.deps.shell.run(["gh", "pr", "checks", prNumber, "--watch"], { strict: false });
 
         const checksResult = await this.deps.shell.run(["gh", "pr", "checks", prNumber, "--json", "name,state,link"]);
-        if (checksResult.exitCode !== 0) {
-            throw new ScriptError(`gh pr checks failed: ${checksResult.stderr.trim() || checksResult.stdout.trim()}`, 1);
-        }
 
         interface CheckEntry {
             name: string;
@@ -224,7 +217,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
                     this.deps.shell.run(["gh", "run", "view", runId, "--json", "event", "-q", ".event"]),
                 ]);
                 const logFile = this.deps.tmp.tempFilePath("ci-watch-logs", ".txt");
-                await this.deps.shell.runSh(`gh run view ${runId} --log-failed > ${logFile} 2>&1 || true`);
+                await this.deps.shell.runSh(`gh run view ${runId} --log-failed > ${logFile} 2>&1 || true`, { strict: false });
                 return { runId, conclusion, url: urlResult.stdout.trim(), event: eventResult.stdout.trim(), logFile };
             }),
         );

@@ -54,7 +54,7 @@ function makeMockDeps(options: { shellRun?: (command: string[]) => Promise<Shell
 
     const mockShell: Shell = {
         run: mock(options.shellRun ?? defaultShellRun),
-        runSh: mock(async (_cmd: string) => ({ stdout: "", stderr: "", exitCode: 0 })),
+        runSh: mock(async (_cmd: string, _opts?: { strict?: boolean }) => ({ stdout: "", stderr: "", exitCode: 0 })),
     };
 
     const envVars = options.envVars ?? {

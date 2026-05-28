@@ -22,9 +22,6 @@ export class QualityGatesScript extends ScriptBase<QualityGatesDeps> {
 
     protected async execute(): Promise<void> {
         const gitResult = await this.deps.shell.run(["git", "rev-parse", "--show-toplevel"]);
-        if (gitResult.exitCode !== 0) {
-            throw new ScriptError(`git rev-parse failed: ${gitResult.stderr.trim() || gitResult.stdout.trim()}`);
-        }
         const repoRoot = gitResult.stdout.trim();
         const confPath = `${repoRoot}/.quality-gates.conf`;
 
@@ -52,7 +49,7 @@ export class QualityGatesScript extends ScriptBase<QualityGatesDeps> {
             const cmd = commands[i];
             this.deps.stdio.stdout.write(`[${i + 1}/${total}] ${cmd}\n`);
 
-            const result = await this.deps.shell.runSh(`${cmd} 2>&1`);
+            const result = await this.deps.shell.runSh(`${cmd} 2>&1`, { strict: false });
             const status: "PASS" | "FAIL" = result.exitCode === 0 ? "PASS" : "FAIL";
 
             if (status === "FAIL") overall = "FAIL";

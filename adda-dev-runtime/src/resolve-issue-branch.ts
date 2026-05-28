@@ -78,19 +78,22 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps>
             throw new ScriptError("required environment variable 'GITHUB_REPO' is not set");
         }
 
-        const ghResult = await this.deps.shell.run([
-            "gh",
-            "api",
-            "graphql",
-            "-F",
-            `owner=${owner}`,
-            "-F",
-            `repo=${repo}`,
-            "-F",
-            `number=${issueId}`,
-            "-f",
-            `query=${GRAPHQL_QUERY}`,
-        ]);
+        const ghResult = await this.deps.shell.run(
+            [
+                "gh",
+                "api",
+                "graphql",
+                "-F",
+                `owner=${owner}`,
+                "-F",
+                `repo=${repo}`,
+                "-F",
+                `number=${issueId}`,
+                "-f",
+                `query=${GRAPHQL_QUERY}`,
+            ],
+            { strict: false },
+        );
 
         if (ghResult.exitCode !== 0) {
             const details = `GraphQL API call failed: ${ghResult.stderr.trim() || ghResult.stdout.trim()}`;

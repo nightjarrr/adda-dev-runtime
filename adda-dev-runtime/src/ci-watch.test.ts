@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { CiWatchScript } from "./ci-watch";
+import { ScriptShellError } from "./lib/errors";
 import type { Shell, ShellDep, ShellResult, Sleep, SleepDep, StdioDep, Tmp, TmpDep } from "./lib/index";
 
 type CiWatchDeps = ShellDep & TmpDep & StdioDep & SleepDep;
@@ -35,12 +36,15 @@ function makeMockDeps(options: MockDepsOptions = {}): {
     const runShQueue = options.runShQueue ? [...options.runShQueue] : [];
 
     const mockShell: Shell = {
-        run: mock(async (command: string[]) => {
+        run: mock(async (command: string[], opts?: { strict?: boolean }) => {
             runCalls.push(command);
-            const result = runQueue.shift();
-            return result ?? makeShellResult("");
+            const result = runQueue.shift() ?? makeShellResult("");
+            if ((opts?.strict ?? true) && result.exitCode !== 0) {
+                throw new ScriptShellError(command.join(" "), result.exitCode, result.stdout, result.stderr);
+            }
+            return result;
         }),
-        runSh: mock(async (command: string) => {
+        runSh: mock(async (command: string, _opts?: { strict?: boolean }) => {
             runShCalls.push(command);
             const result = runShQueue.shift();
             return result ?? makeShellResult("");
@@ -196,7 +200,7 @@ describe("CiWatchScript", () => {
             const script = new CiWatchScript(deps);
             const code = await script.run(["bun", "ci-watch.ts", "push", "--branch", "main"]);
             expect(code).toBe(1);
-            expect(errLines.join("")).toContain("git ls-remote failed");
+            expect(errLines.join("")).toContain("git ls-remote");
         });
 
         test("--branch LOCAL resolves local branch name first, then remote SHA", async () => {
@@ -285,7 +289,7 @@ describe("CiWatchScript", () => {
             const script = new CiWatchScript(deps);
             const code = await script.run(["bun", "ci-watch.ts", "push", "--tag", "v1.0"]);
             expect(code).toBe(1);
-            expect(errLines.join("")).toContain("git ls-remote failed");
+            expect(errLines.join("")).toContain("git ls-remote");
         });
     });
 
@@ -438,7 +442,7 @@ describe("CiWatchScript", () => {
             const script = new CiWatchScript(deps);
             const code = await script.run(["bun", "ci-watch.ts", "pr", "42"]);
             expect(code).toBe(1);
-            expect(errLines.join("")).toContain("gh pr checks failed");
+            expect(errLines.join("")).toContain("gh pr checks");
         });
     });
 
