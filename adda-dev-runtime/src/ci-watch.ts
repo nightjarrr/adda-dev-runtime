@@ -14,12 +14,12 @@ interface RunRecord {
 
 interface SuccessWatchResult {
     conclusion: "success";
-    elapsed: number;
+    elapsed_seconds: number;
 }
 
 interface FailedWatchResult {
     conclusion: "failure";
-    elapsed: number;
+    elapsed_seconds: number;
     runs: RunRecord[];
 }
 
@@ -144,12 +144,12 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         const getElapsed = () => Math.round((Date.now() - startMs) / 1000);
 
         if (failingRuns.length === 0) {
-            this.emit({ conclusion: "success", elapsed: getElapsed() });
+            this.emit({ conclusion: "success", elapsed_seconds: getElapsed() });
             return;
         }
 
         const runs = await this.collectFailingRuns(failingRuns);
-        this.emit({ conclusion: "failure", elapsed: getElapsed(), runs });
+        this.emit({ conclusion: "failure", elapsed_seconds: getElapsed(), runs });
         throw new ScriptError("CI runs failed", 1);
     }
 
@@ -175,7 +175,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         const getElapsed = () => Math.round((Date.now() - startMs) / 1000);
 
         if (failingChecks.length === 0) {
-            this.emit({ conclusion: "success", elapsed: getElapsed() });
+            this.emit({ conclusion: "success", elapsed_seconds: getElapsed() });
             return;
         }
 
@@ -192,7 +192,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         const runIds = Array.from(runIdSet);
         const runsWithConclusion = await Promise.all(runIds.map((id) => this.fetchRunConclusion(id)));
         const runs = await this.collectFailingRuns(runsWithConclusion);
-        this.emit({ conclusion: "failure", elapsed: getElapsed(), runs });
+        this.emit({ conclusion: "failure", elapsed_seconds: getElapsed(), runs });
         throw new ScriptError("CI runs failed", 1);
     }
 

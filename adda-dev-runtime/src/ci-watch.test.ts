@@ -97,8 +97,8 @@ interface RunRecordShape {
 }
 
 type CiWatchOutputShape =
-    | { conclusion: "success"; elapsed: number }
-    | { conclusion: "failure"; elapsed: number; runs: RunRecordShape[] };
+    | { conclusion: "success"; elapsed_seconds: number }
+    | { conclusion: "failure"; elapsed_seconds: number; runs: RunRecordShape[] };
 
 // --- Reusable run data builders ---
 
@@ -382,7 +382,7 @@ describe("CiWatchScript", () => {
 
             const out = getStdoutJson(outLines);
             expect(out.conclusion).toBe("success");
-            expect(out.elapsed).toBeGreaterThanOrEqual(0);
+            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
         });
     });
 
@@ -409,7 +409,7 @@ describe("CiWatchScript", () => {
 
             const out = getStdoutJson(outLines);
             expect(out.conclusion).toBe("failure");
-            expect(out.elapsed).toBeGreaterThanOrEqual(0);
+            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
             if (out.conclusion !== "failure") throw new Error("expected failure");
             expect(out.runs).toHaveLength(1);
             expect(out.runs[0].runId).toBe("333");
@@ -466,7 +466,7 @@ describe("CiWatchScript", () => {
 
             const out = getStdoutJson(outLines);
             expect(out.conclusion).toBe("success");
-            expect(out.elapsed).toBeGreaterThanOrEqual(0);
+            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
         });
     });
 
@@ -497,7 +497,7 @@ describe("CiWatchScript", () => {
 
             const out = getStdoutJson(outLines);
             expect(out.conclusion).toBe("failure");
-            expect(out.elapsed).toBeGreaterThanOrEqual(0);
+            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
             if (out.conclusion !== "failure") throw new Error("expected failure");
             expect(out.runs).toHaveLength(1);
             expect(out.runs[0].runId).toBe("500");
@@ -527,7 +527,7 @@ describe("CiWatchScript", () => {
             expect(code).toBe(1);
 
             const out = getStdoutJson(outLines);
-            expect(out.elapsed).toBeGreaterThanOrEqual(0);
+            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
             if (out.conclusion !== "failure") throw new Error("expected failure");
             // Only one run record even though two checks pointed to it
             expect(out.runs).toHaveLength(1);
@@ -554,7 +554,7 @@ describe("CiWatchScript", () => {
 
             const out = getStdoutJson(outLines);
             expect(out.conclusion).toBe("failure");
-            expect(out.elapsed).toBeGreaterThanOrEqual(0);
+            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
             if (out.conclusion !== "failure") throw new Error("expected failure");
             expect(out.runs).toHaveLength(1);
             expect(out.runs[0].runId).toBe("700");
@@ -578,7 +578,7 @@ describe("CiWatchScript", () => {
             expect(errLines.join("")).toContain("Warning:");
             const out = getStdoutJson(outLines);
             expect(out.conclusion).toBe("failure");
-            expect(out.elapsed).toBeGreaterThanOrEqual(0);
+            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
             if (out.conclusion !== "failure") throw new Error("expected failure");
             expect(out.runs).toHaveLength(0);
         });
@@ -610,7 +610,7 @@ describe("CiWatchScript", () => {
             expect(runShCalls[0]).toMatch(/^gh run view 789 --log-failed > \/tmp\/ci-watch-logs-.+\.txt 2>&1 \|\| true$/);
 
             const out = getStdoutJson(outLines);
-            expect(out.elapsed).toBeGreaterThanOrEqual(0);
+            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
             if (out.conclusion !== "failure") throw new Error("expected failure");
             expect(out.runs[0].logFile).toMatch(/^\/tmp\/ci-watch-logs-.+\.txt$/);
             // conclusion in output comes from fetchRunConclusion, not a re-fetch
