@@ -41,7 +41,7 @@ Source placement by tier:
 
 No shebang, no exec bit in sources — the build pipeline injects the shebang via `--banner`.
 
-Every script extends `ScriptBase<TDeps>`. A minimal skeleton:
+Every script extends `ScriptBase<TDeps, TArgs>`. A minimal skeleton:
 
 ```typescript
 import type { parseArgs } from "node:util";
@@ -49,8 +49,9 @@ import type { ShellDep, StdioDep } from "@adda/lib";
 import { defaultDeps, ScriptArgsError, ScriptBase } from "@adda/lib";
 
 type ExampleDeps = ShellDep & StdioDep;
+type ExampleArgs = { target: string };
 
-export class ExampleScript extends ScriptBase<ExampleDeps> {
+export class ExampleScript extends ScriptBase<ExampleDeps, ExampleArgs> {
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return {
             strict: true,
@@ -60,12 +61,15 @@ export class ExampleScript extends ScriptBase<ExampleDeps> {
         };
     }
 
-    protected async execute(args: ReturnType<typeof parseArgs>): Promise<void> {
-        const target = args.values.target as string | undefined;
+    protected validateArgs(parsed: ReturnType<typeof parseArgs>): ExampleArgs {
+        const target = parsed.values.target as string | undefined;
         if (!target)
             throw new ScriptArgsError("--target is required");
+        return { target };
+    }
 
-        const result = await this.deps.shell.run(["sometool", target]);
+    protected async execute(args: ExampleArgs): Promise<void> {
+        const result = await this.deps.shell.run(["sometool", args.target]);
         this.deps.stdio.stdout.write(result.stdout);
     }
 }
@@ -76,11 +80,13 @@ if (import.meta.main)
 
 - `TDeps` is an intersection of capability dep interfaces. `StdioDep` is always required —
   `ScriptBase` uses `this.deps.stdio.stderr` for error output.
+- `TArgs` is the validated, typed result of `validateArgs()`. Use `EmptyArgs` (exported from
+  `@adda/lib`) for scripts that take no arguments.
 - `defaultDeps` (exported from `@adda/lib`) provides the production implementations. The
   constructor accepts `TDeps` directly — used for test injection.
 - `strict: true` in `argDefinitions()` causes `parseArgs` to throw on unknown options;
-  `ScriptBase` catches this and returns exit code 2. Required-option presence still needs
-  explicit validation in `execute()`, as shown above — use `ScriptArgsError` rather than
+  `ScriptBase` catches this and returns exit code 2. Required-option presence is validated
+  in `validateArgs()`, as shown above — use `ScriptArgsError` rather than
   `new ScriptError("...", 2)` for argument validation errors.
 - `Shell.run` and `Shell.runSh` throw `ScriptShellError` (a `ScriptError` subclass, exit
   code 1) when the command exits non-zero — no manual exit code check needed. Pass

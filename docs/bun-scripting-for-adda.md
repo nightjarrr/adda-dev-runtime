@@ -24,10 +24,14 @@ adda-dev-runtime/src/<name>.test.ts     # unit tests
 **Class skeleton:**
 
 ```typescript
-class MyScript extends ScriptBase<ShellDep & StdioDep> {
+class MyScript extends ScriptBase<ShellDep & StdioDep, MyArgs> {
     protected argDefinitions() { /* util.parseArgs options */ }
 
-    protected async execute(): Promise<void> {
+    protected validateArgs(parsed: ReturnType<typeof parseArgs>): MyArgs {
+        // validate and extract args; throw ScriptArgsError on invalid input
+    }
+
+    protected async execute(args: MyArgs): Promise<void> {
         // implementation; throw on error
     }
 }
@@ -39,8 +43,9 @@ if (import.meta.main)
 **`run(argv)`** (implemented in `ScriptBase`):
 1. Slices `argv` past the interpreter/script entries
 2. Parses args via `util.parseArgs` using `argDefinitions()`
-3. Calls `execute()`
-4. Returns exit code
+3. Calls `validateArgs()` to produce typed `TArgs`
+4. Calls `execute(args)` with the validated result
+5. Returns exit code
 
 **`import.meta.main` convention:** The `import.meta.main` block cannot be exercised in unit tests and will appear as uncovered in coverage reports.
 
