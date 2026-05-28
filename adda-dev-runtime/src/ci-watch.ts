@@ -12,13 +12,21 @@ interface RunRecord {
     logFile: string;
 }
 
-interface CiWatchOutput {
-    conclusion: "success" | "failure";
+interface SuccessWatchResult {
+    conclusion: "success";
+    elapsed: number;
+}
+
+interface FailedWatchResult {
+    conclusion: "failure";
+    elapsed: number;
     runs: RunRecord[];
 }
 
+type CiWatchOutput = SuccessWatchResult | FailedWatchResult;
+
 const POLL_INTERVAL_MS = 2000;
-const POLL_TIMEOUT_MS = 60000;
+const POLL_TIMEOUT_MS = 10000;
 
 export class CiWatchScript extends ScriptBase<CiWatchDeps> {
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
@@ -113,24 +121,19 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
     }
 
     private async watchPush(sha: string): Promise<void> {
-        let elapsed = 0;
+        const startMs = Date.now();
+        let pollElapsed = 0;
 
-        const runListArgs = ["gh", "run", "list", "--commit", sha, "--event", "push", "--json", "databaseId"];
-
-        const listResult = await this.deps.shell.run(runListArgs);
-        let runsJson = listResult.stdout.trim();
-        let runIds: string[] = this.parseRunIds(runsJson);
+        let runIds: string[] = await this.fetchPushRunIds(sha);
 
         while (runIds.length === 0) {
-            if (elapsed >= POLL_TIMEOUT_MS) {
+            if (pollElapsed >= POLL_TIMEOUT_MS) {
                 throw new ScriptError(`no push run found for commit ${sha} after ${POLL_TIMEOUT_MS / 1000}s`, 1);
             }
             await this.deps.sleep.sleep(POLL_INTERVAL_MS);
-            elapsed += POLL_INTERVAL_MS;
+            pollElapsed += POLL_INTERVAL_MS;
 
-            const retryResult = await this.deps.shell.run(runListArgs);
-            runsJson = retryResult.stdout.trim();
-            runIds = this.parseRunIds(runsJson);
+            runIds = await this.fetchPushRunIds(sha);
         }
 
         await Promise.all(runIds.map((id) => this.deps.shell.run(["gh", "run", "watch", id])));
@@ -138,17 +141,21 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         const conclusions = await Promise.all(runIds.map((id) => this.fetchRunConclusion(id)));
         const failingRuns = conclusions.filter((c) => c.conclusion !== "success");
 
+        const elapsed = Math.round((Date.now() - startMs) / 1000);
+
         if (failingRuns.length === 0) {
-            this.emit({ conclusion: "success", runs: [] });
+            this.emit({ conclusion: "success", elapsed });
             return;
         }
 
         const runs = await this.collectFailingRuns(failingRuns);
-        this.emit({ conclusion: "failure", runs });
+        this.emit({ conclusion: "failure", elapsed, runs });
         throw new ScriptError("CI runs failed", 1);
     }
 
     private async watchPr(prNumber: string): Promise<void> {
+        const startMs = Date.now();
+
         await this.deps.shell.run(["gh", "pr", "checks", prNumber, "--watch"]);
 
         const checksResult = await this.deps.shell.run(["gh", "pr", "checks", prNumber, "--json", "name,state,link"]);
@@ -163,10 +170,12 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         }
 
         const checks: CheckEntry[] = JSON.parse(checksResult.stdout.trim() || "[]");
-        const failingChecks = checks.filter((c) => c.state !== "SUCCESS" && c.state !== "success");
+        const failingChecks = checks.filter((c) => c.state.toLowerCase() !== "success");
+
+        const elapsed = Math.round((Date.now() - startMs) / 1000);
 
         if (failingChecks.length === 0) {
-            this.emit({ conclusion: "success", runs: [] });
+            this.emit({ conclusion: "success", elapsed });
             return;
         }
 
@@ -183,8 +192,23 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         const runIds = Array.from(runIdSet);
         const runsWithConclusion = await Promise.all(runIds.map((id) => this.fetchRunConclusion(id)));
         const runs = await this.collectFailingRuns(runsWithConclusion);
-        this.emit({ conclusion: "failure", runs });
+        this.emit({ conclusion: "failure", elapsed, runs });
         throw new ScriptError("CI runs failed", 1);
+    }
+
+    private async fetchPushRunIds(sha: string): Promise<string[]> {
+        const result = await this.deps.shell.run([
+            "gh",
+            "run",
+            "list",
+            "--commit",
+            sha,
+            "--event",
+            "push",
+            "--json",
+            "databaseId",
+        ]);
+        return this.parseRunIds(result.stdout.trim());
     }
 
     private async fetchRunConclusion(runId: string): Promise<{ runId: string; conclusion: string }> {

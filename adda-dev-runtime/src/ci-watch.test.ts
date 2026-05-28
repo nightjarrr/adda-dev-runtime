@@ -88,10 +88,17 @@ function getStdoutJson(outLines: string[]): CiWatchOutputShape {
     return JSON.parse(outLines.join("").trim()) as CiWatchOutputShape;
 }
 
-interface CiWatchOutputShape {
+interface RunRecordShape {
+    runId: string;
+    event: string;
+    url: string;
     conclusion: string;
-    runs: Array<{ runId: string; event: string; url: string; conclusion: string; logFile: string }>;
+    logFile: string;
 }
+
+type CiWatchOutputShape =
+    | { conclusion: "success"; elapsed: number }
+    | { conclusion: "failure"; elapsed: number; runs: RunRecordShape[] };
 
 // --- Reusable run data builders ---
 
@@ -339,8 +346,8 @@ describe("CiWatchScript", () => {
 
         test("poll timeout reached — exits 1 with error on stderr", async () => {
             // Need enough empty results to exhaust the timeout
-            // POLL_TIMEOUT_MS=60000, POLL_INTERVAL_MS=2000 → 30 iterations
-            const emptyPolls = Array.from({ length: 31 }, () => makeShellResult("[]"));
+            // POLL_TIMEOUT_MS=10000, POLL_INTERVAL_MS=2000 → 5 retries
+            const emptyPolls = Array.from({ length: 6 }, () => makeShellResult("[]"));
             const { deps, errLines } = makeMockDeps({ runQueue: emptyPolls });
             const script = new CiWatchScript(deps);
             const code = await script.run(["bun", "ci-watch.ts", "push", "--commit", "sha3"]);
@@ -375,7 +382,7 @@ describe("CiWatchScript", () => {
 
             const out = getStdoutJson(outLines);
             expect(out.conclusion).toBe("success");
-            expect(out.runs).toEqual([]);
+            expect(out.elapsed).toBeGreaterThanOrEqual(0);
         });
     });
 
@@ -402,6 +409,8 @@ describe("CiWatchScript", () => {
 
             const out = getStdoutJson(outLines);
             expect(out.conclusion).toBe("failure");
+            expect(out.elapsed).toBeGreaterThanOrEqual(0);
+            if (out.conclusion !== "failure") throw new Error("expected failure");
             expect(out.runs).toHaveLength(1);
             expect(out.runs[0].runId).toBe("333");
             expect(out.runs[0].event).toBe("push");
@@ -457,7 +466,7 @@ describe("CiWatchScript", () => {
 
             const out = getStdoutJson(outLines);
             expect(out.conclusion).toBe("success");
-            expect(out.runs).toEqual([]);
+            expect(out.elapsed).toBeGreaterThanOrEqual(0);
         });
     });
 
@@ -488,6 +497,8 @@ describe("CiWatchScript", () => {
 
             const out = getStdoutJson(outLines);
             expect(out.conclusion).toBe("failure");
+            expect(out.elapsed).toBeGreaterThanOrEqual(0);
+            if (out.conclusion !== "failure") throw new Error("expected failure");
             expect(out.runs).toHaveLength(1);
             expect(out.runs[0].runId).toBe("500");
             // conclusion comes from fetchRunConclusion, not re-fetched in collectFailingRuns
@@ -516,9 +527,37 @@ describe("CiWatchScript", () => {
             expect(code).toBe(1);
 
             const out = getStdoutJson(outLines);
+            expect(out.elapsed).toBeGreaterThanOrEqual(0);
+            if (out.conclusion !== "failure") throw new Error("expected failure");
             // Only one run record even though two checks pointed to it
             expect(out.runs).toHaveLength(1);
             expect(out.runs[0].runId).toBe("600");
+        });
+
+        test("check with lowercase 'failure' state is treated as failing (case-insensitive)", async () => {
+            const checksJson = JSON.stringify([
+                { name: "build", state: "failure", link: "https://github.com/repo/actions/runs/700/jobs/1" },
+            ]);
+            const { deps, outLines } = makeMockDeps({
+                runQueue: [
+                    makeShellResult(""), // gh pr checks --watch
+                    makeShellResult(checksJson), // gh pr checks --json
+                    makeShellResult("failure\n"), // fetchRunConclusion for run 700
+                    makeShellResult("https://github.com/repo/actions/runs/700\n"), // url
+                    makeShellResult("pull_request\n"), // event
+                ],
+                runShQueue: [makeShellResult("")],
+            });
+            const script = new CiWatchScript(deps);
+            const code = await script.run(["bun", "ci-watch.ts", "pr", "42"]);
+            expect(code).toBe(1);
+
+            const out = getStdoutJson(outLines);
+            expect(out.conclusion).toBe("failure");
+            expect(out.elapsed).toBeGreaterThanOrEqual(0);
+            if (out.conclusion !== "failure") throw new Error("expected failure");
+            expect(out.runs).toHaveLength(1);
+            expect(out.runs[0].runId).toBe("700");
         });
 
         test("link with no extractable run ID — warning on stderr, continues", async () => {
@@ -539,6 +578,8 @@ describe("CiWatchScript", () => {
             expect(errLines.join("")).toContain("Warning:");
             const out = getStdoutJson(outLines);
             expect(out.conclusion).toBe("failure");
+            expect(out.elapsed).toBeGreaterThanOrEqual(0);
+            if (out.conclusion !== "failure") throw new Error("expected failure");
             expect(out.runs).toHaveLength(0);
         });
     });
@@ -569,6 +610,8 @@ describe("CiWatchScript", () => {
             expect(runShCalls[0]).toMatch(/^gh run view 789 --log-failed > \/tmp\/ci-watch-logs-.+\.txt 2>&1 \|\| true$/);
 
             const out = getStdoutJson(outLines);
+            expect(out.elapsed).toBeGreaterThanOrEqual(0);
+            if (out.conclusion !== "failure") throw new Error("expected failure");
             expect(out.runs[0].logFile).toMatch(/^\/tmp\/ci-watch-logs-.+\.txt$/);
             // conclusion in output comes from fetchRunConclusion, not a re-fetch
             expect(out.runs[0].conclusion).toBe("failure");
