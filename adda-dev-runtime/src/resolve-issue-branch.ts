@@ -4,6 +4,8 @@ import { defaultDeps, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib
 
 type ResolveIssueBranchDeps = ShellDep & EnvDep & StdioDep;
 
+type ResolveIssueBranchArgs = { issueId: string };
+
 type Status = "feature_branch" | "main" | "ambiguous" | "error";
 
 interface ResolveResult {
@@ -53,18 +55,21 @@ const GRAPHQL_QUERY = `
       }
     }`;
 
-export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps> {
+export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps, ResolveIssueBranchArgs> {
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return { options: {}, allowPositionals: true };
     }
 
-    protected async execute(parsed: ReturnType<typeof parseArgs>): Promise<void> {
+    protected validateArgs(parsed: ReturnType<typeof parseArgs>): ResolveIssueBranchArgs {
         if (parsed.positionals.length !== 1) {
             this.emit("", "error", "", "", "usage: resolve-issue-branch <issue_id>");
             throw new ScriptArgsError("usage: resolve-issue-branch <issue_id>");
         }
+        return { issueId: parsed.positionals[0] };
+    }
 
-        const issueId = parsed.positionals[0];
+    protected async execute(args: ResolveIssueBranchArgs): Promise<void> {
+        const issueId = args.issueId;
 
         const owner = this.deps.env.get("GITHUB_OWNER");
         if (!owner) {

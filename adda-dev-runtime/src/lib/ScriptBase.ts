@@ -2,7 +2,9 @@ import { parseArgs } from "node:util";
 import type { StdioDep } from "./capabilities";
 import { ScriptError } from "./errors";
 
-export abstract class ScriptBase<TDeps extends StdioDep> {
+export type EmptyArgs = Record<string, never>;
+
+export abstract class ScriptBase<TDeps extends StdioDep, TArgs> {
     protected readonly deps: TDeps;
 
     constructor(deps: TDeps) {
@@ -11,7 +13,9 @@ export abstract class ScriptBase<TDeps extends StdioDep> {
 
     protected abstract argDefinitions(): Parameters<typeof parseArgs>[0];
 
-    protected abstract execute(args: ReturnType<typeof parseArgs>): Promise<void>;
+    protected abstract validateArgs(parsed: ReturnType<typeof parseArgs>): TArgs;
+
+    protected abstract execute(args: TArgs): Promise<void>;
 
     async run(argv: string[]): Promise<number> {
         const sliced = argv.slice(2);
@@ -26,7 +30,8 @@ export abstract class ScriptBase<TDeps extends StdioDep> {
         }
 
         try {
-            await this.execute(parsed);
+            const args = this.validateArgs(parsed);
+            await this.execute(args);
             return 0;
         } catch (err) {
             if (err instanceof ScriptError) {

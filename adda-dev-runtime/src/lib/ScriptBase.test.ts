@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { parseArgs } from "node:util";
 import type { StdioDep } from "./capabilities";
-import { ScriptError } from "./errors";
+import { ScriptArgsError, ScriptError } from "./errors";
 import { ScriptBase } from "./ScriptBase";
 
 // --- Test helpers ---
@@ -33,7 +33,7 @@ function makeMockDeps(): {
 
 type ParsedArgs = ReturnType<typeof parseArgs>;
 
-class NoArgScript extends ScriptBase<StdioDep> {
+class NoArgScript extends ScriptBase<StdioDep, ParsedArgs> {
     private readonly executeFn: (args: ParsedArgs) => Promise<void>;
 
     constructor(deps: StdioDep, executeFn: (args: ParsedArgs) => Promise<void>) {
@@ -45,12 +45,16 @@ class NoArgScript extends ScriptBase<StdioDep> {
         return { options: {} };
     }
 
+    protected validateArgs(parsed: ParsedArgs): ParsedArgs {
+        return parsed;
+    }
+
     protected async execute(args: ParsedArgs): Promise<void> {
         return this.executeFn(args);
     }
 }
 
-class FlagScript extends ScriptBase<StdioDep> {
+class FlagScript extends ScriptBase<StdioDep, ParsedArgs> {
     private readonly executeFn: (args: ParsedArgs) => Promise<void>;
 
     constructor(deps: StdioDep, executeFn: (args: ParsedArgs) => Promise<void>) {
@@ -67,9 +71,25 @@ class FlagScript extends ScriptBase<StdioDep> {
         };
     }
 
+    protected validateArgs(parsed: ParsedArgs): ParsedArgs {
+        return parsed;
+    }
+
     protected async execute(args: ParsedArgs): Promise<void> {
         return this.executeFn(args);
     }
+}
+
+class ValidateArgsErrorScript extends ScriptBase<StdioDep, ParsedArgs> {
+    protected argDefinitions(): Parameters<typeof parseArgs>[0] {
+        return { options: {} };
+    }
+
+    protected validateArgs(_parsed: ParsedArgs): ParsedArgs {
+        throw new ScriptArgsError("missing required argument");
+    }
+
+    protected async execute(_args: ParsedArgs): Promise<void> {}
 }
 
 // --- Tests ---
@@ -159,6 +179,15 @@ describe("ScriptBase", () => {
             const script = new FlagScript(deps, async () => {});
             await script.run(["bun", "script.ts", "--unknown"]);
             expect(errLines.join("")).toContain("Error:");
+        });
+    });
+
+    describe("ScriptArgsError thrown in validateArgs", () => {
+        test("returns exit code 2", async () => {
+            const { deps } = makeMockDeps();
+            const script = new ValidateArgsErrorScript(deps);
+            const code = await script.run(["bun", "script.ts"]);
+            expect(code).toBe(2);
         });
     });
 });

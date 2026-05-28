@@ -19,4 +19,5 @@ export type {
 export { defaultDeps } from "./capabilities";
 
 export { ConfigError, ScriptArgsError, ScriptError } from "./errors";
+export type { EmptyArgs } from "./ScriptBase";
 export { ScriptBase } from "./ScriptBase";

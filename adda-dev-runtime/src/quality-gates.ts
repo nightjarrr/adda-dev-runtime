@@ -1,5 +1,5 @@
 import type { parseArgs } from "node:util";
-import type { FileReaderDep, FileWriterDep, ShellDep, StdioDep, TmpDep } from "@adda/lib";
+import type { EmptyArgs, FileReaderDep, FileWriterDep, ShellDep, StdioDep, TmpDep } from "@adda/lib";
 import { ConfigError, defaultDeps, ScriptBase, ScriptError } from "@adda/lib";
 
 type QualityGatesDeps = ShellDep & FileReaderDep & FileWriterDep & TmpDep & StdioDep;
@@ -15,12 +15,16 @@ interface QualityGatesResult {
     checks: CheckResult[];
 }
 
-export class QualityGatesScript extends ScriptBase<QualityGatesDeps> {
+export class QualityGatesScript extends ScriptBase<QualityGatesDeps, EmptyArgs> {
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return { options: {}, strict: true };
     }
 
-    protected async execute(): Promise<void> {
+    protected validateArgs(_parsed: ReturnType<typeof parseArgs>): EmptyArgs {
+        return {};
+    }
+
+    protected async execute(_args: EmptyArgs): Promise<void> {
         const gitResult = await this.deps.shell.run(["git", "rev-parse", "--show-toplevel"]);
         const repoRoot = gitResult.stdout.trim();
         const confPath = `${repoRoot}/.quality-gates.conf`;

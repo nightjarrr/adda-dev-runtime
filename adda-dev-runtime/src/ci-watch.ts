@@ -4,6 +4,9 @@ import { defaultDeps, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib
 
 type CiWatchDeps = ShellDep & TmpDep & StdioDep & SleepDep;
 
+type CiWatchRef = { branch: string } | { tag: string } | { commit: string };
+type CiWatchArgs = { mode: "push"; ref: CiWatchRef } | { mode: "pr"; prNumber: string };
+
 interface RunRecord {
     runId: string;
     event: string;
@@ -28,7 +31,7 @@ type CiWatchOutput = SuccessWatchResult | FailedWatchResult;
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 10000;
 
-export class CiWatchScript extends ScriptBase<CiWatchDeps> {
+export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return {
             options: {
@@ -40,7 +43,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         };
     }
 
-    protected async execute(parsed: ReturnType<typeof parseArgs>): Promise<void> {
+    protected validateArgs(parsed: ReturnType<typeof parseArgs>): CiWatchArgs {
         const mode = parsed.positionals[0];
 
         if (!mode) {
@@ -57,16 +60,28 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
                 throw new ScriptArgsError("push mode requires exactly one of --branch, --tag, or --commit");
             }
 
-            const sha = await this.resolvePushSha(branch, tag, commit);
-            await this.watchPush(sha);
-        } else if (mode === "pr") {
+            const ref: CiWatchRef =
+                branch !== undefined ? { branch } : tag !== undefined ? { tag } : { commit: commit as string };
+            return { mode: "push", ref };
+        }
+
+        if (mode === "pr") {
             const prNumber = parsed.positionals[1];
             if (!prNumber) {
                 throw new ScriptArgsError("pr mode requires a PR number as the second argument");
             }
-            await this.watchPr(prNumber);
+            return { mode: "pr", prNumber };
+        }
+
+        throw new ScriptArgsError(`unknown mode '${mode}': expected 'push' or 'pr'`);
+    }
+
+    protected async execute(args: CiWatchArgs): Promise<void> {
+        if (args.mode === "push") {
+            const sha = await this.resolvePushSha(args.ref);
+            await this.watchPush(sha);
         } else {
-            throw new ScriptArgsError(`unknown mode '${mode}': expected 'push' or 'pr'`);
+            await this.watchPr(args.prNumber);
         }
     }
 
@@ -75,18 +90,14 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         return result.stdout.trim().split("\t")[0] ?? "";
     }
 
-    private async resolvePushSha(
-        branch: string | undefined,
-        tag: string | undefined,
-        commit: string | undefined,
-    ): Promise<string> {
-        if (commit !== undefined) {
-            return commit;
+    private async resolvePushSha(ref: CiWatchRef): Promise<string> {
+        if ("commit" in ref) {
+            return ref.commit;
         }
 
-        if (branch !== undefined) {
-            let resolvedBranch = branch;
-            if (branch === "LOCAL") {
+        if ("branch" in ref) {
+            let resolvedBranch = ref.branch;
+            if (ref.branch === "LOCAL") {
                 const localResult = await this.deps.shell.run(["git", "branch", "--show-current"]);
                 resolvedBranch = localResult.stdout.trim();
                 if (!resolvedBranch) {
@@ -101,8 +112,8 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
             return sha;
         }
 
-        // tag is defined (setCount === 1 guarantees one of branch/tag/commit is set)
-        const tagName = tag as string;
+        // "tag" in ref
+        const tagName = ref.tag;
 
         const peeledSha = await this.resolveRemoteSha(`refs/tags/${tagName}^{}`);
         if (peeledSha) {
