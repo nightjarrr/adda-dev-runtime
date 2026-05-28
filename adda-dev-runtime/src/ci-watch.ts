@@ -155,7 +155,6 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps> {
         await this.deps.shell.run(["gh", "pr", "checks", prNumber, "--watch"], { strict: false });
 
         const checksResult = await this.deps.shell.run(["gh", "pr", "checks", prNumber, "--json", "name,state,link"]);
-
         interface CheckEntry {
             name: string;
             state: string;
