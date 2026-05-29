@@ -55,9 +55,7 @@ After the preview block, invoke `AskUserQuestion`:
   - "Yes, start work"
   - "Use a different issue"
 
-`AskUserQuestion` automatically appends free-text and chat options (rendered as "Type something" / "Chat about this") to every prompt. These are harness behavior, not part of this skill — do not add them to the `options` array, do not try to suppress them, and do not mention them in the question text.
-
-If PO selects "Use a different issue": ask in plain text "Enter the issue number:", capture the answer as the new ID, then repeat the *Read the issue*, *Show preview*, and *Confirm* sections with the new ID.
+If PO selects "Use a different issue" without appending the issue ID in the answer: ask in plain text "Enter the issue number:", capture the answer as the new ID, then repeat the *Read the issue*, *Show preview*, and *Confirm* sections with the new ID.
 
 ## Start work
 
