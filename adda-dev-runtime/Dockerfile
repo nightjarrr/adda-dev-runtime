@@ -180,6 +180,11 @@ COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/
 # COMMON — user, working directory, entrypoint, default command
 # ======================================================================
 
+# Image identity — commit SHA baked at build time by CI; empty for local builds.
+# ADDA_DEV_RUNTIME_IMAGE is not baked here; it is injected at run time by the launcher.
+ARG ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=""
+ENV ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA}
+
 # Create the runtime user explicitly. UID/GID align with the launcher's
 # ADDA_DEV_USER/UID/GID defaults. Higher-tier images FROM this image
 # and inherit the user without re-creating it.

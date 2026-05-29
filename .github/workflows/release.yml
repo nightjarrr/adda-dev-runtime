@@ -40,6 +40,7 @@ jobs:
           push: true
           file: adda-dev-runtime/Dockerfile
           context: .
+          build-args: ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${{ github.sha }}
           tags: ${{ steps.meta-base.outputs.tags }}
 
       - name: Docker metadata — proto-adda
@@ -57,7 +58,9 @@ jobs:
           push: true
           file: proto-adda/Dockerfile
           context: .
-          build-args: BASE_TAG=${{ steps.meta-base.outputs.version }}
+          build-args: |
+            BASE_TAG=${{ steps.meta-base.outputs.version }}
+            ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${{ github.sha }}
           tags: ${{ steps.meta-proto.outputs.tags }}
 
       - name: Package launcher
