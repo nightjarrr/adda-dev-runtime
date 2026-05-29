@@ -47,6 +47,17 @@ Then read, in order:
    - **Architecture Context** — the architectural framing AA extracted for this feature. You do not usually need to read `docs/architecture.md` directly.
    - **Work Breakdown** — ordered implementation steps with test coverage plan.
 5. Read any additional documents or instructions if provided. The impl-plan is your primary source of truth; additional PM documents provide supplementary context but do not override it.
+6. Determine coverage tooling status. Using the documents you have just read, establish whether the project has coverage tooling configured. Consult the following sources in order:
+   1. `docs/conventions.md` — look for any documentation of coverage collection, thresholds, or configuration.
+   2. The implementation plan and any additional dispatch documents from PM — look for references to coverage or a specific quality-gate check that produces coverage output.
+   3. `.quality-gates.conf` — inspect the configured checks for any that collect or report coverage.
+
+   Based on what you find, carry one of three states forward into Section 6:
+   - **Defined and unambiguous** — at least one source identifies a specific quality-gate check that produces coverage output. Note the name or identifier of that check; you will query its `output` field after QG `PASS`.
+   - **Not defined** — no source mentions coverage tooling. Carry `(no coverage data)` into the final response and note a deviation explaining what you checked and why you concluded coverage is not set up.
+   - **Ambiguous** — coverage is mentioned but no specific quality-gate check can be identified, or sources conflict. Carry `(no coverage data)` into the final response and note a deviation describing the ambiguity.
+
+   Ambiguity in coverage tooling is **not** a Type 3 escalation trigger. Proceed with `(no coverage data)` plus a deviation note.
 
 If the impl-plan is insufficient to proceed (reqs unclear, architectural context missing for a real decision, or approach not viable from your standpoint), do not invent design — escalate (Type 3 — Ambiguity).
 
@@ -99,7 +110,11 @@ When uncertain, prefer dialog over silent assumptions — see Section 10 (Commun
      "checks": [{ "command": "<cmd>", "status": "PASS" | "FAIL", "output": "<stdout+stderr>" }]
    }
    ```
-4. On `PASS`: do not read the check outputs. You may query metadata fields needed for attribution and final reporting, especially `.checks[].command`. Note the result file path — you will reference it in Sections 7 and 12. Proceed to Section 7.
+4. On `PASS`: do not read the check outputs. You may query metadata fields needed for attribution and final reporting, especially `.checks[].command`. Note the result file path — you will reference it in Sections 7 and 12. Then, if Section 3 determined that coverage tooling is defined and unambiguous, extract the coverage summary:
+   ```bash
+   jq '[.checks[] | select(.command | contains("<coverage-check-identifier>")) | .output]' <result-file>
+   ```
+   From the output, extract a single line capturing the headline numbers (overall percentage, line/branch breakdown if present) exactly as the tool emitted them — do not normalise or invent a format. Carry that line into the final response under `Code Coverage`. If the identified check's output contains nothing recognisable as a coverage summary, fall back to `(no coverage data)` and add a deviation note describing what was expected versus what was found. Proceed to Section 7.
 5. On `FAIL`, query failing checks and their output — do not read the full JSON file:
    ```bash
    jq '[.checks[] | select(.status=="FAIL") | {command, output}]' <result-file>
@@ -173,6 +188,7 @@ Produce a final response with these headings, in this order:
 - **Status** — `complete` | `partial` | `escalated`.
 - **Implemented** — changes mapped to Work Breakdown steps.
 - **Quality Gates** — PASS confirmation, list of commands run by QG (from `jq -r '.checks[].command' <result file>`) and result file path.
+- **Code Coverage** — headline coverage numbers extracted from the identified quality-gate check output, or `(no coverage data)` when coverage tooling is not defined, ambiguous, or the run did not reach QG `PASS`.
 - **Commits** — SHA and message per commit; push status.
 - **Deviations** — departures from the impl-plan with rationale.
 - **Additional findings** — pre-existing bugs, tech debt, improvement suggestions outside impl-plan scope.
@@ -193,6 +209,8 @@ Template:
 - ...
 
 Result file: /tmp/quality-gates-XXXXXX.json
+
+**Code Coverage:** [headline numbers, or "(no coverage data)"]
 
 **Commits:**
 - [SHA] [Commit message] — [pushed | committed locally only]
