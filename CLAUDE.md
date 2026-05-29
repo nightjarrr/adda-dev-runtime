@@ -23,7 +23,7 @@ container built from this same repo. Two consequences:
 ## Tier architecture
 
 **Tier 1** (`adda-dev-runtime/`) — generic, AI-tool-agnostic base. Ships
-`entrypoint.sh`, `resolve-issue-branch.sh`, `ci-watch.sh`, `quality-gates.sh`,
+`entrypoint.sh`, `resolve-issue-branch` (Bun executable), `ci-watch` (Bun executable),
 `quality-gates` (Bun executable), system tools (git, gh, socat, rg, fdfind, etc.),
 and an empty `entrypoint.d/` hook directory. Also ships Bun, tsc, and Biome —
 making TypeScript a first-class scripting language for Tier 1 scripts; see
@@ -63,10 +63,8 @@ not the running container.
 | Artifact | Repo source | Image-baked path | Bootstrapped to |
 |---|---|---|---|
 | Tier 1 entrypoint | `adda-dev-runtime/content/scripts/entrypoint.sh.source` | `/usr/local/libexec/adda-dev-runtime/entrypoint.sh` | — |
-| `resolve-issue-branch.sh` | `adda-dev-runtime/content/scripts/resolve-issue-branch.sh.source` | `/usr/local/libexec/adda-dev-runtime/resolve-issue-branch.sh` | — |
-| `ci-watch.sh` | `adda-dev-runtime/content/scripts/ci-watch.sh.source` | `/usr/local/libexec/adda-dev-runtime/ci-watch.sh` | — |
+| `resolve-issue-branch` (Bun executable) | `adda-dev-runtime/src/resolve-issue-branch.ts` | `/usr/local/libexec/adda-dev-runtime/resolve-issue-branch` | — |
 | `ci-watch` (Bun executable) | `adda-dev-runtime/src/ci-watch.ts` | `/usr/local/libexec/adda-dev-runtime/ci-watch` | — |
-| `quality-gates.sh` | `adda-dev-runtime/content/scripts/quality-gates.sh.source` | `/usr/local/libexec/adda-dev-runtime/quality-gates.sh` | — |
 | `quality-gates` (Bun executable) | `adda-dev-runtime/src/quality-gates.ts` | `/usr/local/libexec/adda-dev-runtime/quality-gates` | — |
 | Tier 2 bootstrap hook | `proto-adda/content/entrypoint.d/10-claude-config.sh.source` | `/usr/local/libexec/adda-dev-runtime/entrypoint.d/10-claude-config.sh` | — |
 | Claude config (CLAUDE.md, settings.json, agents/, skills/) | `proto-adda/content/.claude/` | `/usr/local/share/adda-dev-runtime/.claude/` | `~/.claude/` (ephemeral) |
@@ -76,8 +74,7 @@ and carry no exec bit; the Dockerfile `RUN chmod` sets the exec bit at build tim
 
 ## CI/build pipeline
 
-`base.yml` builds Tier 1, then Tier 2 `FROM` Tier 1. Lints: shellcheck on all
-six scripts; hadolint on both Dockerfiles. Changes reach production: PR → CI →
+`base.yml` builds Tier 1, then Tier 2 `FROM` Tier 1. Lints: shellcheck on shell scripts; hadolint on both Dockerfiles. Changes reach production: PR → CI →
 edge image on main merge → versioned release on tag.
 
 ## Conventions
