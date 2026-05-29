@@ -117,10 +117,12 @@ Exit 1: `ci-watch` prints a JSON summary to stdout and captures failed logs to a
 
 - **`transient`** — ask PO to re-run; wait; return to step 5a.
 - **`ci_infra`** — surface the analyst's report to PO; wait for PO direction.
-- **`code_fix`** — dispatch Coder with: the current plan, Coder's previous structured response, the `ci-watch` JSON output, and the analyst's report. Return to step 5a when Coder finishes.
+- **`code_fix`** — dispatch Coder with: the current plan, Coder's previous structured response, the `ci-watch` JSON output, and the analyst's report. Increment the consecutive `code_fix` failure counter for this step. Return to step 5a when Coder finishes.
 - **`unclear`** — surface the analyst's report to PO; wait for PO direction.
 
 This inner loop is PM-owned. Do not ask PO before dispatching Coder on a `code_fix` classification — CI is not PO's problem to triage.
+
+**Loop-break rule.** After 3 consecutive `code_fix` dispatches that all end in red CI (exit 1), stop the loop. Before engaging PO, compile a per-iteration summary: for each of the 3 failed iterations, note what the analyst identified as the issue and what fix Coder attempted. Surface this summary to PO and wait for direction. The counter resets to zero on any green CI run (exit 0); only `code_fix` classifications increment it — `transient` and `ci_infra` do not. The counter is scoped to the current step: steps 5a, 7, and 10 each maintain their own independent count.
 
 ### 6. Post outcome
 
