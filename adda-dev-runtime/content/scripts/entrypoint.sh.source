@@ -26,6 +26,7 @@
 # ======================================================================
 
 set -euo pipefail
+_bootstrap_start=$SECONDS
 
 # ----------------------------------------------------------------------
 # Helpers
@@ -646,7 +647,7 @@ fi
 # COMMON — handoff to CMD
 # ======================================================================
 
-section "Bootstrap complete"
+section "Bootstrap complete ($(( SECONDS - _bootstrap_start ))s)"
 
 if [[ -n "${ISSUE_ID:-}" ]]; then
     ISSUE_TITLE="$(gh issue view "${ISSUE_ID}" --json title --jq .title 2>/dev/null || echo '(unable to fetch)')"
