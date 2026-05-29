@@ -612,6 +612,19 @@ Target tags:
 | `weekly-{date}`  | Scheduled weekly                      | Security refresh rebuild.          |
 | `pr-{n}`         | PRs touching harness paths            | Verification only.                 |
 
+### Runtime image identification
+
+Two environment variables carry image identity into every running container:
+
+| Variable | Example value | Set by | When empty |
+|---|---|---|---|
+| `ADDA_DEV_RUNTIME_IMAGE` | `ghcr.io/nightjarrr/proto-adda-dev-runtime:edge` | Launcher at run time (`-e` flag) | Not injected (e.g., container started without the launcher) |
+| `ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA` | `a1b2c3d4e5f6...` | CI at build time (`--build-arg`) | Local builds |
+
+Both variables are displayed during entrypoint bootstrap and remain available for the full session lifetime. Their display is informational only — no validation failure occurs when either is absent.
+
+`ADDA_DEV_RUNTIME_IMAGE` is not baked into the image because the same image layer can be tagged and referenced under different names. The launcher already holds `ADDA_DEV_IMAGE` (the image reference it is about to start) and injects it at run time. `ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA` is baked at build time because only CI has the commit SHA at the moment the image is built.
+
 ---
 
 ## Launcher script (`adda-dev.sh`)
@@ -702,7 +715,7 @@ Container-side script. It validates the runtime contract, starts the local proxy
 
 1. Print welcome banner.
 
-2. Validate required environment variables.
+2. Validate required environment variables. Optionally display image identity variables (`ADDA_DEV_RUNTIME_IMAGE`, `ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA`) when present.
 
 3. Configure Bash prompt to identify the container context, for example:
 

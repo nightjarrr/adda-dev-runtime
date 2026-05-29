@@ -537,6 +537,7 @@ DOCKER_ARGS=(
   -e TZ
   -e ADDA_DEV_LLM_BACKEND
   -e CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC
+  -e "ADDA_DEV_RUNTIME_IMAGE=${ADDA_DEV_IMAGE}"
   "${BACKEND_DOCKER_ENV[@]}"
 
   # Capability and privilege restrictions.

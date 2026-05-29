@@ -17,6 +17,10 @@
 #   ADDA_DEV_PROXY_SOCKET          Bind-mounted proxy socket path.
 #   ADDA_DEV_PROXY_PORT            Local TCP port for the socat proxy
 #                                    bridge.
+#   ADDA_DEV_RUNTIME_IMAGE           Full image reference (registry/name:tag).
+#                                    Injected by the launcher at run time.
+#   ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA  Git SHA baked at build time by CI; empty
+#                                    for local builds.
 #
 # Organized into two logical sections:
 #   1. BASE — generic dev environment bootstrap (GitHub auth, clone,
@@ -114,6 +118,14 @@ if [[ -n "${ISSUE_ID:-}" ]]; then
 else
     success "ISSUE_ID not set. No specific Issue context."
 fi
+
+# ----------------------------------------------------------------------
+# Image identity (optional — informational display only)
+# ----------------------------------------------------------------------
+[[ -n "${ADDA_DEV_RUNTIME_IMAGE:-}" ]] && \
+    success "ADDA_DEV_RUNTIME_IMAGE=${ADDA_DEV_RUNTIME_IMAGE}"
+[[ -n "${ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA:-}" ]] && \
+    success "ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA}"
 
 # ----------------------------------------------------------------------
 # Shell prompt configuration
