@@ -680,7 +680,7 @@ ENVOY_SOCKET_CONTAINER_PATH=/run/adda-dev-proxy/proxy.sock
 9. Render Envoy config from `.devcontainer/envoy/envoy.yaml.template` into the runtime directory.
 10. Start Envoy sidecar container with hardened flags.
 11. Wait for the Envoy Unix socket.
-12. Create `adda-dev shell` and `adda-dev envoy logs` windows in the primary tmux session.
+12. Create `adda-dev shell` and `adda-dev envoy logs` windows in the primary tmux session. The `adda-dev shell` window invokes a container-side script that waits for bootstrap to finish before opening the interactive bash prompt.
 13. Assemble and run the Claude dev container with:
 
     * `--rm -it`
@@ -717,15 +717,9 @@ Container-side script. It validates the runtime contract, starts the local proxy
 
 2. Validate required environment variables. Optionally display image identity variables (`ADDA_DEV_RUNTIME_IMAGE`, `ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA`) when present.
 
-3. Configure Bash prompt to identify the container context, for example:
+3. Verify `/workspace` is empty.
 
-   ```text
-   [adda-dev {repo} #{issue}] /workspace$
-   ```
-
-4. Verify `/workspace` is empty.
-
-5. Report diagnostic hardening checks:
+4. Report diagnostic hardening checks:
 
    * loopback-only network expected;
    * no default route expected;
@@ -737,6 +731,8 @@ Container-side script. It validates the runtime contract, starts the local proxy
    * `$HOME` and `/workspace` executable;
    * `/run` noexec;
    * no unexpected writable non-tmpfs mounts.
+
+5. Install bootstrap-complete marker EXIT trap. From this point on, any premature exit (failure or signal) touches `/run/.adda_bootstrap_complete` so the parallel interactive shell can open for autopsy.
 
 6. Start `socat` bridge from `127.0.0.1:${ADDA_DEV_PROXY_PORT}` to `${ADDA_DEV_PROXY_SOCKET}`.
 
@@ -761,13 +757,15 @@ Container-side script. It validates the runtime contract, starts the local proxy
 
 14. Run project-specific bootstrap steps (e.g., in case of `uv` and Python project this can be `uv sync --frozen`).
 
-15. Print session summary.
+15. Write `~/.bashrc` with `PS1` and the propagated environment variables (`HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy`, `https_proxy`, `NO_PROXY`, `no_proxy`, `GH_REPO`). Touch the bootstrap-complete marker at `/run/.adda_bootstrap_complete`. The marker is also touched by the EXIT trap installed in step 5 so it is created even when bootstrap fails, allowing the parallel interactive shell to open for live autopsy.
 
-16. Run Docker image's CMD, `claude` by default.
+16. Print session summary.
 
-17. If CMD exits, drop to an interactive shell for inspection.
+17. Run Docker image's CMD, `claude` by default.
 
-18. On final shell exit, print git status and unpushed commit trail.
+18. If CMD exits, drop to an interactive shell for inspection.
+
+19. On final shell exit, print git status and unpushed commit trail.
 
 ### Branch resolution
 

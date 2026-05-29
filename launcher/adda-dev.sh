@@ -511,8 +511,8 @@ setup_tmux_windows() {
     fi
 
     if ! tmux new-window -t "${TMUX_SESSION}" -n "adda-dev shell" \
-        "c=0; until docker inspect -f '{{.State.Running}}' ${ADDA_DEV_CONTAINER} 2>/dev/null | grep -q true; do sleep 1; c=\$((c+1)); if [[ \$c -ge 30 ]]; then echo 'Timed out waiting for Claude container'; exit 1; fi; done; docker exec -it ${ADDA_DEV_CONTAINER} bash"; then
-        warning "failed to create 'adda-dev shell' tmux window; to open manually: tmux new-window -t '${TMUX_SESSION}' -n 'adda-dev shell' 'docker exec -it ${ADDA_DEV_CONTAINER} bash'"
+        "c=0; until docker inspect -f '{{.State.Running}}' ${ADDA_DEV_CONTAINER} 2>/dev/null | grep -q true; do sleep 1; c=\$((c+1)); if [[ \$c -ge 30 ]]; then echo 'Timed out waiting for Claude container'; exit 1; fi; done; docker exec -it ${ADDA_DEV_CONTAINER} /usr/local/libexec/adda-dev-runtime/open-interactive-shell.sh"; then
+        warning "failed to create 'adda-dev shell' tmux window; to open manually: tmux new-window -t '${TMUX_SESSION}' -n 'adda-dev shell' 'docker exec -it ${ADDA_DEV_CONTAINER} /usr/local/libexec/adda-dev-runtime/open-interactive-shell.sh'"
     fi
 
     if ! tmux new-window -t "${TMUX_SESSION}" -n "adda-dev envoy logs" \
@@ -533,7 +533,6 @@ DOCKER_ARGS=(
 
   -e GITHUB_OWNER
   -e GITHUB_REPO
-  -e "GH_REPO=${GITHUB_OWNER}/${GITHUB_REPO}"
   -e GITHUB_TOKEN_
   -e TZ
   -e ADDA_DEV_LLM_BACKEND
@@ -561,12 +560,6 @@ DOCKER_ARGS=(
   --mount "type=bind,source=${ENVOY_SOCKET_HOST_PATH},target=${ADDA_DEV_PROXY_SOCKET_CONTAINER_PATH},readonly"
   -e "ADDA_DEV_PROXY_SOCKET=${ADDA_DEV_PROXY_SOCKET_CONTAINER_PATH}"
   -e "ADDA_DEV_PROXY_PORT=${ADDA_DEV_PROXY_PORT}"
-  -e "HTTP_PROXY=http://127.0.0.1:${ADDA_DEV_PROXY_PORT}"
-  -e "HTTPS_PROXY=http://127.0.0.1:${ADDA_DEV_PROXY_PORT}"
-  -e "http_proxy=http://127.0.0.1:${ADDA_DEV_PROXY_PORT}"
-  -e "https_proxy=http://127.0.0.1:${ADDA_DEV_PROXY_PORT}"
-  -e "NO_PROXY=localhost,127.0.0.1,::1"
-  -e "no_proxy=localhost,127.0.0.1,::1"
 )
 
 if [[ -n "$ISSUE_ID" ]]; then
