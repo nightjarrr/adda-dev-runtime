@@ -17,7 +17,7 @@ Kick off work on a GitHub issue.
 2. Otherwise, run `printenv ISSUE_ID`. If the output is set and non-empty, use that value.
 3. Otherwise, use `AskUserQuestion`: "Which issue should we work on?" — free-text input for the issue number.
 
-## Read and confirm
+## Read the issue
 
 Run the following command for the resolved issue ID:
 
@@ -27,11 +27,13 @@ gh issue view {id} --json title,body,labels
 
 If the command fails, surface the error verbatim and stop. If the error indicates the issue does not exist, suggest creating one with `/new-issue`.
 
-Extract the type label: the label whose value is one of `feature`, `bug`, `chore`, or `docs`. If none is found, use `(no type label)` and surface a warning that the issue may be misconfigured — but do not block confirmation.
+## Show preview
 
-Extract the body: truncate to ~120 characters with `…` if longer; use `(no description)` if empty.
+PO needs to confirm the resolved issue is the one they want to work on. The raw JSON from `gh issue view` is already in the bash output but is hard to scan at a glance — especially when the body is long or contains markdown. A formatted preview block makes confirmation fast and unambiguous, and forces the model to commit to a concrete reading of the issue (type label, title, body summary) before asking PO to approve it.
 
-Display the following to PO in a plain code block:
+The preview block must appear as plain response text in the message immediately before the `AskUserQuestion` call in the next section. It is not optional output, and "the JSON is already visible" is not a reason to skip it — the JSON and the preview serve different purposes.
+
+Format:
 
 ```
 Issue: #<id>
@@ -40,11 +42,22 @@ Type:  <type label, or "(no type label)">
 Body:  <first 120 chars of body, or "(no description)">
 ```
 
-Then use `AskUserQuestion`: "Start working on this issue?" with options:
-- "Yes, start work"
-- "Use a different issue"
+How to fill each field:
 
-If PO selects "Use a different issue": ask in plain text "Enter the issue number:", capture the answer as the new ID, then repeat this section from the top with the new ID.
+- **`Type:`** — include the label whose value is one of `feature`, `bug`, `chore`, or `docs`. If no such label exists, include `(no type label)` and add a one-line warning under the block that the issue may be misconfigured — but do not block confirmation.
+- **`Body:`** — include the first ~120 characters of the issue body, with `…` appended if truncated. If the body is empty, include `(no description)`.
+
+## Confirm
+
+After the preview block, invoke `AskUserQuestion`:
+- Question: "Start working on this issue?"
+- Options:
+  - "Yes, start work"
+  - "Use a different issue"
+
+`AskUserQuestion` automatically appends free-text and chat options (rendered as "Type something" / "Chat about this") to every prompt. These are harness behavior, not part of this skill — do not add them to the `options` array, do not try to suppress them, and do not mention them in the question text.
+
+If PO selects "Use a different issue": ask in plain text "Enter the issue number:", capture the answer as the new ID, then repeat the *Read the issue*, *Show preview*, and *Confirm* sections with the new ID.
 
 ## Start work
 
