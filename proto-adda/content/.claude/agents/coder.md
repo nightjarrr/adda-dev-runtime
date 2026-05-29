@@ -100,16 +100,11 @@ When uncertain, prefer dialog over silent assumptions — see Section 10 (Commun
    }
    ```
 4. On `PASS`: do not read the check outputs. You may query metadata fields needed for attribution and final reporting, especially `.checks[].command`. Note the result file path — you will reference it in Sections 7 and 12. Proceed to Section 7.
-5. On `FAIL`, use **progressive discovery** — never read the full JSON:
-   - **Step A** — identify failing commands (no output):
-     ```bash
-     jq '[.checks[] | select(.status=="FAIL") | .command]' <result-file>
-     ```
-   - **Step B** — for each failing command, read its output individually:
-     ```bash
-     jq --arg cmd "<command>" '.checks[] | select(.command==$cmd) | .output' <result-file>
-     ```
-   - Fix, re-run, repeat until `PASS`.
+5. On `FAIL`, query failing checks and their output — do not read the full JSON file:
+   ```bash
+   jq '[.checks[] | select(.status=="FAIL") | {command, output}]' <result-file>
+   ```
+   Fix, re-run, repeat until `PASS`.
 
 If QG does not converge after 4+ iterations, escalate (Type 2) with the failure output and your analysis.
 
