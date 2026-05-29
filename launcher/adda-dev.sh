@@ -533,6 +533,7 @@ DOCKER_ARGS=(
 
   -e GITHUB_OWNER
   -e GITHUB_REPO
+  -e "GH_REPO=${GITHUB_OWNER}/${GITHUB_REPO}"
   -e GITHUB_TOKEN_
   -e TZ
   -e ADDA_DEV_LLM_BACKEND
@@ -560,6 +561,12 @@ DOCKER_ARGS=(
   --mount "type=bind,source=${ENVOY_SOCKET_HOST_PATH},target=${ADDA_DEV_PROXY_SOCKET_CONTAINER_PATH},readonly"
   -e "ADDA_DEV_PROXY_SOCKET=${ADDA_DEV_PROXY_SOCKET_CONTAINER_PATH}"
   -e "ADDA_DEV_PROXY_PORT=${ADDA_DEV_PROXY_PORT}"
+  -e "HTTP_PROXY=http://127.0.0.1:${ADDA_DEV_PROXY_PORT}"
+  -e "HTTPS_PROXY=http://127.0.0.1:${ADDA_DEV_PROXY_PORT}"
+  -e "http_proxy=http://127.0.0.1:${ADDA_DEV_PROXY_PORT}"
+  -e "https_proxy=http://127.0.0.1:${ADDA_DEV_PROXY_PORT}"
+  -e "NO_PROXY=localhost,127.0.0.1,::1"
+  -e "no_proxy=localhost,127.0.0.1,::1"
 )
 
 if [[ -n "$ISSUE_ID" ]]; then
