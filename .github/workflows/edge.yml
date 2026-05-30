@@ -16,11 +16,6 @@ jobs:
       contents: read
       packages: write
     steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -28,26 +23,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build and push adda-dev-runtime
-        uses: docker/build-push-action@v6
-        with:
-          push: true
-          file: adda-dev-runtime/Dockerfile
-          context: .
-          build-args: ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${{ github.sha }}
-          tags: ghcr.io/nightjarrr/adda-dev-runtime:edge
-          cache-from: type=registry,ref=ghcr.io/nightjarrr/adda-dev-runtime:buildcache
-          cache-to: type=registry,ref=ghcr.io/nightjarrr/adda-dev-runtime:buildcache,mode=max
+      - name: Tag adda-dev-runtime :edge
+        run: |
+          docker buildx imagetools create \
+            --tag ghcr.io/nightjarrr/adda-dev-runtime:edge \
+            ghcr.io/nightjarrr/adda-dev-runtime:${{ github.sha }}
 
-      - name: Build and push proto-adda
-        uses: docker/build-push-action@v6
-        with:
-          push: true
-          file: proto-adda/Dockerfile
-          context: .
-          build-args: |
-            BASE_TAG=edge
-            ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${{ github.sha }}
-          tags: ghcr.io/nightjarrr/proto-adda-dev-runtime:edge
-          cache-from: type=registry,ref=ghcr.io/nightjarrr/proto-adda-dev-runtime:buildcache
-          cache-to: type=registry,ref=ghcr.io/nightjarrr/proto-adda-dev-runtime:buildcache,mode=max
+      - name: Tag proto-adda :edge
+        run: |
+          docker buildx imagetools create \
+            --tag ghcr.io/nightjarrr/proto-adda-dev-runtime:edge \
+            ghcr.io/nightjarrr/proto-adda-dev-runtime:${{ github.sha }}
