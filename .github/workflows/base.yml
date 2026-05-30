@@ -41,9 +41,8 @@ jobs:
       - name: hadolint
         if: steps.df-changed.outputs.changed == 'true'
         run: |
-          docker run --rm -v "$(pwd):/workspace" ghcr.io/hadolint/hadolint:v2.12.0-debian \
-            /workspace/adda-dev-runtime/Dockerfile \
-            /workspace/proto-adda/Dockerfile
+          docker run --rm -i ghcr.io/hadolint/hadolint:v2.12.0-debian < adda-dev-runtime/Dockerfile
+          docker run --rm -i ghcr.io/hadolint/hadolint:v2.12.0-debian < proto-adda/Dockerfile
 
       - name: Set up Bun
         uses: oven-sh/setup-bun@v2
