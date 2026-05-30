@@ -99,4 +99,4 @@ Fill the field values exactly the same as in the preview. If the file does not e
 
 ## Start work
 
-Begin working on the confirmed issue. Run  to read the full comment history, then follow the project workflow as defined in CLAUDE.md.
+Begin working on the confirmed issue by following the project workflow as defined in CLAUDE.md.
