@@ -41,8 +41,6 @@ jobs:
       - name: hadolint
         if: steps.df-changed.outputs.changed == 'true'
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends hadolint
           hadolint adda-dev-runtime/Dockerfile
           hadolint proto-adda/Dockerfile
 
