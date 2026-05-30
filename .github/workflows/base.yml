@@ -6,8 +6,18 @@ on:
 jobs:
   build-and-lint:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: actions/checkout@v4
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: shellcheck
         run: |
@@ -52,30 +62,27 @@ jobs:
       - name: Build adda-dev-runtime
         uses: docker/build-push-action@v6
         with:
-          push: false
-          load: true
+          push: true
           file: adda-dev-runtime/Dockerfile
           context: .
-          tags: |
-            adda-dev-runtime:ci
-            ghcr.io/nightjarrr/adda-dev-runtime:ci
-          cache-from: type=gha,scope=adda-dev-runtime
-          cache-to: type=gha,mode=max,scope=adda-dev-runtime
+          tags: ghcr.io/nightjarrr/adda-dev-runtime:ci
+          cache-from: type=registry,ref=ghcr.io/nightjarrr/adda-dev-runtime:buildcache
+          cache-to: type=registry,ref=ghcr.io/nightjarrr/adda-dev-runtime:buildcache,mode=max
 
       - name: Build proto-adda
         uses: docker/build-push-action@v6
         with:
-          builder: default
-          push: false
-          load: true
+          push: true
           file: proto-adda/Dockerfile
           context: .
           build-args: BASE_TAG=ci
-          tags: proto-adda:ci
+          tags: ghcr.io/nightjarrr/proto-adda-dev-runtime:ci
+          cache-from: type=registry,ref=ghcr.io/nightjarrr/proto-adda-dev-runtime:buildcache
+          cache-to: type=registry,ref=ghcr.io/nightjarrr/proto-adda-dev-runtime:buildcache,mode=max
 
       - name: Smoke test — adda-dev-runtime
         run: |
-          docker run --rm --entrypoint sh adda-dev-runtime:ci -c '
+          docker run --rm --entrypoint sh ghcr.io/nightjarrr/adda-dev-runtime:ci -c '
             set -eu
             [ "$(whoami)" = "adda" ]
             [ "$(id -u)" = "1000" ]
@@ -90,7 +97,7 @@ jobs:
 
       - name: Smoke test — proto-adda
         run: |
-          docker run --rm --entrypoint sh proto-adda:ci -c '
+          docker run --rm --entrypoint sh ghcr.io/nightjarrr/proto-adda-dev-runtime:ci -c '
             set -eu
             [ "$(whoami)" = "adda" ]
             [ "$(id -u)" = "1000" ]

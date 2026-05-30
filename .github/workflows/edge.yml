@@ -36,8 +36,8 @@ jobs:
           context: .
           build-args: ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${{ github.sha }}
           tags: ghcr.io/nightjarrr/adda-dev-runtime:edge
-          cache-from: type=gha,scope=adda-dev-runtime
-          cache-to: type=gha,mode=max,scope=adda-dev-runtime
+          cache-from: type=registry,ref=ghcr.io/nightjarrr/adda-dev-runtime:buildcache
+          cache-to: type=registry,ref=ghcr.io/nightjarrr/adda-dev-runtime:buildcache,mode=max
 
       - name: Build and push proto-adda
         uses: docker/build-push-action@v6
@@ -49,5 +49,5 @@ jobs:
             BASE_TAG=edge
             ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${{ github.sha }}
           tags: ghcr.io/nightjarrr/proto-adda-dev-runtime:edge
-          cache-from: type=gha,scope=proto-adda
-          cache-to: type=gha,mode=max,scope=proto-adda
+          cache-from: type=registry,ref=ghcr.io/nightjarrr/proto-adda-dev-runtime:buildcache
+          cache-to: type=registry,ref=ghcr.io/nightjarrr/proto-adda-dev-runtime:buildcache,mode=max

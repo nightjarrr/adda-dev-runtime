@@ -45,8 +45,8 @@ jobs:
           context: .
           build-args: ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${{ github.sha }}
           tags: ${{ steps.meta-base.outputs.tags }}
-          cache-from: type=gha,scope=adda-dev-runtime
-          cache-to: type=gha,mode=max,scope=adda-dev-runtime
+          cache-from: type=registry,ref=ghcr.io/nightjarrr/adda-dev-runtime:buildcache
+          cache-to: type=registry,ref=ghcr.io/nightjarrr/adda-dev-runtime:buildcache,mode=max
 
       - name: Docker metadata — proto-adda
         id: meta-proto
@@ -67,8 +67,8 @@ jobs:
             BASE_TAG=${{ steps.meta-base.outputs.version }}
             ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${{ github.sha }}
           tags: ${{ steps.meta-proto.outputs.tags }}
-          cache-from: type=gha,scope=proto-adda
-          cache-to: type=gha,mode=max,scope=proto-adda
+          cache-from: type=registry,ref=ghcr.io/nightjarrr/proto-adda-dev-runtime:buildcache
+          cache-to: type=registry,ref=ghcr.io/nightjarrr/proto-adda-dev-runtime:buildcache,mode=max
 
       - name: Package launcher
         run: tar -czf adda-dev-launcher-${{ github.ref_name }}.tar.gz -C launcher .
