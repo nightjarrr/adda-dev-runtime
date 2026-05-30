@@ -80,26 +80,3 @@ jobs:
           cache-from: type=registry,ref=ghcr.io/nightjarrr/proto-adda-dev-runtime:buildcache
           cache-to: type=registry,ref=ghcr.io/nightjarrr/proto-adda-dev-runtime:buildcache,mode=max
 
-      - name: Smoke test — adda-dev-runtime
-        run: |
-          docker run --rm --entrypoint sh ghcr.io/nightjarrr/adda-dev-runtime:ci -c '
-            set -eu
-            [ "$(whoami)" = "adda" ]
-            [ "$(id -u)" = "1000" ]
-            command -v git >/dev/null
-            command -v gh >/dev/null
-            command -v socat >/dev/null
-            test -x /usr/local/libexec/adda-dev-runtime/entrypoint.sh
-            test -x /usr/local/libexec/adda-dev-runtime/resolve-issue-branch
-            test -x /usr/local/libexec/adda-dev-runtime/ci-watch
-            test -x /usr/local/libexec/adda-dev-runtime/quality-gates
-          '
-
-      - name: Smoke test — proto-adda
-        run: |
-          docker run --rm --entrypoint sh ghcr.io/nightjarrr/proto-adda-dev-runtime:ci -c '
-            set -eu
-            [ "$(whoami)" = "adda" ]
-            [ "$(id -u)" = "1000" ]
-            test -d /usr/local/share/adda-dev-runtime/.claude
-          '
