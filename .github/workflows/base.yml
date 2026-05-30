@@ -1,5 +1,5 @@
 name: build-and-lint
-
+# Shared reusable workflow: called by ci.yml, edge.yml (gate), and release.yml (gate).
 on:
   workflow_call:
 
