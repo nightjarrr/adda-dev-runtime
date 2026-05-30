@@ -90,7 +90,6 @@ jobs:
           push: true
           file: adda-dev-runtime/Dockerfile
           context: .
-          build-args: ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${{ github.sha }}
           tags: |
             ghcr.io/nightjarrr/adda-dev-runtime:ci
             ghcr.io/nightjarrr/adda-dev-runtime:${{ github.sha }}
@@ -103,9 +102,7 @@ jobs:
           push: true
           file: proto-adda/Dockerfile
           context: .
-          build-args: |
-            BASE_TAG=ci
-            ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${{ github.sha }}
+          build-args: BASE_TAG=${{ github.sha }}
           tags: |
             ghcr.io/nightjarrr/proto-adda-dev-runtime:ci
             ghcr.io/nightjarrr/proto-adda-dev-runtime:${{ github.sha }}
