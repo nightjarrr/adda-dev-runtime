@@ -56,20 +56,21 @@ jobs:
           load: true
           file: adda-dev-runtime/Dockerfile
           context: .
-          tags: adda-dev-runtime:ci
+          tags: |
+            adda-dev-runtime:ci
+            ghcr.io/nightjarrr/adda-dev-runtime:ci
           cache-from: type=gha,scope=adda-dev-runtime
           cache-to: type=gha,mode=max,scope=adda-dev-runtime
 
       - name: Build proto-adda
         uses: docker/build-push-action@v6
         with:
+          builder: default
           push: false
           load: true
           file: proto-adda/Dockerfile
           context: .
           build-args: BASE_TAG=ci
-          build-contexts: |
-            ghcr.io/nightjarrr/adda-dev-runtime:ci=docker-image://adda-dev-runtime:ci
           tags: proto-adda:ci
 
       - name: Smoke test — adda-dev-runtime
