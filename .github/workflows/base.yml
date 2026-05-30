@@ -17,6 +17,10 @@ jobs:
       - name: Check Dockerfile changes
         id: df-changed
         run: |
+          echo "debug: git log --oneline -4"
+          git log --oneline -4
+          echo "debug: all changed files HEAD~1..HEAD"
+          git diff --name-only HEAD~1 HEAD
           diff_files=$(git diff --name-only HEAD~1 HEAD -- '*/Dockerfile')
           echo "debug: diff_files='${diff_files}'"
           if echo "${diff_files}" | grep -q .; then
