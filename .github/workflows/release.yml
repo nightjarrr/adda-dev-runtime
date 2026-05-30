@@ -25,14 +25,19 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Tag adda-dev-runtime :version + :latest
+      - name: Stamp and push adda-dev-runtime :version :latest
         run: |
-          docker buildx imagetools create \
-            --tag ghcr.io/nightjarrr/adda-dev-runtime:${{ github.ref_name }} \
-            --tag ghcr.io/nightjarrr/adda-dev-runtime:latest \
-            ghcr.io/nightjarrr/adda-dev-runtime:${{ github.sha }}
+          printf 'ARG S\nFROM ${S}\nARG SHA\nENV ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${SHA}\n' \
+            | docker build \
+                --build-arg S="ghcr.io/nightjarrr/adda-dev-runtime:${{ github.sha }}" \
+                --build-arg SHA="${{ github.sha }}" \
+                -t ghcr.io/nightjarrr/adda-dev-runtime:${{ github.ref_name }} \
+                -t ghcr.io/nightjarrr/adda-dev-runtime:latest \
+                -
+          docker push ghcr.io/nightjarrr/adda-dev-runtime:${{ github.ref_name }}
+          docker push ghcr.io/nightjarrr/adda-dev-runtime:latest
 
-      - name: Tag proto-adda :version + :latest
+      - name: Retag proto-adda :version :latest
         run: |
           docker buildx imagetools create \
             --tag ghcr.io/nightjarrr/proto-adda-dev-runtime:${{ github.ref_name }} \
