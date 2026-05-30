@@ -71,8 +71,6 @@ jobs:
           build-contexts: |
             ghcr.io/nightjarrr/adda-dev-runtime:ci=docker-image://adda-dev-runtime:ci
           tags: proto-adda:ci
-          cache-from: type=gha,scope=proto-adda
-          cache-to: type=gha,mode=max,scope=proto-adda
 
       - name: Smoke test — adda-dev-runtime
         run: |
