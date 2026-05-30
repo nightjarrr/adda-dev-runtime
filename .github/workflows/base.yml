@@ -24,6 +24,17 @@ jobs:
             echo "changed=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Check TS/Bun changes
+        id: ts-changed
+        run: |
+          diff_files=$(git diff --name-only HEAD~1 HEAD -- \
+            'adda-dev-runtime/src/' 'tsconfig.json' 'package.json')
+          if [ -n "${diff_files}" ]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -45,23 +56,29 @@ jobs:
           docker run --rm -i ghcr.io/hadolint/hadolint:v2.12.0-debian < proto-adda/Dockerfile
 
       - name: Set up Bun
+        if: steps.ts-changed.outputs.changed == 'true'
         uses: oven-sh/setup-bun@v2
         with:
           bun-version: "1.3.14"
 
       - name: Install tsc and @types/bun globally
+        if: steps.ts-changed.outputs.changed == 'true'
         run: sudo env PATH="$PATH" BUN_INSTALL=/usr/local bun install -g typescript@6.0.3 @types/bun@1.3.14
 
       - name: Lint (biome)
+        if: steps.ts-changed.outputs.changed == 'true'
         run: bunx @biomejs/biome@2.4.15 check adda-dev-runtime/src/
 
       - name: Type check (tsc)
+        if: steps.ts-changed.outputs.changed == 'true'
         run: tsc --noEmit
 
       - name: Test
+        if: steps.ts-changed.outputs.changed == 'true'
         run: bun test --coverage
 
       - name: Build (pre-check)
+        if: steps.ts-changed.outputs.changed == 'true'
         run: bun build adda-dev-runtime/src/*.ts --outdir /tmp/ci-build-check/ --target bun
 
       - name: Set up Docker Buildx
