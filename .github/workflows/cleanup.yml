@@ -1,0 +1,24 @@
+name: cleanup
+
+on:
+  schedule:
+    - cron: '0 3 * * 0'  # weekly, Sunday 03:00 UTC
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    strategy:
+      matrix:
+        package:
+          - adda-dev-runtime
+          - proto-adda-dev-runtime
+    steps:
+      - uses: actions/delete-package-versions@v5
+        with:
+          package-name: ${{ matrix.package }}
+          package-type: container
+          min-versions-to-keep: 10
+          ignore-versions: '^(latest|edge|ci|\d+\.\d+\.\d+.*)$'

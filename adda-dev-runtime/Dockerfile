@@ -95,7 +95,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ----------------------------------------------------------------------
 # GitHub CLI (gh) — installed from the official .deb release
 # ----------------------------------------------------------------------
-RUN curl -fsSL "https://github.com/cli/cli/releases/download/v2.91.0/gh_2.91.0_linux_amd64.deb" \
+RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/cli/cli/releases/download/v2.91.0/gh_2.91.0_linux_amd64.deb" \
         -o /tmp/gh.deb \
     && apt-get install -y --no-install-recommends /tmp/gh.deb \
     && rm /tmp/gh.deb \
@@ -108,7 +108,7 @@ RUN curl -fsSL "https://github.com/cli/cli/releases/download/v2.91.0/gh_2.91.0_l
 ENV MICRO_VERSION=2.0.15 \
     EDITOR=micro \
     VISUAL=micro
-RUN curl -fsSL "https://github.com/micro-editor/micro/releases/download/v${MICRO_VERSION}/micro-${MICRO_VERSION}-linux64-static.tar.gz" \
+RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/micro-editor/micro/releases/download/v${MICRO_VERSION}/micro-${MICRO_VERSION}-linux64-static.tar.gz" \
         -o /tmp/micro.tar.gz \
     && tar -xzf /tmp/micro.tar.gz -C /tmp \
     && mv /tmp/micro-${MICRO_VERSION}/micro /usr/local/bin/micro \
@@ -120,7 +120,7 @@ RUN curl -fsSL "https://github.com/micro-editor/micro/releases/download/v${MICRO
 # Static (musl) binary; no runtime dependencies.
 # ----------------------------------------------------------------------
 ENV DELTA_VERSION=0.19.2
-RUN curl -fsSL "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/delta-${DELTA_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
+RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/delta-${DELTA_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
         -o /tmp/delta.tar.gz \
     && tar -xzf /tmp/delta.tar.gz -C /tmp \
     && mv /tmp/delta-${DELTA_VERSION}-x86_64-unknown-linux-musl/delta /usr/local/bin/delta \
@@ -131,7 +131,7 @@ RUN curl -fsSL "https://github.com/dandavison/delta/releases/download/${DELTA_VE
     && git config --system delta.line-numbers true \
     && git config --system delta.navigate true \
     && mkdir -p /etc/delta \
-    && curl -fsSL "https://raw.githubusercontent.com/dandavison/delta/${DELTA_VERSION}/themes.gitconfig" \
+    && curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://raw.githubusercontent.com/dandavison/delta/${DELTA_VERSION}/themes.gitconfig" \
         -o /etc/delta/themes.gitconfig \
     && git config --system include.path /etc/delta/themes.gitconfig \
     && git config --system delta.features mellow-barbet \
@@ -143,7 +143,7 @@ RUN curl -fsSL "https://github.com/dandavison/delta/releases/download/${DELTA_VE
 # ----------------------------------------------------------------------
 ARG BUN_VERSION
 ENV BUN_VERSION=${BUN_VERSION}
-RUN curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64-baseline.zip" \
+RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64-baseline.zip" \
         -o /tmp/bun.zip \
     && unzip -j /tmp/bun.zip 'bun-linux-x64-baseline/bun' -d /usr/local/bin/ \
     && rm /tmp/bun.zip \
@@ -157,11 +157,22 @@ RUN curl -fsSL "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERS
 # ----------------------------------------------------------------------
 ENV BIOME_VERSION=2.4.15 \
     TYPESCRIPT_VERSION=6.0.3
-RUN curl -fsSL \
+RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors \
         "https://github.com/biomejs/biome/releases/download/%40biomejs%2Fbiome%40${BIOME_VERSION}/biome-linux-x64-musl" \
         -o /usr/local/bin/biome \
     && chmod +x /usr/local/bin/biome \
     && BUN_INSTALL=/usr/local bun install -g typescript@${TYPESCRIPT_VERSION} @types/bun@${BUN_VERSION}
+
+# Create the runtime user explicitly. UID/GID align with the launcher's
+# ADDA_DEV_USER/UID/GID defaults. Higher-tier images FROM this image
+# and inherit the user without re-creating it.
+# Note: placed before COPY/ARG-SHA so a SHA change does not bust this layer.
+ARG USERNAME=adda
+ARG USER_UID=1000
+ARG USER_GID=1000
+RUN groupadd --gid ${USER_GID} ${USERNAME} \
+    && useradd --uid ${USER_UID} --gid ${USER_GID} \
+       --create-home --shell /bin/bash ${USERNAME}
 
 # ----------------------------------------------------------------------
 # Bootstrap scripts — all Tier 1 scripts baked at build time.
@@ -177,23 +188,13 @@ COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/
 
 
 # ======================================================================
-# COMMON — user, working directory, entrypoint, default command
+# COMMON — working directory, entrypoint, default command
 # ======================================================================
 
 # Image identity — commit SHA baked at build time by CI; empty for local builds.
 # ADDA_DEV_RUNTIME_IMAGE is not baked here; it is injected at run time by the launcher.
 ARG ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=""
 ENV ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA}
-
-# Create the runtime user explicitly. UID/GID align with the launcher's
-# ADDA_DEV_USER/UID/GID defaults. Higher-tier images FROM this image
-# and inherit the user without re-creating it.
-ARG USERNAME=adda
-ARG USER_UID=1000
-ARG USER_GID=1000
-RUN groupadd --gid ${USER_GID} ${USERNAME} \
-    && useradd --uid ${USER_UID} --gid ${USER_GID} \
-       --create-home --shell /bin/bash ${USERNAME}
 
 USER ${USERNAME}
 WORKDIR /workspace
