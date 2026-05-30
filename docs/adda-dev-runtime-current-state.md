@@ -235,8 +235,8 @@ Policy clarification:
 * Uses `set -euo pipefail` during bootstrap.
 * Prints section headers, warnings, and green check success lines.
 * Validates required env vars.
-* Configures ephemeral Bash prompt in `$HOME/.bashrc`.
-* Prompt includes repo and optional issue, e.g. `[adda-dev acme-repo #42] /workspace$`.
+* Writes `$HOME/.bashrc` at end of bootstrap (after proxy bridge and hooks) with `PS1` and propagated env vars (`HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy`, `https_proxy`, `NO_PROXY`, `no_proxy`, `GH_REPO`). Prompt includes repo and optional issue, e.g. `[adda-dev acme-repo #42] /workspace$`.
+* Touches bootstrap-complete marker `/run/.adda_bootstrap_complete` explicitly on success and via EXIT trap on failure, so the parallel interactive shell (launched via `open-interactive-shell.sh`) always unblocks.
 * Verifies `/workspace` is empty before clone.
 * Runs warning/success diagnostics for:
   * network mode: loopback-only, no default route
@@ -275,7 +275,7 @@ Policy clarification:
 * Launcher creates primary tmux session with three windows:
 
   * `adda-dev primary` — ADDA Dev Runtime container (`docker run`)
-  * `adda-dev shell` — interactive `docker exec bash` into ADDA Dev Runtime container
+  * `adda-dev shell` — `docker exec` into the container running `open-interactive-shell.sh`, which waits for bootstrap to complete then opens an interactive bash session
   * `adda-dev envoy logs` — `docker logs -f ${ENVOY_CONTAINER}`
 * `Ctrl-b d` detaches from tmux without killing underlying command.
 * Tmux seed config is copied to `~/.tmux.conf` only if missing.

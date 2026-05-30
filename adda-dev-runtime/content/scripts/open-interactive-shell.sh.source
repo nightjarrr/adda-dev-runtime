@@ -1,0 +1,31 @@
+#!/bin/bash
+# ======================================================================
+# open-interactive-shell.sh — Wait for bootstrap, then open bash
+#
+# Container-side entry point for the "adda-dev shell" tmux window.
+# Waits for the bootstrap-complete marker written by entrypoint.sh,
+# then replaces itself with an interactive bash session so the user
+# lands at a prompt with ~/.bashrc (written at end of bootstrap) sourced.
+#
+# The marker path is /run/.adda_bootstrap_complete. It is touched by
+# entrypoint.sh both explicitly on successful bootstrap and via an EXIT
+# trap on any premature exit, so this script always unblocks eventually.
+#
+# No timeout is enforced: bootstrap can legitimately take several minutes
+# (clone + auth + hooks). The existing launcher-side container-running
+# check covers the case where the container never starts at all.
+# ======================================================================
+
+set -eu
+
+_MARKER=/run/.adda_bootstrap_complete
+
+if [[ ! -f "${_MARKER}" ]]; then
+    echo "Waiting for bootstrap to complete…"
+fi
+
+while [[ ! -f "${_MARKER}" ]]; do
+    sleep 0.5
+done
+
+exec bash
