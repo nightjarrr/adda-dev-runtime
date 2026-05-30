@@ -33,7 +33,8 @@
       "WebFetch(domain:docs.anthropic.com)",
       "WebFetch(domain:docs.astral.sh)",
       "WebFetch(domain:docs.python.org)",
-      "WebSearch"
+      "WebSearch",
+      "Write(~/.issue)"
     ],
     "deny": [
       "Bash(gh pr merge *)",
