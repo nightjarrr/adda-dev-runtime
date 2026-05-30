@@ -104,7 +104,7 @@ jobs:
           file: proto-adda/Dockerfile
           context: .
           build-args: |
-            BASE_TAG=${{ github.sha }}
+            BASE_TAG=ci
             ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${{ github.sha }}
           tags: |
             ghcr.io/nightjarrr/proto-adda-dev-runtime:ci
