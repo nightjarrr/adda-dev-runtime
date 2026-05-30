@@ -28,7 +28,7 @@ jobs:
         id: ts-changed
         run: |
           diff_files=$(git diff --name-only HEAD~1 HEAD -- \
-            'adda-dev-runtime/src/' 'tsconfig.json' 'package.json')
+            ':(glob)**/*.ts' 'tsconfig.json' 'package.json')
           if [ -n "${diff_files}" ]; then
             echo "changed=true" >> "$GITHUB_OUTPUT"
           else
