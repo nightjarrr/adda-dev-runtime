@@ -33,7 +33,7 @@ Once the issue ID is resolved to a specific value, the user needs to see a short
 
 The preview block must appear as plain response text in the message immediately before starting the work on it in the next section. It is not optional output, and "the JSON is already visible" is not a reason to skip it — the JSON and the preview serve different purposes.
 
-**Format:**
+### Format
 
 ```
 Issue:    #<id>
@@ -44,11 +44,45 @@ Body:     <first 120 chars of body, or "(no description)">
 Comments: <count or "(no comments)">
 ```
 
-**How to fill each field:**
+### How to fill each field
 - **`Type:`** — include the label whose value is one of `feature`, `bug`, `chore`, or `docs`. If no such label exists, include `(no type label)` and add a one-line warning under the block that the issue may be misconfigured — but do not block the work on it.
 - **`Phase:`** — include the label whose value is one of `phase: triage`, `phase: spec`, `phase: tech-design`, `phase: impl-plan`, `phase: impl-coding`, `phase: impl-docs`, `phase: impl-done`, `phase: merged`, `phase: released`. If no such label exists, include `(no phase label)` and add a one-line warning under the block that the issue may be misconfigured — but do not block the work on it.
 - **`Body:`** — include the first ~120 characters of the issue body, with `…` appended if truncated. If the body is empty, include `(no description)`.
 - **`Comments:`** - include only the count of comments, not the actual text. If there are no comments yet, include `(no comments)`
+
+### Examples
+
+Minimal issue without expected labels:
+```
+Issue:    #133
+Title:    Make build faster
+Type:     (no type label)
+Phase:    (no phase label)
+Body:     (no description)
+Comments: (no comments)
+
+Warning: the type and phase labels are missing on this issue, it might be misconfigured.
+```
+
+Fresh bug issue with all details but without comments, body truncated to 120 characters with ellipsis (...):
+```
+Issue:    #137
+Title:    Fix race condition bug during startup
+Type:     bug
+Phase:    phase: triage
+Body:     During startup in rare cases when the authorization service call is delayed or times out the database connection is esta...
+Comments: (no comments)
+```
+
+Merged but not released feature with extensive comment chain, short body, not truncated:
+```
+Issue:    #137
+Title:    User should be able to save preferences in browser's localStorage
+Type:     feature
+Phase:    phase: merged
+Body:     PreferenceService should automatically save user's preferences into browser's localStorage each time a value changes.
+Comments: 14
+```
 
 ## Write the ~/.issue file 
 
