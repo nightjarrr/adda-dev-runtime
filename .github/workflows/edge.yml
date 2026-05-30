@@ -18,6 +18,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -33,6 +36,8 @@ jobs:
           context: .
           build-args: ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${{ github.sha }}
           tags: ghcr.io/nightjarrr/adda-dev-runtime:edge
+          cache-from: type=gha,scope=adda-dev-runtime
+          cache-to: type=gha,mode=max,scope=adda-dev-runtime
 
       - name: Build and push proto-adda
         uses: docker/build-push-action@v6
@@ -44,3 +49,5 @@ jobs:
             BASE_TAG=edge
             ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${{ github.sha }}
           tags: ghcr.io/nightjarrr/proto-adda-dev-runtime:edge
+          cache-from: type=gha,scope=proto-adda
+          cache-to: type=gha,mode=max,scope=proto-adda

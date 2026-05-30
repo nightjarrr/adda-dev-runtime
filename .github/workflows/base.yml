@@ -46,14 +46,33 @@ jobs:
       - name: Build (pre-check)
         run: bun build adda-dev-runtime/src/*.ts --outdir /tmp/ci-build-check/ --target bun
 
-      - name: Build adda-dev-runtime
-        run: docker build -t adda-dev-runtime:ci -f adda-dev-runtime/Dockerfile .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
 
-      - name: Tag adda-dev-runtime for proto-adda build
-        run: docker tag adda-dev-runtime:ci ghcr.io/nightjarrr/adda-dev-runtime:ci
+      - name: Build adda-dev-runtime
+        uses: docker/build-push-action@v6
+        with:
+          push: false
+          load: true
+          file: adda-dev-runtime/Dockerfile
+          context: .
+          tags: adda-dev-runtime:ci
+          cache-from: type=gha,scope=adda-dev-runtime
+          cache-to: type=gha,mode=max,scope=adda-dev-runtime
 
       - name: Build proto-adda
-        run: docker build -t proto-adda:ci --build-arg BASE_TAG=ci -f proto-adda/Dockerfile .
+        uses: docker/build-push-action@v6
+        with:
+          push: false
+          load: true
+          file: proto-adda/Dockerfile
+          context: .
+          build-args: BASE_TAG=ci
+          build-contexts: |
+            ghcr.io/nightjarrr/adda-dev-runtime:ci=docker-image://adda-dev-runtime:ci
+          tags: proto-adda:ci
+          cache-from: type=gha,scope=proto-adda
+          cache-to: type=gha,mode=max,scope=proto-adda
 
       - name: Smoke test — adda-dev-runtime
         run: |
