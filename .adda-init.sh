@@ -14,7 +14,7 @@ if [[ "$_declared" != "$BUN_VERSION" ]]; then
     cat > /workspace/.adda-init-notes.md <<EOF
 # Bootstrap notes
 
-\`@types/bun\` was outdated (package.json: ${_declared:-missing}, image BUN_VERSION: ${BUN_VERSION}) and auto-corrected during bootstrap. \`package.json\` and \`bun.lock\` have local changes.
+\`@types/bun\` must match the image's \`BUN_VERSION\` so TypeScript type definitions align with the actual Bun runtime APIs. It was outdated (package.json: ${_declared:-missing}, image BUN_VERSION: ${BUN_VERSION}) and auto-corrected during bootstrap. \`package.json\` and \`bun.lock\` have local changes.
 
 If on a feature branch, commit them:
 

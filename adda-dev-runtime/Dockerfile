@@ -152,8 +152,7 @@ RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com
 # ----------------------------------------------------------------------
 # Biome — standalone binary linter/formatter, from official GitHub release.
 # TypeScript — installed globally via bun for tsc in container sessions;
-# BUN_INSTALL sets the global prefix. @types/bun is a repo devDependency
-# installed at bootstrap time via .adda-init.sh, not a global.
+# BUN_INSTALL sets the global prefix.
 # ----------------------------------------------------------------------
 ENV BIOME_VERSION=2.4.15 \
     TYPESCRIPT_VERSION=6.0.3
