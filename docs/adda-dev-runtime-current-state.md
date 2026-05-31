@@ -24,7 +24,7 @@ docker build -f proto-adda/Dockerfile -t proto-adda:latest .
 
 ### Bootstrap hook mechanism
 
-Tier 1's entrypoint sources every `*.sh` file under `/usr/local/libexec/adda-dev-runtime/entrypoint.d/` after BASE init and before CMD handoff. Tier 1 ships nothing there; `proto-adda` drops `10-claude-config.sh` via `Dockerfile COPY`.
+Tier 1's entrypoint sources every `*.sh` file under `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/` after BASE init and before CMD handoff. Tier 1 ships nothing there; `proto-adda` drops `10-claude-config.sh` via `Dockerfile COPY`.
 
 Because hooks are sourced (not subprocessed), they can read and write environment variables that persist for downstream steps and the final CMD.
 
@@ -80,7 +80,7 @@ The Claude config is staged in the image at build time under `/usr/local/share/a
 * Launcher config: `launcher/adda-dev.env` (gitignored; from `adda-dev.env.example`).
 * Tmux seed config: `launcher/adda-dev.tmux.conf`.
 * ADDA Dev Runtime container Dockerfile: `adda-dev-runtime/Dockerfile`.
-* ADDA Dev Runtime container entrypoint: `adda-dev-runtime/content/scripts/entrypoint.sh.source`.
+* ADDA Dev Runtime container entrypoint: `adda-dev-runtime/content/scripts/bootstrap/entrypoint.sh.source`.
 * Envoy config template: `launcher/envoy.yaml.template`.
 
 ---
