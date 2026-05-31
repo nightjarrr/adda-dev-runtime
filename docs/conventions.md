@@ -18,8 +18,9 @@ the repo and no exec bit. The Dockerfile `RUN` step renames them (strips `.sourc
 sets the exec bit with `chmod`. This convention applies to all scripts baked to that path
 regardless of tier:
 
-- Tier 1 scripts live under `adda-dev-runtime/content/scripts/bootstrap/`.
-- Tier 2 scripts live under `proto-adda/content/scripts/bootstrap/entrypoint.d/`.
+- Tier 1 scripts live under `adda-dev-runtime/content/scripts/<bootstrap|runtime>/`.
+- Tier 2 scripts live under `proto-adda/content/scripts/<bootstrap|runtime>/`.
+  Hook scripts (sourced by entrypoint) additionally live under `entrypoint.d/` within the bootstrap directory.
 
 Apply all bash conventions above.
 

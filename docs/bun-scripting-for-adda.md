@@ -200,9 +200,10 @@ adda-dev-runtime/src/lib/        # ScriptBase, capability interfaces, Bun implem
 **Multi-stage Docker build:**
 1. `FROM oven/bun:<version>-slim AS bun-builder` — builder stage at top of Dockerfile
 2. `COPY adda-dev-runtime/src/ /build/adda-dev-runtime/src/` — copies `runtime/`, `bootstrap/`, and `lib/` together so relative imports work
-3. `bun build /build/adda-dev-runtime/src/runtime/*.ts --outdir /build/out/ --target bun --sourcemap=inline --banner "#!/usr/bin/env bun"` — shebang injected by banner, not present in source
-4. Strip `.js` extensions from outputs → `chmod +x`
-5. Final Tier 1 stage: `COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/bin/`
+3. Build runtime scripts: `bun build /build/adda-dev-runtime/src/runtime/*.ts --outdir /build/out/bin/ --target bun --sourcemap=inline --banner "#!/usr/bin/env bun"` — shebang injected by banner, not present in source
+   - Add `bun build /build/adda-dev-runtime/src/bootstrap/*.ts --outdir /build/out/bootstrap/ ...` when bootstrap Bun scripts exist
+4. Strip `.js` extensions from outputs per subdirectory → `chmod +x` per subdirectory. `out/` mirrors the target's `bin/`/`bootstrap/` layout.
+5. Final Tier 1 stage: `COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/` — Docker merges directories; bootstrap shell scripts already present under `bootstrap/` are untouched.
 
 **`.dockerignore`** excludes:
 - `**/*.test.ts`

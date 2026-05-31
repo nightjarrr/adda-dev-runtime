@@ -79,7 +79,12 @@ jobs:
 
       - name: Build (pre-check)
         if: steps.ts-changed.outputs.changed == 'true'
-        run: bun build adda-dev-runtime/src/runtime/*.ts --outdir /tmp/ci-build-check/ --target bun
+        run: |
+          for d in runtime bootstrap; do
+            if [ -d "adda-dev-runtime/src/$d" ] && ls adda-dev-runtime/src/$d/*.ts >/dev/null 2>&1; then
+              bun build adda-dev-runtime/src/$d/*.ts --outdir /tmp/ci-build-check/$d/ --target bun
+            fi
+          done
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

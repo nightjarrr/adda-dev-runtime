@@ -27,12 +27,12 @@ WORKDIR /build
 COPY tsconfig.json /build/
 COPY adda-dev-runtime/src/ /build/adda-dev-runtime/src/
 RUN bun build /build/adda-dev-runtime/src/runtime/*.ts \
-        --outdir /build/out/ \
+        --outdir /build/out/bin/ \
         --target bun \
         --sourcemap=inline \
         --banner '#!/usr/bin/env bun' \
-    && for f in /build/out/*.js; do mv "$f" "${f%.js}"; done \
-    && chmod +x /build/out/*
+    && for f in /build/out/bin/*.js; do mv "$f" "${f%.js}"; done \
+    && chmod +x /build/out/bin/*
 
 # ======================================================================
 # BASE — generic dev runtime (project-agnostic, AI-tool-agnostic)
@@ -184,7 +184,7 @@ RUN mkdir -p /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d \
         mv "$f" "${f%.source}"; \
     done \
     && chmod +x /usr/local/libexec/adda-dev-runtime/bootstrap/*.sh
-COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/bin/
+COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/
 
 
 # ======================================================================

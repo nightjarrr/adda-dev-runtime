@@ -23,21 +23,30 @@ container built from this same repo. Two consequences:
 ## Tier architecture
 
 **Tier 1** (`adda-dev-runtime/`) — generic, AI-tool-agnostic base. Ships
-`bootstrap/entrypoint.sh`, `bin/resolve-issue-branch` (Bun executable),
-`bin/ci-watch` (Bun executable), `bin/quality-gates` (Bun executable), system
-tools (git, gh, socat, rg, fdfind, etc.), and an empty `bootstrap/entrypoint.d/`
-hook directory. Also ships Bun, tsc, and Biome — making TypeScript a first-class
-scripting language for Tier 1 scripts; see `docs/bun-scripting-for-adda.md`.
+`/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh`,
+`/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch` (Bun executable),
+`/usr/local/libexec/adda-dev-runtime/bin/ci-watch` (Bun executable),
+`/usr/local/libexec/adda-dev-runtime/bin/quality-gates` (Bun executable), system
+tools (git, gh, socat, rg, fdfind, etc.), and an empty
+`/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/` hook directory.
+Also ships Bun, tsc, and Biome — making TypeScript a first-class scripting
+language for Tier 1 scripts; see `docs/bun-scripting-for-adda.md`.
 
 **Tier 2** (`proto-adda/`) — AI harness. Builds `FROM` Tier 1. Ships Claude
 Code, the Claude config, and the `10-claude-config.sh` bootstrap hook.
 
 ## Script placement decision model
 
-When adding a new script, use these three axes to determine where it goes:
+When adding a new script, use these four axes to determine where it goes:
 
-1. **Tier**: Tier 1 (`adda-dev-runtime/`) if generic and AI-tool-agnostic; Tier 2+
-   (`proto-adda/` or a project image) if harness- or project-specific.
+0. **Host vs Container**: if the script runs on the host, it lives in `launcher/`
+   and this decision model does not apply. If it runs inside the container,
+   proceed to axes 1–3.
+
+1. **Tier**: Tier 1 (`adda-dev-runtime/`) if generic and AI-tool-agnostic, or if
+   the script modifies the bootstrap/entrypoint process itself (rather than
+   extending it via a hook or other extensibility point); Tier 2 (`proto-adda/`)
+   if harness- or project-specific.
 
 2. **bootstrap vs bin**: `bootstrap/` if the script runs during container startup
    (entrypoint, hook, interactive-shell helper) and must **not** be agent-invokable;

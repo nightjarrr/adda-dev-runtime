@@ -578,18 +578,24 @@ Contains Bun executables that the agent calls during a session: `ci-watch`, `qua
 The following table shows where each artifact originates in the repo and where it lands in the image:
 
 ```
-Source                                                           Destination
-─────────────────────────────────────────────────────────────────────────────────────────
+Source                                                                Destination
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+Tier 1 invariant
+  content/scripts/bootstrap/entrypoint.sh.source               /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh
+
 Tier 1 — adda-dev-runtime
-  src/runtime/<name>.ts                                         libexec/bin/<name>
-  src/bootstrap/<name>.ts                                       libexec/bootstrap/<name>
+  src/runtime/<name>.ts                                         /usr/local/libexec/adda-dev-runtime/bin/<name>
+  src/bootstrap/<name>.ts                                       /usr/local/libexec/adda-dev-runtime/bootstrap/<name>
   src/lib/                                                      (shared; not deployed directly)
-  content/scripts/bootstrap/<name>.sh.source                   libexec/bootstrap/<name>.sh
+  content/scripts/runtime/<name>.sh.source                     /usr/local/libexec/adda-dev-runtime/bin/<name>.sh
+  content/scripts/bootstrap/<name>.sh.source                   /usr/local/libexec/adda-dev-runtime/bootstrap/<name>.sh
 
 Tier 2 — proto-adda (and any tier built FROM adda-dev-runtime)
-  src/runtime/<name>.ts                                         libexec/bin/<name>
-  src/bootstrap/<name>.ts                                       libexec/bootstrap/<name>
-  content/scripts/bootstrap/entrypoint.d/<hook>.sh.source      libexec/bootstrap/entrypoint.d/<hook>.sh
+  src/runtime/<name>.ts                                         /usr/local/libexec/adda-dev-runtime/bin/<name>
+  src/bootstrap/<name>.ts                                       /usr/local/libexec/adda-dev-runtime/bootstrap/<name>
+  content/scripts/runtime/<name>.sh.source                     /usr/local/libexec/adda-dev-runtime/bin/<name>.sh
+  content/scripts/bootstrap/<name>.sh.source                   /usr/local/libexec/adda-dev-runtime/bootstrap/<name>.sh
+  content/scripts/bootstrap/entrypoint.d/<h>.sh.source         /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/<h>.sh
 ```
 
 ### Shared library
