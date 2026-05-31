@@ -23,14 +23,12 @@ container built from this same repo. Two consequences:
 ## Tier architecture
 
 **Tier 1** (`adda-dev-runtime/`) — generic, AI-tool-agnostic base. Ships
-`/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh`,
-`/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch` (Bun executable),
-`/usr/local/libexec/adda-dev-runtime/bin/ci-watch` (Bun executable),
-`/usr/local/libexec/adda-dev-runtime/bin/quality-gates` (Bun executable), system
-tools (git, gh, socat, rg, fdfind, etc.), and an empty
-`/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/` hook directory.
-Also ships Bun, tsc, and Biome — making TypeScript a first-class scripting
-language for Tier 1 scripts; see `docs/bun-scripting-for-adda.md`.
+container startup scripts under `/usr/local/libexec/adda-dev-runtime/bootstrap/`
+(including `entrypoint.sh` and the `entrypoint.d/` hook directory), runtime tools
+invokable by the agent under `/usr/local/libexec/adda-dev-runtime/bin/`, system
+tools (git, gh, socat, rg, fdfind, etc.), and Bun, tsc, and Biome — making
+TypeScript a first-class scripting language for Tier 1 scripts; see
+`docs/bun-scripting-for-adda.md`.
 
 **Tier 2** (`proto-adda/`) — AI harness. Builds `FROM` Tier 1. Ships Claude
 Code, the Claude config, and the `10-claude-config.sh` bootstrap hook.
