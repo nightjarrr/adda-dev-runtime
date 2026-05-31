@@ -511,8 +511,8 @@ setup_tmux_windows() {
     fi
 
     if ! tmux new-window -t "${TMUX_SESSION}" -n "adda-dev shell" \
-        "c=0; until docker inspect -f '{{.State.Running}}' ${ADDA_DEV_CONTAINER} 2>/dev/null | grep -q true; do sleep 1; c=\$((c+1)); if [[ \$c -ge 30 ]]; then echo 'Timed out waiting for Claude container'; exit 1; fi; done; docker exec -it ${ADDA_DEV_CONTAINER} /usr/local/libexec/adda-dev-runtime/open-interactive-shell.sh"; then
-        warning "failed to create 'adda-dev shell' tmux window; to open manually: tmux new-window -t '${TMUX_SESSION}' -n 'adda-dev shell' 'docker exec -it ${ADDA_DEV_CONTAINER} /usr/local/libexec/adda-dev-runtime/open-interactive-shell.sh'"
+        "c=0; until docker inspect -f '{{.State.Running}}' ${ADDA_DEV_CONTAINER} 2>/dev/null | grep -q true; do sleep 1; c=\$((c+1)); if [[ \$c -ge 30 ]]; then echo 'Timed out waiting for Claude container'; exit 1; fi; done; docker exec -it ${ADDA_DEV_CONTAINER} /usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh"; then
+        warning "failed to create 'adda-dev shell' tmux window; to open manually: tmux new-window -t '${TMUX_SESSION}' -n 'adda-dev shell' 'docker exec -it ${ADDA_DEV_CONTAINER} /usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh'"
     fi
 
     if ! tmux new-window -t "${TMUX_SESSION}" -n "adda-dev envoy logs" \

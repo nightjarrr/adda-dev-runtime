@@ -595,7 +595,7 @@ section "Resolving working branch"
 if [[ -z "${ISSUE_ID:-}" ]]; then
     success "No ISSUE_ID; staying on main."
 else
-    resolve_result="$(/usr/local/libexec/adda-dev-runtime/resolve-issue-branch "${ISSUE_ID}" || true)"
+    resolve_result="$(/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch "${ISSUE_ID}" || true)"
     resolve_status="$(echo "${resolve_result}" | jq -r '.status')"
     resolve_branch="$(echo "${resolve_result}" | jq -r '.branch')"
     resolve_pr="$(echo "${resolve_result}"    | jq -r '.pr')"
@@ -634,9 +634,9 @@ fi
 # hooks can mutate env for downstream tooling and CMD.
 # ======================================================================
 
-if [[ -d /usr/local/libexec/adda-dev-runtime/entrypoint.d ]]; then
+if [[ -d /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d ]]; then
     shopt -s nullglob
-    hooks=(/usr/local/libexec/adda-dev-runtime/entrypoint.d/*.sh)
+    hooks=(/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/*.sh)
     shopt -u nullglob
     if (( ${#hooks[@]} > 0 )); then
         section "Running bootstrap hooks"
@@ -644,7 +644,7 @@ if [[ -d /usr/local/libexec/adda-dev-runtime/entrypoint.d ]]; then
             echo "Sourcing ${hook}"
             # shellcheck disable=SC1090
             # Why: hooks are discovered at runtime via glob over
-            # /usr/local/libexec/adda-dev-runtime/entrypoint.d/*.sh; the source
+            # /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/*.sh; the source
             # path is intentionally dynamic.
             source "${hook}"
         done

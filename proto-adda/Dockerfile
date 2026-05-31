@@ -27,11 +27,11 @@ RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code@${CLAUDE_COD
 # ----------------------------------------------------------------------
 # Bootstrap hook — sourced by Tier 1 entrypoint after BASE init
 # ----------------------------------------------------------------------
-COPY proto-adda/content/entrypoint.d/ /usr/local/libexec/adda-dev-runtime/entrypoint.d/
-RUN for f in /usr/local/libexec/adda-dev-runtime/entrypoint.d/*.sh.source; do \
+COPY proto-adda/content/scripts/bootstrap/entrypoint.d/ /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/
+RUN for f in /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/*.sh.source; do \
         mv "$f" "${f%.source}"; \
     done \
-    && chmod +x /usr/local/libexec/adda-dev-runtime/entrypoint.d/*.sh
+    && chmod +x /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/*.sh
 
 # ----------------------------------------------------------------------
 # Claude config — staged in image; hook copies to ~/.claude/ at container start

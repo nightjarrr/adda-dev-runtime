@@ -42,10 +42,15 @@ The Claude config is staged in the image at build time under `/usr/local/share/a
 | Artifact | Absolute path in container |
 |---|---|
 | Claude Code binary | `/usr/local/bin/claude` (Bun global install) |
-| quality-gates | `/usr/local/libexec/adda-dev-runtime/quality-gates` |
+| Tier 1 entrypoint | `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh` |
+| Tier 1 interactive shell helper | `/usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh` |
+| Bootstrap hook directory | `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/` |
+| Bootstrap hook | `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/10-claude-config.sh` |
+| `quality-gates` | `/usr/local/libexec/adda-dev-runtime/bin/quality-gates` |
+| `ci-watch` | `/usr/local/libexec/adda-dev-runtime/bin/ci-watch` |
+| `resolve-issue-branch` | `/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch` |
 | Config template dir | `/usr/local/share/adda-dev-runtime/.claude/` |
 | `.claude.json` template | `/usr/local/share/adda-dev-runtime/templates/.claude.json.template` |
-| Bootstrap hook | `/usr/local/libexec/adda-dev-runtime/entrypoint.d/10-claude-config.sh` |
 
 ---
 

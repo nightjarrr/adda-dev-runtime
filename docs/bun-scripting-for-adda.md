@@ -17,8 +17,10 @@ Design reference for Tier 1 scripts written in TypeScript and executed by Bun.
 Every script is a class descending from `ScriptBase<TDeps>`.
 
 ```
-adda-dev-runtime/src/<name>.ts          # script source (no shebang, no exec bit)
-adda-dev-runtime/src/<name>.test.ts     # unit tests
+adda-dev-runtime/src/runtime/<name>.ts          # runtime script source (bin/; no shebang, no exec bit)
+adda-dev-runtime/src/runtime/<name>.test.ts     # unit tests
+adda-dev-runtime/src/bootstrap/<name>.ts        # bootstrap script source (bootstrap/; no shebang, no exec bit)
+adda-dev-runtime/src/bootstrap/<name>.test.ts   # unit tests
 ```
 
 **Class skeleton:**
@@ -190,16 +192,17 @@ Bun resolves path aliases from `tsconfig.json` at runtime — no separate bundle
 
 **Source placement:**
 ```
-adda-dev-runtime/src/*.ts        # scripts + capability implementations
-adda-dev-runtime/src/lib/        # ScriptBase, capability interfaces, Bun implementations
+adda-dev-runtime/src/runtime/    # runtime scripts (compile to bin/)
+adda-dev-runtime/src/bootstrap/  # bootstrap scripts (compile to bootstrap/)
+adda-dev-runtime/src/lib/        # ScriptBase, capability interfaces, Bun implementations (shared; not deployed directly)
 ```
 
 **Multi-stage Docker build:**
 1. `FROM oven/bun:<version>-slim AS bun-builder` — builder stage at top of Dockerfile
-2. `COPY adda-dev-runtime/src/ /build/` — only sources; `.dockerignore` excludes `**/*.test.ts`
-3. `bun build /build/*.ts --outdir /build/out/ --target bun --sourcemap=inline --banner "#!/usr/bin/env bun"` — shebang injected by banner, not present in source
+2. `COPY adda-dev-runtime/src/ /build/adda-dev-runtime/src/` — copies `runtime/`, `bootstrap/`, and `lib/` together so relative imports work
+3. `bun build /build/adda-dev-runtime/src/runtime/*.ts --outdir /build/out/ --target bun --sourcemap=inline --banner "#!/usr/bin/env bun"` — shebang injected by banner, not present in source
 4. Strip `.js` extensions from outputs → `chmod +x`
-5. Final Tier 1 stage: `COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/`
+5. Final Tier 1 stage: `COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/bin/`
 
 **`.dockerignore`** excludes:
 - `**/*.test.ts`

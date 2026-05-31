@@ -90,7 +90,7 @@ gh issue develop {issue-id} -n {branch-name}
 
 If already on a feature branch linked to the current issue, no further action needed. If not sure whether the current branch is the proper branch for the current issue, check it with `resolve-issue-branch` script:
 ```
-/usr/local/libexec/adda-dev-runtime/resolve-issue-branch {issue-id}
+/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch {issue-id}
 ```
 
 On existing branch, always verify the working tree is clean before dispatching Coder or making repository file modifications. If there are unrelated dirty changes, stop and ask PO.
@@ -108,7 +108,7 @@ After Coder terminates and returns the structured response with the outcome of t
 After Coder pushes, call `ci-watch` script and pass the special `LOCAL` value for the branch:
 
 ```bash
-/usr/local/libexec/adda-dev-runtime/ci-watch push --branch LOCAL
+/usr/local/libexec/adda-dev-runtime/bin/ci-watch push --branch LOCAL
 ```
 
 Exit 0: proceed to step 6.
@@ -147,7 +147,7 @@ gh pr create --title "..." --body "..."
 When the PR is opened, monitor all checks to completion:
 
 ```bash
-/usr/local/libexec/adda-dev-runtime/ci-watch pr {pr-number}
+/usr/local/libexec/adda-dev-runtime/bin/ci-watch pr {pr-number}
 ```
 
 Exit 0: step 7 is complete, proceed.
@@ -182,7 +182,7 @@ This step is triggered only if PO explicitly reports that the PR was merged. PM 
 If PO does report the merge, monitor all runs triggered by the merge commit on main:
 
 ```bash
-/usr/local/libexec/adda-dev-runtime/ci-watch push --branch main
+/usr/local/libexec/adda-dev-runtime/bin/ci-watch push --branch main
 ```
 
 Exit 0: main is healthy; the task is complete.

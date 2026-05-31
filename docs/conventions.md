@@ -18,8 +18,8 @@ the repo and no exec bit. The Dockerfile `RUN` step renames them (strips `.sourc
 sets the exec bit with `chmod`. This convention applies to all scripts baked to that path
 regardless of tier:
 
-- Tier 1 scripts live under `adda-dev-runtime/content/scripts/`.
-- Tier 2 scripts live under `proto-adda/content/entrypoint.d/`.
+- Tier 1 scripts live under `adda-dev-runtime/content/scripts/bootstrap/`.
+- Tier 2 scripts live under `proto-adda/content/scripts/bootstrap/entrypoint.d/`.
 
 Apply all bash conventions above.
 
@@ -32,12 +32,14 @@ Apply all bash conventions above.
 
 ## Bun/TypeScript
 
-Source placement by tier:
+Source placement by tier and purpose:
 
-| Tier | Script | Test |
-|------|--------|------|
-| Tier 1 | `adda-dev-runtime/src/<name>.ts` | `adda-dev-runtime/src/<name>.test.ts` |
-| Tier 2 | `proto-adda/src/<name>.ts` | `proto-adda/src/<name>.test.ts` |
+| Tier | Purpose | Script | Test |
+|------|---------|--------|------|
+| Tier 1 | runtime (bin/) | `adda-dev-runtime/src/runtime/<name>.ts` | `adda-dev-runtime/src/runtime/<name>.test.ts` |
+| Tier 1 | bootstrap | `adda-dev-runtime/src/bootstrap/<name>.ts` | `adda-dev-runtime/src/bootstrap/<name>.test.ts` |
+| Tier 2 | runtime (bin/) | `proto-adda/src/runtime/<name>.ts` | `proto-adda/src/runtime/<name>.test.ts` |
+| Tier 2 | bootstrap | `proto-adda/src/bootstrap/<name>.ts` | `proto-adda/src/bootstrap/<name>.test.ts` |
 
 No shebang, no exec bit in sources — the build pipeline injects the shebang via `--banner`.
 
