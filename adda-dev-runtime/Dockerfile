@@ -151,9 +151,9 @@ RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com
 
 # ----------------------------------------------------------------------
 # Biome — standalone binary linter/formatter, from official GitHub release.
-# TypeScript + @types/bun — installed globally via bun for tsc and type
-# checking in container sessions; BUN_INSTALL sets the global prefix.
-# @types/bun version matches BUN_VERSION (same runtime).
+# TypeScript — installed globally via bun for tsc in container sessions;
+# BUN_INSTALL sets the global prefix. @types/bun is a repo devDependency
+# installed at bootstrap time via .adda-init.sh, not a global.
 # ----------------------------------------------------------------------
 ENV BIOME_VERSION=2.4.15 \
     TYPESCRIPT_VERSION=6.0.3
@@ -161,7 +161,7 @@ RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors \
         "https://github.com/biomejs/biome/releases/download/%40biomejs%2Fbiome%40${BIOME_VERSION}/biome-linux-x64-musl" \
         -o /usr/local/bin/biome \
     && chmod +x /usr/local/bin/biome \
-    && BUN_INSTALL=/usr/local bun install -g typescript@${TYPESCRIPT_VERSION} @types/bun@${BUN_VERSION}
+    && BUN_INSTALL=/usr/local bun install -g typescript@${TYPESCRIPT_VERSION}
 
 # Create the runtime user explicitly. UID/GID align with the launcher's
 # ADDA_DEV_USER/UID/GID defaults. Higher-tier images FROM this image

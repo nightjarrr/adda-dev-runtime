@@ -267,7 +267,7 @@ Policy clarification:
 * Resolves linked GitHub issue branch via GraphQL `linkedBranches(first: 2)`.
 * Initializes `~/.claude.json` from template using `CLAUDE_CODE_VERSION`.
 * `~/.claude/settings.json` ships via content (no separate template path); `autoMemoryDirectory` is set to `/workspace/.claude/memory`.
-* Runs project bootstrap currently via `uv sync --frozen`.
+* Sources `/workspace/.adda-init.sh` after image hooks if the file exists. Section header always appears in bootstrap output; success line follows on source; informational skip message printed if absent. Non-zero exit from the hook fails bootstrap (inherited `set -euo pipefail`).
 * Runs CMD (`claude` by default), then drops to interactive bash.
 * On exit, prints git status and commits ahead of upstream/main.
 
