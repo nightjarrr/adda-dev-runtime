@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
+import { ScriptShellError } from "../lib/errors";
+import type { Shell, ShellDep, ShellResult, Sleep, SleepDep, StdioDep, Tmp, TmpDep } from "../lib/index";
 import { CiWatchScript } from "./ci-watch";
-import { ScriptShellError } from "./lib/errors";
-import type { Shell, ShellDep, ShellResult, Sleep, SleepDep, StdioDep, Tmp, TmpDep } from "./lib/index";
 
 type CiWatchDeps = ShellDep & TmpDep & StdioDep & SleepDep;
 

@@ -26,13 +26,13 @@ FROM oven/bun:${BUN_VERSION}-slim AS bun-builder
 WORKDIR /build
 COPY tsconfig.json /build/
 COPY adda-dev-runtime/src/ /build/adda-dev-runtime/src/
-RUN bun build /build/adda-dev-runtime/src/*.ts \
-        --outdir /build/out/ \
+RUN bun build /build/adda-dev-runtime/src/runtime/*.ts \
+        --outdir /build/out/bin/ \
         --target bun \
         --sourcemap=inline \
         --banner '#!/usr/bin/env bun' \
-    && for f in /build/out/*.js; do mv "$f" "${f%.js}"; done \
-    && chmod +x /build/out/*
+    && for f in /build/out/bin/*.js; do mv "$f" "${f%.js}"; done \
+    && chmod +x /build/out/bin/*
 
 # ======================================================================
 # BASE — generic dev runtime (project-agnostic, AI-tool-agnostic)
@@ -178,12 +178,12 @@ RUN groupadd --gid ${USER_GID} ${USERNAME} \
 # Bootstrap scripts — all Tier 1 scripts baked at build time.
 # .sh.source files have no exec bit in the repo; chmod is set here.
 # ----------------------------------------------------------------------
-COPY adda-dev-runtime/content/scripts/ /usr/local/libexec/adda-dev-runtime/
-RUN mkdir -p /usr/local/libexec/adda-dev-runtime/entrypoint.d \
-    && for f in /usr/local/libexec/adda-dev-runtime/*.sh.source; do \
+COPY adda-dev-runtime/content/scripts/bootstrap/ /usr/local/libexec/adda-dev-runtime/bootstrap/
+RUN mkdir -p /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d \
+    && for f in /usr/local/libexec/adda-dev-runtime/bootstrap/*.sh.source; do \
         mv "$f" "${f%.source}"; \
     done \
-    && chmod +x /usr/local/libexec/adda-dev-runtime/*.sh
+    && chmod +x /usr/local/libexec/adda-dev-runtime/bootstrap/*.sh
 COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/
 
 
@@ -203,5 +203,5 @@ WORKDIR /workspace
 # final command after bootstrap. CMD is overridable at `docker run` time
 # for troubleshooting (e.g., `docker run ... adda-dev-runtime ls /workspace`
 # bootstraps and runs ls instead of bash).
-ENTRYPOINT ["/usr/local/libexec/adda-dev-runtime/entrypoint.sh"]
+ENTRYPOINT ["/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh"]
 CMD ["/bin/bash"]

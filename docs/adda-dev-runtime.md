@@ -561,6 +561,53 @@ These do not by themselves provide network access. They should be treated as exp
 
 ---
 
+## libexec structure
+
+Scripts and executables are installed under `/usr/local/libexec/adda-dev-runtime/` and split into two subdirectories by purpose:
+
+### `bootstrap/` — startup scripts (not agent-invokable)
+
+Contains scripts that run during container startup: `entrypoint.sh`, the `entrypoint.d/` hook directory, and the interactive-shell helper. These scripts are **not** covered by the agent permission wildcard and cannot be invoked by the agent.
+
+### `bin/` — runtime executables (agent-invokable)
+
+Contains Bun executables that the agent calls during a session: `ci-watch`, `quality-gates`, `resolve-issue-branch`. The agent permission entry `Bash(/usr/local/libexec/adda-dev-runtime/bin/*)` covers exactly this directory.
+
+### Source-to-destination mapping
+
+The following table shows where each artifact originates in the repo and where it lands in the image:
+
+```
+Source                                                                Destination
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+Tier 1 invariant
+  content/scripts/bootstrap/entrypoint.sh.source               /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh
+
+Tier 1 — adda-dev-runtime
+  src/runtime/<name>.ts                                         /usr/local/libexec/adda-dev-runtime/bin/<name>
+  src/bootstrap/<name>.ts                                       /usr/local/libexec/adda-dev-runtime/bootstrap/<name>
+  src/lib/                                                      (shared; not deployed directly)
+  content/scripts/runtime/<name>.sh.source                     /usr/local/libexec/adda-dev-runtime/bin/<name>.sh
+  content/scripts/bootstrap/<name>.sh.source                   /usr/local/libexec/adda-dev-runtime/bootstrap/<name>.sh
+
+Tier 2 — proto-adda (and any tier built FROM adda-dev-runtime)
+  src/runtime/<name>.ts                                         /usr/local/libexec/adda-dev-runtime/bin/<name>
+  src/bootstrap/<name>.ts                                       /usr/local/libexec/adda-dev-runtime/bootstrap/<name>
+  content/scripts/runtime/<name>.sh.source                     /usr/local/libexec/adda-dev-runtime/bin/<name>.sh
+  content/scripts/bootstrap/<name>.sh.source                   /usr/local/libexec/adda-dev-runtime/bootstrap/<name>.sh
+  content/scripts/bootstrap/entrypoint.d/<h>.sh.source         /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/<h>.sh
+```
+
+### Shared library
+
+`src/lib/` lives at the top level of `src/` (not under `runtime/` or `bootstrap/`) so it is equally importable by both `src/runtime/` and `src/bootstrap/` scripts. It is not deployed directly; it is compiled into the executables during the `bun build` step. The `@adda/lib` tsconfig path alias resolves to `adda-dev-runtime/src/lib`.
+
+### `.sh.source` rename convention
+
+Shell scripts in the repo carry a `.sh.source` extension and have no exec bit. The Dockerfile `RUN` step renames each file (strips `.source`) and sets the exec bit with `chmod`. This applies to all shell scripts baked to `libexec/`, regardless of tier or subdirectory.
+
+---
+
 ## Repository layout
 
 The harness lives in the project repository.

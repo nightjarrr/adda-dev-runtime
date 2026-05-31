@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { Env, EnvDep, Shell, ShellDep, ShellResult, StdioDep } from "./lib/index";
+import type { Env, EnvDep, Shell, ShellDep, ShellResult, StdioDep } from "../lib/index";
 import { ResolveIssueBranchScript } from "./resolve-issue-branch";
 
 type ResolveIssueBranchDeps = ShellDep & EnvDep & StdioDep;

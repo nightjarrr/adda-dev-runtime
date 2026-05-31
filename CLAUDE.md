@@ -23,14 +23,36 @@ container built from this same repo. Two consequences:
 ## Tier architecture
 
 **Tier 1** (`adda-dev-runtime/`) — generic, AI-tool-agnostic base. Ships
-`entrypoint.sh`, `resolve-issue-branch` (Bun executable), `ci-watch` (Bun executable),
-`quality-gates` (Bun executable), system tools (git, gh, socat, rg, fdfind, etc.),
-and an empty `entrypoint.d/` hook directory. Also ships Bun, tsc, and Biome —
-making TypeScript a first-class scripting language for Tier 1 scripts; see
+container startup scripts under `/usr/local/libexec/adda-dev-runtime/bootstrap/`
+(including `entrypoint.sh` and the `entrypoint.d/` hook directory), runtime tools
+invokable by the agent under `/usr/local/libexec/adda-dev-runtime/bin/`, system
+tools (git, gh, socat, rg, fdfind, etc.), and Bun, tsc, and Biome — making
+TypeScript a first-class scripting language for Tier 1 scripts; see
 `docs/bun-scripting-for-adda.md`.
 
 **Tier 2** (`proto-adda/`) — AI harness. Builds `FROM` Tier 1. Ships Claude
 Code, the Claude config, and the `10-claude-config.sh` bootstrap hook.
+
+## Script placement decision model
+
+When adding a new script, use these four axes to determine where it goes:
+
+0. **Host vs Container**: if the script runs on the host, it lives in `launcher/`
+   and this decision model does not apply. If it runs inside the container,
+   proceed to axes 1–3.
+
+1. **Tier**: Tier 1 (`adda-dev-runtime/`) if generic and AI-tool-agnostic, or if
+   the script modifies the bootstrap/entrypoint process itself (rather than
+   extending it via a hook or other extensibility point); Tier 2 (`proto-adda/`)
+   if harness- or project-specific.
+
+2. **bootstrap vs bin**: `bootstrap/` if the script runs during container startup
+   (entrypoint, hook, interactive-shell helper) and must **not** be agent-invokable;
+   `bin/` if the script is invokable by the agent at runtime.
+
+3. **Shell vs Bun**: shell (`.sh.source`) if it is simple glue, needs to source the
+   environment, or is part of the hook chain; Bun (`.ts`) if it needs structured
+   argument parsing, typed logic, external API calls, or testability.
 
 ## Toolchain
 
@@ -62,11 +84,12 @@ not the running container.
 
 | Artifact | Repo source | Image-baked path | Bootstrapped to |
 |---|---|---|---|
-| Tier 1 entrypoint | `adda-dev-runtime/content/scripts/entrypoint.sh.source` | `/usr/local/libexec/adda-dev-runtime/entrypoint.sh` | — |
-| `resolve-issue-branch` (Bun executable) | `adda-dev-runtime/src/resolve-issue-branch.ts` | `/usr/local/libexec/adda-dev-runtime/resolve-issue-branch` | — |
-| `ci-watch` (Bun executable) | `adda-dev-runtime/src/ci-watch.ts` | `/usr/local/libexec/adda-dev-runtime/ci-watch` | — |
-| `quality-gates` (Bun executable) | `adda-dev-runtime/src/quality-gates.ts` | `/usr/local/libexec/adda-dev-runtime/quality-gates` | — |
-| Tier 2 bootstrap hook | `proto-adda/content/entrypoint.d/10-claude-config.sh.source` | `/usr/local/libexec/adda-dev-runtime/entrypoint.d/10-claude-config.sh` | — |
+| Tier 1 entrypoint | `adda-dev-runtime/content/scripts/bootstrap/entrypoint.sh.source` | `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh` | — |
+| Tier 1 interactive shell helper | `adda-dev-runtime/content/scripts/bootstrap/open-interactive-shell.sh.source` | `/usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh` | — |
+| `resolve-issue-branch` (Bun executable) | `adda-dev-runtime/src/runtime/resolve-issue-branch.ts` | `/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch` | — |
+| `ci-watch` (Bun executable) | `adda-dev-runtime/src/runtime/ci-watch.ts` | `/usr/local/libexec/adda-dev-runtime/bin/ci-watch` | — |
+| `quality-gates` (Bun executable) | `adda-dev-runtime/src/runtime/quality-gates.ts` | `/usr/local/libexec/adda-dev-runtime/bin/quality-gates` | — |
+| Tier 2 bootstrap hook | `proto-adda/content/scripts/bootstrap/entrypoint.d/10-claude-config.sh.source` | `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/10-claude-config.sh` | — |
 | Claude config (CLAUDE.md, settings.json, agents/, skills/) | `proto-adda/content/.claude/` | `/usr/local/share/adda-dev-runtime/.claude/` | `~/.claude/` (ephemeral) |
 
 Scripts baked to `/usr/local/libexec/` use a `.sh.source` extension in the repo

@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import { ScriptShellError } from "./lib/errors";
+import { ScriptShellError } from "../lib/errors";
 import type {
     FileReader,
     FileReaderDep,
@@ -11,7 +11,7 @@ import type {
     StdioDep,
     Tmp,
     TmpDep,
-} from "./lib/index";
+} from "../lib/index";
 import { QualityGatesScript } from "./quality-gates";
 
 type QualityGatesDeps = ShellDep & FileReaderDep & FileWriterDep & TmpDep & StdioDep;

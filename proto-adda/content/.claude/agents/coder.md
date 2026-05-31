@@ -100,7 +100,7 @@ When uncertain, prefer dialog over silent assumptions — see Section 10 (Commun
 
 1. Run:
    ```bash
-   /usr/local/libexec/adda-dev-runtime/quality-gates
+   /usr/local/libexec/adda-dev-runtime/bin/quality-gates
    ```
 2. Read stdout: summary is the final two lines — `PASS` or `FAIL`, then `Results: <path-to-result-file>`.
 3. Result file structure:
