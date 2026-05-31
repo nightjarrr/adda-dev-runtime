@@ -581,9 +581,8 @@ fi
 # ----------------------------------------------------------------------
 start_envoy
 wait_for_envoy
-setup_tmux_windows
-
 pull_if_not_local "${ADDA_DEV_IMAGE}"
+setup_tmux_windows
 
 echo "Starting ADDA Dev Runtime container..."
 docker "${DOCKER_ARGS[@]}"
