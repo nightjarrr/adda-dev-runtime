@@ -683,6 +683,8 @@ fi
 # entrypoint's final environment, including anything hooks may export.
 # This is an ephemeral container; overwriting .bashrc is intentional.
 # ----------------------------------------------------------------------
+section "Initializing shell config in ~/.bashrc."
+
 write_bashrc() {
     local context="${GITHUB_REPO}"
 
