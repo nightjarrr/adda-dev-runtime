@@ -802,7 +802,7 @@ Container-side script. It validates the runtime contract, starts the local proxy
 
 13. Initialize Claude Code configuration in `$HOME`.
 
-14. Run project-specific bootstrap steps (e.g., in case of `uv` and Python project this can be `uv sync --frozen`).
+14. Run repo-level init hook: source `/workspace/.adda-init.sh` if it exists (see *Repo-level init hook* section). Non-existence is not an error.
 
 15. Write `~/.bashrc` with `PS1` and the propagated environment variables (`HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy`, `https_proxy`, `NO_PROXY`, `no_proxy`, `GH_REPO`). Touch the bootstrap-complete marker at `/run/.adda_bootstrap_complete`. The marker is also touched by the EXIT trap installed in step 5 so it is created even when bootstrap fails, allowing the parallel interactive shell to open for live autopsy.
 
@@ -819,6 +819,20 @@ Container-side script. It validates the runtime contract, starts the local proxy
 Branch lookup uses GitHub's first-class Issue branch linkage, not a naming convention. Implementation may use GitHub GraphQL to query linked branches.
 
 The branch naming convention remains documentation. The entrypoint stays convention-agnostic.
+
+### Repo-level init hook
+
+`/workspace/.adda-init.sh`, if present in the repository root, is sourced by the entrypoint after all image-defined `entrypoint.d` hooks and before CMD handoff.
+
+**When it runs:** after the `entrypoint.d` loop; the full bootstrapped environment is available.
+
+**What it has access to:** GitHub auth, proxy environment variables, git config, and any exports set by `entrypoint.d` hooks.
+
+**Failure semantics:** `.adda-init.sh` inherits `set -euo pipefail` from the entrypoint. Any non-zero exit fails bootstrap.
+
+**Non-existence:** not an error. A section header is always printed; if the file is absent, an informational message is printed and bootstrap continues.
+
+**Intended use cases:** `bun install --frozen-lockfile`, `uv sync --frozen`, or other repo-level setup that depends on the cloned repository and the fully initialised environment.
 
 ### Base/project split
 
@@ -949,6 +963,6 @@ The following are recognized but not part of the immediate baseline implementati
 1. **Broad web retrieval plane** — define how user-approved direct URL fetch and research should work without opening general egress from the Claude dev container.
 2. **Live allow-list management** — explore whether Envoy policy should be reloadable without sidecar restart, and whether a UI/control plane is justified.
 3. **Credential hiding behind proxy/gateway** — investigate whether future API-specific gateways can inject auth headers so selected tools do not receive raw tokens.
-4. **Base/project entrypoint split** — extract generic Claude dev runtime logic into a reusable base layer and project-specific bootstrap into hooks.
+4. **Base/project entrypoint split** — extract generic Claude dev runtime logic into a reusable base layer and project-specific bootstrap into hooks. The repo-level `.adda-init.sh` hook (see *Repo-level init hook* section) partially addresses this by giving any repository a lightweight bootstrap point without a full Tier 3 image build.
 5. **Image provenance hardening** — complete GHCR publishing, digest pinning, provenance, and scheduled rebuild workflow.
 6. **Stronger sandboxing** — evaluate gVisor or VM isolation if kernel escape risk becomes a higher priority.

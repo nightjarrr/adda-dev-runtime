@@ -96,6 +96,7 @@ require_env GITHUB_OWNER true
 require_env GITHUB_REPO true
 require_env GITHUB_TOKEN_
 require_env TZ true
+require_env BUN_VERSION true
 require_env ADDA_DEV_PROXY_SOCKET
 require_env ADDA_DEV_PROXY_PORT
 
@@ -650,6 +651,24 @@ if [[ -d /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d ]]; then
         done
         success "Bootstrap hooks complete."
     fi
+fi
+
+# ======================================================================
+# REPO INIT — optional repo-level init hook
+# Sourced after image hooks so it has access to the full bootstrapped
+# environment: GitHub auth, proxy, git config, and any exports from
+# entrypoint.d hooks. Non-existence is not an error.
+# ======================================================================
+section "Running repo-level init hook (.adda-init.sh)"
+
+if [[ -f /workspace/.adda-init.sh ]]; then
+    # shellcheck disable=SC1091
+    # Why: /workspace/.adda-init.sh is a repo-supplied hook sourced at
+    # runtime after clone; its path and contents are not statically known.
+    source /workspace/.adda-init.sh
+    success "Repo-level init hook complete."
+else
+    echo "No .adda-init.sh found in /workspace; skipping."
 fi
 
 # ======================================================================

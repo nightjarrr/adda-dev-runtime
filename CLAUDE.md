@@ -28,10 +28,34 @@ container startup scripts under `/usr/local/libexec/adda-dev-runtime/bootstrap/`
 invokable by the agent under `/usr/local/libexec/adda-dev-runtime/bin/`, system
 tools (git, gh, socat, rg, fdfind, etc.), and Bun, tsc, and Biome — making
 TypeScript a first-class scripting language for Tier 1 scripts; see
-`docs/bun-scripting-for-adda.md`.
+`docs/bun-scripting-for-adda.md`. Note: `@types/bun` is **not** an image global —
+it is a repo `devDependency` in `package.json`, installed at bootstrap time via
+`.adda-init.sh`.
 
 **Tier 2** (`proto-adda/`) — AI harness. Builds `FROM` Tier 1. Ships Claude
 Code, the Claude config, and the `10-claude-config.sh` bootstrap hook.
+
+## Repo-level init hook
+
+`.adda-init.sh` in the repo root is sourced by the entrypoint at bootstrap time,
+after all image-defined `entrypoint.d` hooks and before CMD handoff.
+
+**What it does in this repo:**
+
+- Reads `@types/bun` version from `package.json` and compares it to `$BUN_VERSION`
+  (the version baked into the image).
+- **Match:** runs `bun install --frozen-lockfile` and creates an empty
+  `/workspace/.adda-init-notes.md`.
+- **Mismatch:** runs `bun add --dev "@types/bun@${BUN_VERSION}"` to auto-correct,
+  then writes `/workspace/.adda-init-notes.md` with exact versions and a
+  ready-to-paste commit message.
+
+**Lockfile:** `bun.lock` (text format, Bun 1.3.14 default) is committed to the
+repo. The `--frozen-lockfile` flag keeps it authoritative on the happy path.
+
+**Session start signal:** if `package.json` and/or `bun.lock` are dirty at the
+start of a session with an `@types/bun` version change, the init hook auto-corrected
+a version mismatch. Check `.adda-init-notes.md` for details and the commit command.
 
 ## Script placement decision model
 
@@ -103,3 +127,5 @@ edge image on main merge → versioned release on tag.
 ## Conventions
 
 Script and Dockerfile conventions: `docs/conventions.md`.
+
+@import .adda-init-notes.md
