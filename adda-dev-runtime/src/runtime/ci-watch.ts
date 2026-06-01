@@ -1,6 +1,10 @@
 import type { parseArgs } from "node:util";
 import type { ShellDep, SleepDep, StdioDep, TmpDep } from "@adda/lib";
-import { defaultDeps, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
+import { defaultDeps, ScriptArgsError, ScriptBase, ScriptError, ScriptZodValidationError } from "@adda/lib";
+import { z } from "zod";
+
+const ChecksSchema = z.array(z.object({ name: z.string(), state: z.string(), link: z.string() }));
+const RunListSchema = z.array(z.object({ databaseId: z.union([z.number(), z.string()]) }));
 
 type CiWatchDeps = ShellDep & TmpDep & StdioDep & SleepDep;
 
@@ -166,13 +170,11 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         await this.deps.shell.run(["gh", "pr", "checks", prNumber, "--watch"], { strict: false });
 
         const checksResult = await this.deps.shell.run(["gh", "pr", "checks", prNumber, "--json", "name,state,link"]);
-        interface CheckEntry {
-            name: string;
-            state: string;
-            link: string;
-        }
-
-        const checks: CheckEntry[] = JSON.parse(checksResult.stdout.trim() || "[]");
+        const checksRaw = JSON.parse(checksResult.stdout.trim() || "[]");
+        const checksParsed = ChecksSchema.safeParse(checksRaw);
+        if (!checksParsed.success)
+            throw new ScriptZodValidationError("unexpected gh pr checks output", checksParsed.error, checksRaw);
+        const checks = checksParsed.data;
         const failingChecks = checks.filter((c) => c.state.toLowerCase() !== "success");
 
         const getElapsed = () => Math.round((Date.now() - startMs) / 1000);
@@ -236,9 +238,9 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
     private parseRunIds(json: string): string[] {
         if (!json) return [];
         try {
-            const parsed = JSON.parse(json) as Array<{ databaseId: number | string }>;
-            if (!Array.isArray(parsed) || parsed.length === 0) return [];
-            return parsed.map((r) => String(r.databaseId));
+            const result = RunListSchema.safeParse(JSON.parse(json));
+            if (!result.success || result.data.length === 0) return [];
+            return result.data.map((r) => String(r.databaseId));
         } catch {
             return [];
         }

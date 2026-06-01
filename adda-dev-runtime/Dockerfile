@@ -24,9 +24,10 @@ ARG BUN_VERSION=1.3.14
 # ======================================================================
 FROM oven/bun:${BUN_VERSION}-slim AS bun-builder
 WORKDIR /build
-COPY tsconfig.json /build/
+COPY package.json bun.lock tsconfig.json /build/
 COPY adda-dev-runtime/src/ /build/adda-dev-runtime/src/
-RUN bun build /build/adda-dev-runtime/src/runtime/*.ts \
+RUN bun install --frozen-lockfile \
+    && bun build /build/adda-dev-runtime/src/runtime/*.ts \
         --outdir /build/out/bin/ \
         --target bun \
         --sourcemap=inline \

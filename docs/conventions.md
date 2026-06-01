@@ -97,6 +97,37 @@ if (import.meta.main)
   caller (e.g. a command whose exit code encodes a status, or a `|| true` shell pipeline).
 - Import via the `@adda/lib` alias as shown; use `import type` for type-only imports.
 
+## Runtime data validation (Bun)
+
+Use Zod (`import { z } from "zod"`) for all external API responses and parsed JSON. Import `ScriptZodValidationError` from `@adda/lib` for the failure path.
+
+**Canonical pattern:**
+
+```typescript
+import { z } from "zod";
+import { ScriptZodValidationError } from "@adda/lib";
+
+const ResultSchema = z.object({ id: z.number(), name: z.string() });
+
+const raw = JSON.parse(ghResult.stdout);
+const parsed = ResultSchema.safeParse(raw);
+if (!parsed.success)
+    throw new ScriptZodValidationError("unexpected API response", parsed.error, raw);
+const { id, name } = parsed.data;
+```
+
+For scripts that also emit structured stdout on error (e.g. `resolve-issue-branch`):
+
+```typescript
+if (!parsed.success) {
+    const err = new ScriptZodValidationError("unexpected API response", parsed.error, raw);
+    this.emit(issueId, "error", "", "", err.short);
+    throw err;
+}
+```
+
+Always use `.safeParse()`, never `.parse()`. Use `.nullable()` on fields the API legitimately returns null (domain conditions such as repository or issue not found); keep non-nullable for fields that must always be present — their absence is a schema failure.
+
 ## Testing (Bun)
 
 - Constructor injection is the primary testing mechanism for script descendants — no module

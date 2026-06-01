@@ -1,6 +1,7 @@
 import type { parseArgs } from "node:util";
 import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
-import { defaultDeps, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
+import { defaultDeps, ScriptArgsError, ScriptBase, ScriptError, ScriptZodValidationError } from "@adda/lib";
+import { z } from "zod";
 
 type ResolveIssueBranchDeps = ShellDep & EnvDep & StdioDep;
 
@@ -16,20 +17,34 @@ interface ResolveResult {
     details: string;
 }
 
-interface GraphQLResponse {
-    data?: {
-        repository?: {
-            issue?: {
-                linkedBranches?: { nodes?: Array<{ ref: { name: string } }> };
-                timelineItems?: {
-                    nodes?: Array<{
-                        subject: { number: number; state: string; headRefName: string };
-                    }>;
-                };
-            } | null;
-        } | null;
-    } | null;
-}
+const GraphQLSchema = z.object({
+    data: z.object({
+        repository: z
+            .object({
+                issue: z
+                    .object({
+                        linkedBranches: z.object({
+                            nodes: z.array(z.object({ ref: z.object({ name: z.string() }) })),
+                        }),
+                        timelineItems: z.object({
+                            nodes: z.array(
+                                z.object({
+                                    subject: z
+                                        .object({
+                                            number: z.number().optional(),
+                                            state: z.string().optional(),
+                                            headRefName: z.string().optional(),
+                                        })
+                                        .optional(),
+                                }),
+                            ),
+                        }),
+                    })
+                    .nullable(),
+            })
+            .nullable(),
+    }),
+});
 
 const GRAPHQL_QUERY = `
     query($owner: String!, $repo: String!, $number: Int!) {
@@ -106,39 +121,25 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps,
             throw new ScriptError(details);
         }
 
-        const response: GraphQLResponse = JSON.parse(ghResult.stdout);
-
-        if (response.data == null) {
-            this.emit(issueId, "error", "", "", "unexpected API response: missing data");
-            throw new ScriptError("unexpected API response: missing data");
+        const raw = JSON.parse(ghResult.stdout);
+        const parsed = GraphQLSchema.safeParse(raw);
+        if (!parsed.success) {
+            const err = new ScriptZodValidationError("unexpected API response", parsed.error, raw);
+            this.emit(issueId, "error", "", "", err.short);
+            throw err;
         }
-        if (response.data.repository == null) {
+
+        // Domain conditions — null is intentional (not found), not a schema violation
+        if (parsed.data.data.repository === null) {
             this.emit(issueId, "error", "", "", `repository ${owner}/${repo} not found`);
             throw new ScriptError(`repository ${owner}/${repo} not found`);
         }
-        if (response.data.repository.issue == null) {
+        if (parsed.data.data.repository.issue === null) {
             this.emit(issueId, "error", "", "", `issue #${issueId} not found in ${owner}/${repo}`);
             throw new ScriptError(`issue #${issueId} not found in ${owner}/${repo}`);
         }
 
-        const issue = response.data.repository.issue;
-
-        if (issue.linkedBranches == null) {
-            this.emit(issueId, "error", "", "", "unexpected API response: missing linkedBranches");
-            throw new ScriptError("unexpected API response: missing linkedBranches");
-        }
-        if (issue.linkedBranches.nodes == null) {
-            this.emit(issueId, "error", "", "", "unexpected API response: missing linkedBranches.nodes");
-            throw new ScriptError("unexpected API response: missing linkedBranches.nodes");
-        }
-        if (issue.timelineItems == null) {
-            this.emit(issueId, "error", "", "", "unexpected API response: missing timelineItems");
-            throw new ScriptError("unexpected API response: missing timelineItems");
-        }
-        if (issue.timelineItems.nodes == null) {
-            this.emit(issueId, "error", "", "", "unexpected API response: missing timelineItems.nodes");
-            throw new ScriptError("unexpected API response: missing timelineItems.nodes");
-        }
+        const issue = parsed.data.data.repository.issue;
 
         // Resolution tier 1 — linkedBranches
         const linkedNodes = issue.linkedBranches.nodes;
@@ -153,7 +154,8 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps,
         }
 
         // Resolution tier 2 — CONNECTED_EVENT open PRs
-        const openPrs = issue.timelineItems.nodes.filter((n) => n.subject.state === "OPEN");
+        // subject is optional (non-PR ConnectedEvent subjects return {}); filter those out
+        const openPrs = issue.timelineItems.nodes.filter((n) => n.subject?.state === "OPEN");
 
         if (openPrs.length === 0) {
             this.emit(issueId, "main", "", "", "");
@@ -161,11 +163,11 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps,
         }
         if (openPrs.length === 1) {
             const pr = openPrs[0].subject;
-            this.emit(issueId, "feature_branch", pr.headRefName, String(pr.number), "");
+            this.emit(issueId, "feature_branch", pr?.headRefName ?? "", String(pr?.number), "");
             return;
         }
 
-        const branches = openPrs.map((n) => n.subject.headRefName).join(", ");
+        const branches = openPrs.map((n) => n.subject?.headRefName).join(", ");
         this.emit(issueId, "ambiguous", "", "", `multiple open PRs with branches: ${branches}`);
         throw new ScriptError(`multiple open PRs with branches: ${branches}`);
     }

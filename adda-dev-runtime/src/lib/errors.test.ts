@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { ConfigError, ScriptArgsError, ScriptError, ScriptShellError } from "./errors";
+import { z } from "zod";
+import { ConfigError, ScriptArgsError, ScriptError, ScriptShellError, ScriptZodValidationError } from "./errors";
 
 describe("ScriptError", () => {
     test("stores exit code and message", () => {
@@ -125,5 +126,89 @@ describe("ScriptShellError", () => {
     test("non-empty stderr is rendered trimmed", () => {
         const err = new ScriptShellError("cmd", 1, "", "  fatal: error  ");
         expect(err.message).toContain("stderr: fatal: error");
+    });
+});
+
+describe("ScriptZodValidationError", () => {
+    function makeZodError(issues: Array<{ path: (string | number)[]; message: string }>): z.ZodError {
+        return new z.ZodError(
+            issues.map(({ path, message }) => ({
+                code: "custom" as const,
+                path,
+                message,
+            })),
+        );
+    }
+
+    test("is an instance of ScriptError and Error", () => {
+        const zodErr = makeZodError([{ path: ["field"], message: "Required" }]);
+        const err = new ScriptZodValidationError("ctx", zodErr);
+        expect(err).toBeInstanceOf(ScriptError);
+        expect(err).toBeInstanceOf(Error);
+    });
+
+    test("name is 'ScriptZodValidationError'", () => {
+        const zodErr = makeZodError([{ path: ["x"], message: "Invalid" }]);
+        const err = new ScriptZodValidationError("ctx", zodErr);
+        expect(err.name).toBe("ScriptZodValidationError");
+    });
+
+    test("message contains context, issue paths, messages, and raw input", () => {
+        const zodErr = makeZodError([{ path: ["data", "id"], message: "Expected number" }]);
+        const raw = { data: { id: "notanumber" } };
+        const err = new ScriptZodValidationError("API response", zodErr, raw);
+        expect(err.message).toContain("API response");
+        expect(err.message).toContain("data.id");
+        expect(err.message).toContain("Expected number");
+        expect(err.message).toContain("raw input:");
+        expect(err.message).toContain(JSON.stringify(raw));
+    });
+
+    test("short contains context and issue paths+messages but no raw input", () => {
+        const zodErr = makeZodError([{ path: ["data", "id"], message: "Expected number" }]);
+        const raw = { data: { id: "notanumber" } };
+        const err = new ScriptZodValidationError("API response", zodErr, raw);
+        expect(err.short).toContain("API response");
+        expect(err.short).toContain("data.id");
+        expect(err.short).toContain("Expected number");
+        expect(err.short).not.toContain("raw input:");
+    });
+
+    test("message and short converge when rawInput is omitted", () => {
+        const zodErr = makeZodError([{ path: ["name"], message: "Required" }]);
+        const err = new ScriptZodValidationError("ctx", zodErr);
+        expect(err.message).toBe(err.short);
+    });
+
+    test("multiple issues are all present in message and short", () => {
+        const zodErr = makeZodError([
+            { path: ["a"], message: "Missing a" },
+            { path: ["b"], message: "Missing b" },
+        ]);
+        const err = new ScriptZodValidationError("ctx", zodErr);
+        expect(err.message).toContain("a: Missing a");
+        expect(err.message).toContain("b: Missing b");
+        expect(err.short).toContain("a: Missing a");
+        expect(err.short).toContain("b: Missing b");
+    });
+
+    test("root-level issue (empty path) is rendered as '(root)'", () => {
+        const zodErr = makeZodError([{ path: [], message: "Expected object" }]);
+        const err = new ScriptZodValidationError("ctx", zodErr);
+        expect(err.message).toContain("(root): Expected object");
+        expect(err.short).toContain("(root): Expected object");
+    });
+
+    test("raw input is included verbatim in message as JSON", () => {
+        const raw = [1, 2, 3];
+        const zodErr = makeZodError([{ path: ["0"], message: "Bad" }]);
+        const err = new ScriptZodValidationError("ctx", zodErr, raw);
+        expect(err.message).toContain(`raw input: ${JSON.stringify(raw)}`);
+    });
+
+    test("exitCode is 1 (inherited from ScriptError default)", () => {
+        const zodErr = makeZodError([{ path: ["x"], message: "bad" }]);
+        const err = new ScriptZodValidationError("ctx", zodErr);
+        expect(err.exitCode).toBe(1);
     });
 });
