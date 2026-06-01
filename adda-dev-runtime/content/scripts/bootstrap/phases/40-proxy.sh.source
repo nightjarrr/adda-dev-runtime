@@ -1,0 +1,66 @@
+# ======================================================================
+# 40-proxy.sh — Local proxy bridge initialization
+#
+# Sourced by: entrypoint.sh (after 30-harden-checks-filesystem.sh)
+# Sourcing context: requires section/die/success helpers defined in
+#   00-helpers.sh; requires ADDA_DEV_PROXY_SOCKET and ADDA_DEV_PROXY_PORT
+#   validated in 10-validate-env.sh.
+# Exports: HTTP_PROXY, HTTPS_PROXY, http_proxy, https_proxy,
+#          NO_PROXY, no_proxy
+# ======================================================================
+
+# ----------------------------------------------------------------------
+# Local proxy configuration
+# The real Envoy proxy is exposed on a bind-mounted socket at $ADDA_DEV_PROXY_SOCKET.
+# socat is used as a bridge to connect to the proxy.
+# ----------------------------------------------------------------------
+section "Network proxy bridge initialization"
+
+start_proxy_bridge() {
+    local socket_path="${ADDA_DEV_PROXY_SOCKET}"
+    local proxy_port="${ADDA_DEV_PROXY_PORT:-8080}"
+    local proxy_url="http://127.0.0.1:${proxy_port}"
+    local log_file="/tmp/adda-dev-proxy-socat.log"
+
+    if [[ ! -S "${socket_path}" ]]; then
+        die "proxy socket not found or not a socket: ${socket_path}"
+    fi
+
+    : > "${log_file}"
+
+    socat -d -d \
+        "TCP-LISTEN:${proxy_port},bind=127.0.0.1,reuseaddr,fork" \
+        "UNIX-CONNECT:${socket_path}" \
+        2>"${log_file}" &
+
+    local socat_pid="$!"
+
+    # Wait until the local TCP listener is reachable.
+    for _ in {1..50}; do
+        if ! kill -0 "${socat_pid}" >/dev/null 2>&1; then
+            cat "${log_file}" >&2 || true
+            die "network proxy bridge process exited before becoming ready."
+        fi
+
+        if timeout 1 bash -c ":</dev/tcp/127.0.0.1/${proxy_port}" >/dev/null 2>&1; then
+            export HTTP_PROXY="${proxy_url}"
+            export HTTPS_PROXY="${proxy_url}"
+            export http_proxy="${proxy_url}"
+            export https_proxy="${proxy_url}"
+            export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,::1}"
+            export no_proxy="${no_proxy:-localhost,127.0.0.1,::1}"
+
+            echo "Proxy socket: ${socket_path}"
+            echo "Proxy bridge: ${proxy_url}"
+            echo "socat log: ${log_file}"
+            success "Network proxy bridge started."
+            return 0
+        fi
+
+        sleep 0.1
+    done
+
+    cat "${log_file}" >&2 || true
+    die "network proxy bridge did not become ready on 127.0.0.1:${proxy_port}"
+}
+start_proxy_bridge

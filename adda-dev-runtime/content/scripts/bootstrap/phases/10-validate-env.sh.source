@@ -1,0 +1,60 @@
+# ======================================================================
+# 10-validate-env.sh — Environment and tool validation
+#
+# Sourced by: entrypoint.sh (after 00-helpers.sh)
+# Sourcing context: requires section/die/warning/success/require_env/
+#   require_tool helpers defined in 00-helpers.sh.
+# Exports nothing; validates required env vars and tools, then checks
+#   that /workspace exists and is empty.
+# ======================================================================
+
+section "Validating environment"
+
+require_env GITHUB_OWNER true
+require_env GITHUB_REPO true
+require_env GITHUB_TOKEN_
+require_env TZ true
+require_env BUN_VERSION true
+require_env ADDA_DEV_PROXY_SOCKET
+require_env ADDA_DEV_PROXY_PORT
+
+require_tool socat
+require_tool gh
+require_tool git
+require_tool jq
+require_tool rg
+require_tool fdfind
+require_tool bwrap
+require_tool micro
+require_tool delta
+require_tool bun
+
+# ----------------------------------------------------------------------
+# Issue ID handling
+# ----------------------------------------------------------------------
+if [[ -n "${ISSUE_ID:-}" ]]; then
+    success "ISSUE_ID=${ISSUE_ID}"
+else
+    success "ISSUE_ID not set. No specific Issue context."
+fi
+
+# ----------------------------------------------------------------------
+# Image identity (optional — informational display only)
+# ----------------------------------------------------------------------
+[[ -n "${ADDA_DEV_RUNTIME_IMAGE:-}" ]] && \
+    success "ADDA_DEV_RUNTIME_IMAGE=${ADDA_DEV_RUNTIME_IMAGE}"
+[[ -n "${ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA:-}" ]] && \
+    success "ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA}"
+
+# ----------------------------------------------------------------------
+# Verify /workspace exists, is accessible and empty
+# A non-empty /workspace means the container deviates from design
+# (a bind mount, a stale tmpfs, etc.); fail loudly rather than risk
+# clobbering or merging unexpected content.
+# ----------------------------------------------------------------------
+section "Verifying /workspace initial state"
+
+[[ -d /workspace ]] || die "/workspace does not exist."
+[[ -r /workspace && -x /workspace ]] || die "/workspace is not accessible."
+[[ -n "$(ls -A /workspace 2>/dev/null)" ]] && die "/workspace is not empty."
+success "/workspace is ready."

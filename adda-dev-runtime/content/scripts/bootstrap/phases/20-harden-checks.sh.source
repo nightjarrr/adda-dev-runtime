@@ -1,0 +1,91 @@
+# ======================================================================
+# 20-harden-checks.sh — Network and capability hardening checks
+#
+# Sourced by: entrypoint.sh (after 10-validate-env.sh)
+# Sourcing context: requires section/warning/success helpers defined
+#   in 00-helpers.sh.
+# Exports nothing; emits warnings on policy deviations but does not fail.
+# ======================================================================
+
+# ----------------------------------------------------------------------
+# Check container network mode - expected --network none
+# No routes, only loopback interface.
+# Show warning if this does not appear to be the case, but do not fail.
+# ----------------------------------------------------------------------
+section "Checking container network"
+
+verify_network_mode() {
+    local interfaces=""
+    local has_non_loopback=0
+    local has_default_route=0
+
+    # /sys/class/net is available without iproute2/net-tools.
+    if [[ -d /sys/class/net ]]; then
+        interfaces="$(basename -a /sys/class/net/* 2>/dev/null | sort | tr '\n' ' ')"
+
+        while IFS= read -r iface; do
+            if [[ "$iface" != "lo" ]]; then
+                has_non_loopback=1
+                break
+            fi
+        done < <(basename -a /sys/class/net/* 2>/dev/null)
+    else
+        warning "Cannot inspect /sys/class/net; unable to verify container network mode."
+        return 0
+    fi
+
+    # /proc/net/route exposes kernel route table without requiring iproute2.
+    # A default route has destination 00000000.
+    if [[ -r /proc/net/route ]]; then
+        if awk 'NR > 1 && $2 == "00000000" { found=1 } END { exit found ? 0 : 1 }' /proc/net/route; then
+            has_default_route=1
+        fi
+    else
+        warning "Cannot inspect /proc/net/route; unable to verify default route state."
+    fi
+
+    if [[ "$has_non_loopback" -eq 1 || "$has_default_route" -eq 1 ]]; then
+        warning "Container does not appear to be running with Docker --network none."
+        warning "Detected network interfaces: ${interfaces:-unknown}"
+        if [[ "$has_default_route" -eq 1 ]]; then
+            warning "Detected a default route in /proc/net/route."
+        fi
+        warning "Network isolation is expected to be enforced by the host launcher."
+    else
+        success "Network mode: loopback-only."
+    fi
+}
+verify_network_mode
+
+# ----------------------------------------------------------------------
+# Check container capability and privilege restrictions.
+# Expected: all capabilities dropped, no-new-privileges enabled.
+# Show warning if this does not appear to be the case, but do not fail.
+# ----------------------------------------------------------------------
+section "Checking container capability and privilege restrictions"
+
+verify_capability_hardening() {
+    local cap_eff=""
+    local no_new_privs=""
+
+    if [[ ! -r /proc/self/status ]]; then
+        warning "Cannot inspect /proc/self/status; unable to verify capability/no-new-privileges state."
+        return 0
+    fi
+
+    cap_eff="$(awk '/^CapEff:/ {print $2}' /proc/self/status)"
+    no_new_privs="$(awk '/^NoNewPrivs:/ {print $2}' /proc/self/status)"
+
+    if [[ "$cap_eff" == "0000000000000000" ]]; then
+        success "Capabilities: none effective."
+    else
+        warning "Container effective capabilities are not fully dropped: CapEff=${cap_eff:-unknown}"
+    fi
+
+    if [[ "$no_new_privs" == "1" ]]; then
+        success "Privileges: no-new-privileges enabled."
+    else
+        warning "Container no-new-privileges is not enabled: NoNewPrivs=${no_new_privs:-unknown}"
+    fi
+}
+verify_capability_hardening
