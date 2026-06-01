@@ -153,6 +153,19 @@ describe("ResolveIssueBranchScript", () => {
         });
     });
 
+    describe("invalid JSON response", () => {
+        test("GraphQL response is not valid JSON — exits 1 with invalid JSON error", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async () => ({ stdout: "not valid json{{", stderr: "", exitCode: 0 }),
+            });
+            const exit = await new ResolveIssueBranchScript(deps).run(["bun", "script.ts", "42"]);
+            expect(exit).toBe(1);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(out.details).toBe("invalid JSON");
+        });
+    });
+
     describe("issue not found", () => {
         test("null issue in response — exits 1 with error status", async () => {
             const { deps, outLines } = makeMockDeps({
