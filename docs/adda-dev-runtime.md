@@ -435,13 +435,17 @@ Runtime package-registry access:
 
 - Container/toolchain dependencies are baked into the image and do not require runtime package-manager access.
 - Project code dependencies may require runtime registry access because the repository is cloned by the entrypoint after the container starts.
-- Registry access must be explicit, ecosystem-specific, and lockfile/frozen-mode based. Examples: PyPI domains for Python/uv projects, npm registry domains for Node projects, or equivalent domains for other ecosystems.
+- Registry access must be explicit, ecosystem-specific, and lockfile/frozen-mode based. Examples: PyPI domains (`pypi.org`, `files.pythonhosted.org`) and the uv installer domain (`releases.astral.sh`) for Python/uv projects; npm registry domains for Node projects; or equivalent domains for other ecosystems.
 - OS package registries such as Ubuntu/Debian APT mirrors are not allowed in the Claude runtime container.
 
 Target-state non-goals for runtime allow-list:
 
 - `ghcr.io` is not required inside the Claude container. The host launcher pulls the image.
 - Arbitrary direct web fetch is not part of the baseline network policy.
+
+### Allow-list implementation
+
+Default-deny is achieved via Envoy RBAC `action: ALLOW` — no explicit wildcard deny rule is needed; a request that matches no policy entry is denied automatically. Policy match basis is `:authority`. For HTTPS `CONNECT`, authority is `host:port` (e.g. `api.github.com:443`); for plain HTTP, authority may be `host` or `host:port` — allow-list entries must account for both forms. The dynamic forward proxy cluster is retained; the RBAC filter restricts it before DNS resolution and upstream connection.
 
 ### DNS
 
@@ -963,6 +967,5 @@ The following are recognized but not part of the immediate baseline implementati
 1. **Broad web retrieval plane** — define how user-approved direct URL fetch and research should work without opening general egress from the Claude dev container.
 2. **Live allow-list management** — explore whether Envoy policy should be reloadable without sidecar restart, and whether a UI/control plane is justified.
 3. **Credential hiding behind proxy/gateway** — investigate whether future API-specific gateways can inject auth headers so selected tools do not receive raw tokens.
-4. **Base/project entrypoint split** — extract generic Claude dev runtime logic into a reusable base layer and project-specific bootstrap into hooks. The repo-level `.adda-init.sh` hook (see *Repo-level init hook* section) partially addresses this by giving any repository a lightweight bootstrap point without a full Tier 3 image build.
-5. **Image provenance hardening** — complete GHCR publishing, digest pinning, provenance, and scheduled rebuild workflow.
-6. **Stronger sandboxing** — evaluate gVisor or VM isolation if kernel escape risk becomes a higher priority.
+4. **Image provenance hardening** — GHCR publishing is implemented; remaining work: digest pinning, SLSA provenance attestation, and scheduled weekly rebuild workflow.
+5. **Stronger sandboxing** — evaluate gVisor or VM isolation if kernel escape risk becomes a higher priority.
