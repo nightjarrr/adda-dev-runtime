@@ -180,10 +180,13 @@ RUN groupadd --gid ${USER_GID} ${USERNAME} \
 # ----------------------------------------------------------------------
 COPY adda-dev-runtime/content/scripts/bootstrap/ /usr/local/libexec/adda-dev-runtime/bootstrap/
 RUN mkdir -p /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d \
-    && for f in /usr/local/libexec/adda-dev-runtime/bootstrap/*.sh.source; do \
+    && for f in \
+        /usr/local/libexec/adda-dev-runtime/bootstrap/*.sh.source \
+        /usr/local/libexec/adda-dev-runtime/bootstrap/phases/*.sh.source; do \
         mv "$f" "${f%.source}"; \
     done \
-    && chmod +x /usr/local/libexec/adda-dev-runtime/bootstrap/*.sh
+    && chmod +x /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh \
+                /usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh
 COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/
 
 

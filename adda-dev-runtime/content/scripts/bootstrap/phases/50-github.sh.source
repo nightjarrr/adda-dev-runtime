@@ -1,0 +1,94 @@
+# ======================================================================
+# 50-github.sh — GitHub authentication, user details, clone, and branch
+#
+# Sourced by: entrypoint.sh (after 40-proxy.sh)
+# Sourcing context: requires section/die/success helpers defined in
+#   00-helpers.sh; requires GITHUB_TOKEN_, GITHUB_OWNER, GITHUB_REPO,
+#   and ISSUE_ID validated in 10-validate-env.sh; proxy must be up
+#   (40-proxy.sh) for gh and git network calls to succeed.
+# Exports: GH_REPO, GH_USER_ID, GH_USERNAME
+# ======================================================================
+
+# ----------------------------------------------------------------------
+# Configure GitHub authentication via gh
+# This installs gh's git credential helper as a side effect, so both
+# `gh` and `git` work against github.com without further setup.
+#
+# GITHUB_TOKEN_ (with trailing underscore) is the launcher → container
+# contract; gh does not recognize it, so we can pipe it directly to
+# `gh auth login` without first unsetting a reserved env var. After
+# auth, the token lives in gh's credential helper config, so we drop
+# GITHUB_TOKEN_ from the environment.
+# ----------------------------------------------------------------------
+section "Configuring GitHub authentication"
+
+echo "$GITHUB_TOKEN_" | gh auth login --with-token --hostname github.com
+unset GITHUB_TOKEN_
+gh auth setup-git
+gh auth status
+
+# Set gh's reserved GH_REPO so subsequent gh calls (entrypoint's own
+# and the user's interactive ones) target the project repo by default.
+export GH_REPO="${GITHUB_OWNER}/${GITHUB_REPO}"
+
+success "GitHub authentication initialized."
+
+# ----------------------------------------------------------------------
+# Fetch GitHub user details
+# Populate GH_USER_ID and GH_USERNAME so downstream hooks (e.g. the
+# proto-adda Tier 2 hook) can use them without making their own API calls.
+# ----------------------------------------------------------------------
+section "Fetching GitHub user details"
+
+GH_USER_ID="$(gh api user --jq .id)"
+GH_USERNAME="$(gh api user --jq .login)"
+success "GitHub user: ${GH_USERNAME} (id=${GH_USER_ID})."
+
+# ----------------------------------------------------------------------
+# Clone the project repository
+# ----------------------------------------------------------------------
+section "Cloning ${GH_REPO} into /workspace"
+
+git clone "https://github.com/${GH_REPO}.git" /workspace
+cd /workspace
+success "Repository cloned."
+
+# ----------------------------------------------------------------------
+# Resolve and check out the working branch
+# ----------------------------------------------------------------------
+section "Resolving working branch"
+
+if [[ -z "${ISSUE_ID:-}" ]]; then
+    success "No ISSUE_ID; staying on main."
+else
+    resolve_result="$(/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch "${ISSUE_ID}" || true)"
+    resolve_status="$(echo "${resolve_result}" | jq -r '.status')"
+    resolve_branch="$(echo "${resolve_result}" | jq -r '.branch')"
+    resolve_pr="$(echo "${resolve_result}"    | jq -r '.pr')"
+    resolve_details="$(echo "${resolve_result}" | jq -r '.details')"
+
+    case "${resolve_status}" in
+        feature_branch)
+            if [[ -n "${resolve_pr}" ]]; then
+                echo "Issue #${ISSUE_ID}: resolved via open PR #${resolve_pr} (branch: ${resolve_branch})."
+            else
+                echo "Issue #${ISSUE_ID}: one linked branch (${resolve_branch}); checking out."
+            fi
+            git checkout "${resolve_branch}"
+            success "Checked out branch ${resolve_branch} for Issue #${ISSUE_ID}."
+            ;;
+        main)
+            success "Issue #${ISSUE_ID}: no linked branch yet; staying on main."
+            echo "Branch creation is the SDLC's spec phase responsibility."
+            ;;
+        ambiguous)
+            die "Issue #${ISSUE_ID}: ${resolve_details}. Resolve in GitHub (Issue page → Development sidebar) and retry."
+            ;;
+        error)
+            die "Issue #${ISSUE_ID}: branch resolution failed. ${resolve_details}"
+            ;;
+        *)
+            die "Issue #${ISSUE_ID}: unexpected resolution status '${resolve_status}'."
+            ;;
+    esac
+fi

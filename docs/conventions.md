@@ -8,8 +8,9 @@
 - Structure logic into named functions; group related functions under `# ---`-delimited section
   headings.
 - `# shellcheck disable=SC…` requires a `# Why:` comment on the immediately following line.
-- The `section`/`die`/`warning`/`success` helpers are defined in `entrypoint.sh` and available
-  only in sourced entrypoint hooks (`entrypoint.d/*.sh`); not in standalone scripts.
+- The `section`/`die`/`warning`/`success` helpers are defined in
+  `bootstrap/phases/00-helpers.sh` and available in all phases and sourced entrypoint hooks
+  (`entrypoint.d/*.sh`); not in standalone scripts.
 
 ## .sh.source files
 

@@ -1,0 +1,52 @@
+# ======================================================================
+# 00-helpers.sh — Output and validation helper functions
+#
+# Sourced by: entrypoint.sh (before any other phase)
+# Sourcing context: runs in the entrypoint shell; defines functions
+#   available to all subsequent phases and entrypoint.d hooks.
+# Exports nothing; all definitions land in the sourcing shell's namespace.
+# ======================================================================
+
+# ----------------------------------------------------------------------
+# Output helpers
+# ----------------------------------------------------------------------
+section() {
+    printf '\n\033[1;32m==> %s\033[0m\n' "$*"
+}
+
+die() {
+    printf '\033[1;31mError:\033[0m %s\n' "$*" >&2
+    exit 1
+}
+
+warning() {
+    printf '\033[1;33mWarning:\033[0m %s\n' "$*" >&2
+}
+
+success() {
+    printf '\033[1;32m✓\033[0m %s\n' "$*"
+}
+
+# ----------------------------------------------------------------------
+# Validation helpers
+# ----------------------------------------------------------------------
+require_env() {
+    local var="$1"
+    local show_value="${2:-false}"
+    if [[ -z "${!var:-}" ]]; then
+        die "required environment variable '${var}' is not set; check the launcher."
+    fi
+    local text="$var"
+    if [[ "$show_value" == "true" ]]; then
+        text="${text}=${!var}"
+    fi
+    success "$text"
+}
+
+require_tool() {
+    local tool="$1"
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        die "tool '${tool}' not found in PATH. Container image does not match entrypoint.sh prerequisites; cannot proceed."
+    fi
+    success "$tool"
+}

@@ -1,6 +1,6 @@
 #!/bin/bash
 # ======================================================================
-# entrypoint.sh — Tier 1 base bootstrap
+# entrypoint.sh — Tier 1 base bootstrap sequencer
 #
 # Runs as the container's ENTRYPOINT. Receives configuration via env vars
 # from the launcher (adda-dev.sh on the host):
@@ -22,35 +22,35 @@
 #   ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA  Git SHA baked at build time by CI; empty
 #                                    for local builds.
 #
-# Organized into two logical sections:
-#   1. BASE — generic dev environment bootstrap (GitHub auth, clone,
-#             branch resolution, proxy bridge, hardening checks)
-#   2. HOOKS — sourced bootstrap hooks dropped by higher-tier images
+# Organized as a thin sequencer that sources phase files from the
+# bootstrap/phases/ subdirectory. Each phase file is a focused,
+# single-concern script:
+#
+#   00-helpers.sh                — output and validation helper functions
+#   10-validate-env.sh           — env vars, tools, /workspace check
+#   20-harden-checks.sh          — network and capability checks
+#   30-harden-checks-filesystem.sh — filesystem hardening checks
+#   40-proxy.sh                  — socat proxy bridge
+#   50-github.sh                 — GitHub auth, user, clone, branch
+#   60-bashrc.sh                 — write ~/.bashrc (after all hooks)
+#
+# Bootstrap traps, the entrypoint.d hooks loop, the repo-init hook,
+# the bootstrap summary, and CMD exec remain here in the sequencer.
 #
 # ======================================================================
 
 set -euo pipefail
 _bootstrap_start=$SECONDS
 
+_PHASES_DIR="$(dirname "$(realpath "${BASH_SOURCE[0]}")")/phases"
+
 # ----------------------------------------------------------------------
-# Helpers
+# Phase 00: helpers — must be first; all phases depend on these
 # ----------------------------------------------------------------------
-section() {
-    printf '\n\033[1;32m==> %s\033[0m\n' "$*"
-}
-
-die() {
-    printf '\033[1;31mError:\033[0m %s\n' "$*" >&2
-    exit 1
-}
-
-warning() {
-    printf '\033[1;33mWarning:\033[0m %s\n' "$*" >&2
-}
-
-success() {
-    printf '\033[1;32m✓\033[0m %s\n' "$*"
-}
+# shellcheck disable=SC1091
+# Why: phases/ files are co-located scripts discovered at runtime via
+# _PHASES_DIR; the source path is intentionally dynamic.
+source "${_PHASES_DIR}/00-helpers.sh"
 
 # ======================================================================
 # BASE — generic dev environment bootstrap
@@ -58,10 +58,9 @@ success() {
 section "Welcome to ephemeral ADDA Dev Runtime"
 
 # ----------------------------------------------------------------------
-# Validate required environment
+# Bootstrap-failure EXIT trap — installed before validate-env so any
+# early failure pauses the container for autopsy.
 # ----------------------------------------------------------------------
-section "Validating environment"
-
 # shellcheck disable=SC2317
 # Why: function body runs via `trap bootstrap_failure EXIT`; shellcheck
 # does not follow trap-bound execution paths.
@@ -71,402 +70,18 @@ bootstrap_failure() {
 }
 trap bootstrap_failure EXIT
 
-require_env() {
-    local var="$1"
-    local show_value="${2:-false}"
-    if [[ -z "${!var:-}" ]]; then
-        die "required environment variable '${var}' is not set; check the launcher."
-    fi
-    local text="$var"
-    if [[ "$show_value" == "true" ]]; then
-        text="${text}=${!var}"
-    fi
-    success "$text"
-}
-
-require_tool() {
-    local tool="$1"
-    if ! command -v "$tool" >/dev/null 2>&1; then
-        die "tool '${tool}' not found in PATH. Container image does not match entrypoint.sh prerequisites; cannot proceed."
-    fi
-    success "$tool"
-}
-
-require_env GITHUB_OWNER true
-require_env GITHUB_REPO true
-require_env GITHUB_TOKEN_
-require_env TZ true
-require_env BUN_VERSION true
-require_env ADDA_DEV_PROXY_SOCKET
-require_env ADDA_DEV_PROXY_PORT
-
-require_tool socat
-require_tool gh
-require_tool git
-require_tool jq
-require_tool rg
-require_tool fdfind
-require_tool bwrap
-require_tool micro
-require_tool delta
-require_tool bun
-
-# ----------------------------------------------------------------------
-# Issue ID handling
-# ----------------------------------------------------------------------
-if [[ -n "${ISSUE_ID:-}" ]]; then
-    success "ISSUE_ID=${ISSUE_ID}"
-else
-    success "ISSUE_ID not set. No specific Issue context."
-fi
-
-# ----------------------------------------------------------------------
-# Image identity (optional — informational display only)
-# ----------------------------------------------------------------------
-[[ -n "${ADDA_DEV_RUNTIME_IMAGE:-}" ]] && \
-    success "ADDA_DEV_RUNTIME_IMAGE=${ADDA_DEV_RUNTIME_IMAGE}"
-[[ -n "${ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA:-}" ]] && \
-    success "ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA}"
-
-# ----------------------------------------------------------------------
-# Verify /workspace exists, is accessible and empty
-# A non-empty /workspace means the container deviates from design
-# (a bind mount, a stale tmpfs, etc.); fail loudly rather than risk
-# clobbering or merging unexpected content.
-# ----------------------------------------------------------------------
-section "Verifying /workspace initial state"
-
-[[ -d /workspace ]] || die "/workspace does not exist."
-[[ -r /workspace && -x /workspace ]] || die "/workspace is not accessible."
-[[ -n "$(ls -A /workspace 2>/dev/null)" ]] && die "/workspace is not empty."
-success "/workspace is ready."
-
-# ----------------------------------------------------------------------
-# Check container network mode - expected --network none
-# No routes, only loopback interface.
-# Show warning if this does not appear to be the case, but do not fail.
-# ----------------------------------------------------------------------
-section "Checking container network"
-
-verify_network_mode() {
-    local interfaces=""
-    local has_non_loopback=0
-    local has_default_route=0
-
-    # /sys/class/net is available without iproute2/net-tools.
-    if [[ -d /sys/class/net ]]; then
-        interfaces="$(basename -a /sys/class/net/* 2>/dev/null | sort | tr '\n' ' ')"
-
-        while IFS= read -r iface; do
-            if [[ "$iface" != "lo" ]]; then
-                has_non_loopback=1
-                break
-            fi
-        done < <(basename -a /sys/class/net/* 2>/dev/null)
-    else
-        warning "Cannot inspect /sys/class/net; unable to verify container network mode."
-        return 0
-    fi
-
-    # /proc/net/route exposes kernel route table without requiring iproute2.
-    # A default route has destination 00000000.
-    if [[ -r /proc/net/route ]]; then
-        if awk 'NR > 1 && $2 == "00000000" { found=1 } END { exit found ? 0 : 1 }' /proc/net/route; then
-            has_default_route=1
-        fi
-    else
-        warning "Cannot inspect /proc/net/route; unable to verify default route state."
-    fi
-
-    if [[ "$has_non_loopback" -eq 1 || "$has_default_route" -eq 1 ]]; then
-        warning "Container does not appear to be running with Docker --network none."
-        warning "Detected network interfaces: ${interfaces:-unknown}"
-        if [[ "$has_default_route" -eq 1 ]]; then
-            warning "Detected a default route in /proc/net/route."
-        fi
-        warning "Network isolation is expected to be enforced by the host launcher."
-    else
-        success "Network mode: loopback-only."
-    fi
-}
-verify_network_mode
-
-# ----------------------------------------------------------------------
-# Check container capability and privilege restrictions.
-# Expected: all capabilities dropped, no-new-privileges enabled.
-# Show warning if this does not appear to be the case, but do not fail.
-# ----------------------------------------------------------------------
-section "Checking container capability and privilege restrictions"
-
-verify_capability_hardening() {
-    local cap_eff=""
-    local no_new_privs=""
-
-    if [[ ! -r /proc/self/status ]]; then
-        warning "Cannot inspect /proc/self/status; unable to verify capability/no-new-privileges state."
-        return 0
-    fi
-
-    cap_eff="$(awk '/^CapEff:/ {print $2}' /proc/self/status)"
-    no_new_privs="$(awk '/^NoNewPrivs:/ {print $2}' /proc/self/status)"
-
-    if [[ "$cap_eff" == "0000000000000000" ]]; then
-        success "Capabilities: none effective."
-    else
-        warning "Container effective capabilities are not fully dropped: CapEff=${cap_eff:-unknown}"
-    fi
-
-    if [[ "$no_new_privs" == "1" ]]; then
-        success "Privileges: no-new-privileges enabled."
-    else
-        warning "Container no-new-privileges is not enabled: NoNewPrivs=${no_new_privs:-unknown}"
-    fi
-}
-verify_capability_hardening
-
-# ----------------------------------------------------------------------
-# Check container root filesystem is read-only.
-# Expected: read-only root with writable tmpfs mounts as needed.
-# Show warning if root is not read-only, but do not fail.
-# ----------------------------------------------------------------------
-
-section "Checking container filesystem"
-
-mount_field() {
-    local path="$1"
-    local field="$2"
-
-    awk -v path="$path" -v field="$field" '
-        $2 == path { value = $field }
-        END {
-            if (value != "") {
-                print value
-            } else {
-                exit 1
-            }
-        }
-    ' /proc/mounts
-}
-
-mount_fstype() {
-    mount_field "$1" 3
-}
-
-mount_options() {
-    mount_field "$1" 4
-}
-
-mount_has_option() {
-    local path="$1"
-    local option="$2"
-    local options
-
-    if ! options="$(mount_options "$path" 2>/dev/null)"; then
-        return 1
-    fi
-
-    [[ ",${options}," == *",${option},"* ]]
-}
-
-check_mount_is_tmpfs() {
-    local path="$1"
-    local fstype
-
-    if ! fstype="$(mount_fstype "$path" 2>/dev/null)"; then
-        warning "Expected mount not found: ${path}"
-        return 1
-    fi
-
-    if [[ "$fstype" != "tmpfs" ]]; then
-        warning "Expected ${path} to be tmpfs, got filesystem type: ${fstype}"
-        return 1
-    fi
-
-    return 0
-}
-
-check_path_writable() {
-    local path="$1"
-    local test_file="${path%/}/.adda-dev-write-check.$$"
-
-    if ( : > "$test_file" ) 2>/dev/null; then
-        rm -f "$test_file" 2>/dev/null || true
-        return 0
-    fi
-
-    warning "Expected path to be writable by current user, but write failed: ${path}"
-    return 1
-}
-
-check_path_owner() {
-    local path="$1"
-    local expected_uid="$2"
-    local expected_gid="$3"
-    local actual
-
-    if ! actual="$(stat -c '%u:%g' "$path" 2>/dev/null)"; then
-        warning "Cannot stat expected writable path: ${path}"
-        return 1
-    fi
-
-    if [[ "$actual" != "${expected_uid}:${expected_gid}" ]]; then
-        warning "Unexpected ownership for ${path}: got ${actual}, expected ${expected_uid}:${expected_gid}"
-        return 1
-    fi
-
-    return 0
-}
-
-verify_filesystem_hardening() {
-    local failed=0
-    local uid gid
-    local expected_tmpfs_paths
-
-    uid="$(id -u)"
-    gid="$(id -g)"
-
-    expected_tmpfs_paths=(
-        "$HOME"
-        "/workspace"
-        "/tmp"
-        "/var/tmp"
-        "/run"
-    )
-
-    # Root filesystem is mounted read-only.
-    if mount_has_option "/" "ro"; then
-        success "Root filesystem is mounted read-only."
-    else
-        warning "Root filesystem does not appear to be mounted read-only."
-        failed=1
-    fi
-
-    # Expected writable tmpfs mounts exist.
-    local tmpfs_ok=1
-    for path in "${expected_tmpfs_paths[@]}"; do
-        if ! check_mount_is_tmpfs "$path"; then
-            tmpfs_ok=0
-            failed=1
-        fi
-    done
-
-    if [[ "$tmpfs_ok" -eq 1 ]]; then
-        success "Expected writable paths are tmpfs mounts."
-    fi
-
-    # Writable tmpfs mounts are writable by the current user.
-    local writable_ok=1
-    for path in "${expected_tmpfs_paths[@]}"; do
-        if ! check_path_writable "$path"; then
-            writable_ok=0
-            failed=1
-        fi
-    done
-
-    if [[ "$writable_ok" -eq 1 ]]; then
-        success "Expected tmpfs mounts are writable by current user."
-    fi
-
-    # Root filesystem rejects writes outside approved writable mounts.
-    #
-    # This is a practical smoke test. Failure to write is expected. The
-    # earlier mount-option check is the stronger verification that / is ro.
-    local root_write_failed=1
-
-    if (: > "/.adda-dev-rootfs-write-check.$$") 2>/dev/null; then
-        warning "Unexpectedly wrote to root filesystem path: /.adda-dev-rootfs-write-check.$$"
-        rm -f "/.adda-dev-rootfs-write-check.$$" 2>/dev/null || true
-        root_write_failed=0
-        failed=1
-    fi
-
-    if (: > "/etc/.adda-dev-rootfs-write-check.$$") 2>/dev/null; then
-        warning "Unexpectedly wrote to root filesystem path: /etc/.adda-dev-rootfs-write-check.$$"
-        rm -f "/etc/.adda-dev-rootfs-write-check.$$" 2>/dev/null || true
-        root_write_failed=0
-        failed=1
-    fi
-
-    if [[ "$root_write_failed" -eq 1 ]]; then
-        success "Writes outside approved writable mounts are rejected."
-    fi
-
-    # Expected tmpfs mount ownership matches runtime user.
-    local ownership_ok=1
-    for path in "${expected_tmpfs_paths[@]}"; do
-        if ! check_path_owner "$path" "$uid" "$gid"; then
-            ownership_ok=0
-            failed=1
-        fi
-    done
-
-    if [[ "$ownership_ok" -eq 1 ]]; then
-        success "Expected tmpfs mounts are owned by current user (${uid}:${gid})."
-    fi
-
-    # Executable paths are executable where needed.
-    local exec_ok=1
-
-    if mount_has_option "$HOME" "noexec"; then
-        warning "${HOME} is mounted noexec, but project tooling may need to execute files from it."
-        exec_ok=0
-        failed=1
-    fi
-
-    if mount_has_option "/workspace" "noexec"; then
-        warning "/workspace is mounted noexec, but project tooling may need to execute files from it."
-        exec_ok=0
-        failed=1
-    fi
-
-    if [[ "$exec_ok" -eq 1 ]]; then
-        success "Executable tmpfs paths are not mounted noexec."
-    fi
-
-    # Runtime path /run is mounted noexec.
-    if mount_has_option "/run" "noexec"; then
-        success "/run is mounted noexec."
-    else
-        warning "/run is not mounted noexec."
-        failed=1
-    fi
-
-    # No unexpected non-tmpfs writable mountpoints.
-    #
-    # Ignore expected Docker/pseudo filesystems and Docker-managed config
-    # file mounts. Warn on unexpected writable non-tmpfs mounts.
-    local unexpected_mounts=""
-    while read -r _source target fstype options rest; do
-        [[ ",${options}," == *",rw,"* ]] || continue
-
-        case "$fstype" in
-            tmpfs|proc|sysfs|devpts|mqueue|cgroup|cgroup2|devtmpfs)
-                continue
-                ;;
-        esac
-
-        case "$target" in
-            /etc/hosts|/etc/hostname|/etc/resolv.conf)
-                continue
-                ;;
-        esac
-
-        unexpected_mounts+="${target} (${fstype}, ${options})"$'\n'
-    done < /proc/mounts
-
-    if [[ -n "$unexpected_mounts" ]]; then
-        warning "Unexpected writable non-tmpfs mountpoints detected:"
-        printf '%s' "$unexpected_mounts" | sed 's/^/  - /' >&2
-        failed=1
-    else
-        success "No unexpected writable non-tmpfs mountpoints detected."
-    fi
-
-    if [[ "$failed" -eq 0 ]]; then
-        success "Read-only root and tmpfs hardening checks passed."
-    fi
-}
-verify_filesystem_hardening
+# shellcheck disable=SC1091
+# Why: phases/ files are co-located scripts discovered at runtime via
+# _PHASES_DIR; the source path is intentionally dynamic.
+source "${_PHASES_DIR}/10-validate-env.sh"
+# shellcheck disable=SC1091
+# Why: phases/ files are co-located scripts discovered at runtime via
+# _PHASES_DIR; the source path is intentionally dynamic.
+source "${_PHASES_DIR}/20-harden-checks.sh"
+# shellcheck disable=SC1091
+# Why: phases/ files are co-located scripts discovered at runtime via
+# _PHASES_DIR; the source path is intentionally dynamic.
+source "${_PHASES_DIR}/30-harden-checks-filesystem.sh"
 
 # ----------------------------------------------------------------------
 # Bootstrap-complete marker — EXIT trap (failure safety net)
@@ -488,145 +103,14 @@ mark_bootstrap_complete() {
 }
 trap mark_bootstrap_complete EXIT
 
-# ----------------------------------------------------------------------
-# Local proxy configuration
-# The real Envoy proxy is exposed on a bind-mounted socket at $ADDA_DEV_PROXY_SOCKET.
-# socat is used as a bridge to connect to the proxy.
-# ----------------------------------------------------------------------
-section "Network proxy bridge initialization"
-
-start_proxy_bridge() {
-    local socket_path="${ADDA_DEV_PROXY_SOCKET}"
-    local proxy_port="${ADDA_DEV_PROXY_PORT:-8080}"
-    local proxy_url="http://127.0.0.1:${proxy_port}"
-    local log_file="/tmp/adda-dev-proxy-socat.log"
-
-    if [[ ! -S "${socket_path}" ]]; then
-        die "proxy socket not found or not a socket: ${socket_path}"
-    fi
-
-    : > "${log_file}"
-
-    socat -d -d \
-        "TCP-LISTEN:${proxy_port},bind=127.0.0.1,reuseaddr,fork" \
-        "UNIX-CONNECT:${socket_path}" \
-        2>"${log_file}" &
-
-    local socat_pid="$!"
-
-    # Wait until the local TCP listener is reachable.
-    for _ in {1..50}; do
-        if ! kill -0 "${socat_pid}" >/dev/null 2>&1; then
-            cat "${log_file}" >&2 || true
-            die "network proxy bridge process exited before becoming ready."
-        fi
-
-        if timeout 1 bash -c ":</dev/tcp/127.0.0.1/${proxy_port}" >/dev/null 2>&1; then
-            export HTTP_PROXY="${proxy_url}"
-            export HTTPS_PROXY="${proxy_url}"
-            export http_proxy="${proxy_url}"
-            export https_proxy="${proxy_url}"
-            export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,::1}"
-            export no_proxy="${no_proxy:-localhost,127.0.0.1,::1}"
-
-            echo "Proxy socket: ${socket_path}"
-            echo "Proxy bridge: ${proxy_url}"
-            echo "socat log: ${log_file}"
-            success "Network proxy bridge started."
-            return 0
-        fi
-
-        sleep 0.1
-    done
-
-    cat "${log_file}" >&2 || true
-    die "network proxy bridge did not become ready on 127.0.0.1:${proxy_port}"
-}
-start_proxy_bridge
-
-# ----------------------------------------------------------------------
-# Configure GitHub authentication via gh
-# This installs gh's git credential helper as a side effect, so both
-# `gh` and `git` work against github.com without further setup.
-#
-# GITHUB_TOKEN_ (with trailing underscore) is the launcher → container
-# contract; gh does not recognize it, so we can pipe it directly to
-# `gh auth login` without first unsetting a reserved env var. After
-# auth, the token lives in gh's credential helper config, so we drop
-# GITHUB_TOKEN_ from the environment.
-# ----------------------------------------------------------------------
-section "Configuring GitHub authentication"
-
-echo "$GITHUB_TOKEN_" | gh auth login --with-token --hostname github.com
-unset GITHUB_TOKEN_
-gh auth setup-git
-gh auth status
-
-# Set gh's reserved GH_REPO so subsequent gh calls (entrypoint's own
-# and the user's interactive ones) target the project repo by default.
-export GH_REPO="${GITHUB_OWNER}/${GITHUB_REPO}"
-
-success "GitHub authentication initialized."
-
-# ----------------------------------------------------------------------
-# Fetch GitHub user details
-# Populate GH_USER_ID and GH_USERNAME so downstream hooks (e.g. the
-# proto-adda Tier 2 hook) can use them without making their own API calls.
-# ----------------------------------------------------------------------
-section "Fetching GitHub user details"
-
-GH_USER_ID="$(gh api user --jq .id)"
-GH_USERNAME="$(gh api user --jq .login)"
-success "GitHub user: ${GH_USERNAME} (id=${GH_USER_ID})."
-
-# ----------------------------------------------------------------------
-# Clone the project repository
-# ----------------------------------------------------------------------
-section "Cloning ${GH_REPO} into /workspace"
-
-git clone "https://github.com/${GH_REPO}.git" /workspace
-cd /workspace
-success "Repository cloned."
-
-# ----------------------------------------------------------------------
-# Resolve and check out the working branch
-# ----------------------------------------------------------------------
-section "Resolving working branch"
-
-if [[ -z "${ISSUE_ID:-}" ]]; then
-    success "No ISSUE_ID; staying on main."
-else
-    resolve_result="$(/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch "${ISSUE_ID}" || true)"
-    resolve_status="$(echo "${resolve_result}" | jq -r '.status')"
-    resolve_branch="$(echo "${resolve_result}" | jq -r '.branch')"
-    resolve_pr="$(echo "${resolve_result}"    | jq -r '.pr')"
-    resolve_details="$(echo "${resolve_result}" | jq -r '.details')"
-
-    case "${resolve_status}" in
-        feature_branch)
-            if [[ -n "${resolve_pr}" ]]; then
-                echo "Issue #${ISSUE_ID}: resolved via open PR #${resolve_pr} (branch: ${resolve_branch})."
-            else
-                echo "Issue #${ISSUE_ID}: one linked branch (${resolve_branch}); checking out."
-            fi
-            git checkout "${resolve_branch}"
-            success "Checked out branch ${resolve_branch} for Issue #${ISSUE_ID}."
-            ;;
-        main)
-            success "Issue #${ISSUE_ID}: no linked branch yet; staying on main."
-            echo "Branch creation is the SDLC's spec phase responsibility."
-            ;;
-        ambiguous)
-            die "Issue #${ISSUE_ID}: ${resolve_details}. Resolve in GitHub (Issue page → Development sidebar) and retry."
-            ;;
-        error)
-            die "Issue #${ISSUE_ID}: branch resolution failed. ${resolve_details}"
-            ;;
-        *)
-            die "Issue #${ISSUE_ID}: unexpected resolution status '${resolve_status}'."
-            ;;
-    esac
-fi
+# shellcheck disable=SC1091
+# Why: phases/ files are co-located scripts discovered at runtime via
+# _PHASES_DIR; the source path is intentionally dynamic.
+source "${_PHASES_DIR}/40-proxy.sh"
+# shellcheck disable=SC1091
+# Why: phases/ files are co-located scripts discovered at runtime via
+# _PHASES_DIR; the source path is intentionally dynamic.
+source "${_PHASES_DIR}/50-github.sh"
 
 # ======================================================================
 # Entrypoint hooks — sourced by Tier 1 entrypoint after BASE init and
@@ -675,40 +159,12 @@ fi
 # COMMON — handoff to CMD
 # ======================================================================
 
-# ----------------------------------------------------------------------
-# Write ~/.bashrc with PS1 and propagated environment variables.
-#
-# Placed here — after start_proxy_bridge (which exports the proxy vars),
-# after export GH_REPO, and after hooks — so the file reflects the
-# entrypoint's final environment, including anything hooks may export.
-# This is an ephemeral container; overwriting .bashrc is intentional.
-# ----------------------------------------------------------------------
-section "Initializing shell config in ~/.bashrc."
-
-write_bashrc() {
-    local context="${GITHUB_REPO}"
-
-    if [[ -n "${ISSUE_ID:-}" ]]; then
-        context="${context} #${ISSUE_ID}"
-    fi
-
-    cat > "${HOME}/.bashrc" <<EOF
-# ADDA Dev container shell config.
-# Generated by entrypoint.sh.
-
-export PS1='\\[\\033[1;36m\\][adda-dev ${context}]\\[\\033[0m\\] \\w\\$ '
-
-export HTTP_PROXY='${HTTP_PROXY}'
-export HTTPS_PROXY='${HTTPS_PROXY}'
-export http_proxy='${http_proxy}'
-export https_proxy='${https_proxy}'
-export NO_PROXY='${NO_PROXY}'
-export no_proxy='${no_proxy}'
-export GH_REPO='${GH_REPO}'
-EOF
-}
-write_bashrc
-success "Shell config written to ~/.bashrc."
+# Phase 60: write ~/.bashrc — must come after all hooks so it captures
+# the final environment state, including anything hooks may export.
+# shellcheck disable=SC1091
+# Why: phases/ files are co-located scripts discovered at runtime via
+# _PHASES_DIR; the source path is intentionally dynamic.
+source "${_PHASES_DIR}/60-bashrc.sh"
 
 # Touch the marker explicitly so the "adda-dev shell" tmux window opens
 # promptly without waiting for CMD or the EXIT trap.
