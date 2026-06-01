@@ -42,7 +42,7 @@ export class ScriptZodValidationError extends ScriptError {
 
     constructor(context: string, error: z.ZodError, rawInput?: unknown) {
         const issues = error.issues.map((i) => `${i.path.length > 0 ? i.path.join(".") : "(root)"}: ${i.message}`).join("; ");
-        const raw = rawInput !== undefined ? `\n\nraw input: ${JSON.stringify(rawInput)}` : "";
+        const raw = rawInput !== undefined ? `\nraw data:\n\n${JSON.stringify(rawInput)}` : "";
         super(`${context}: ${issues}${raw}`);
         this.short = `${context}: ${issues}`;
         this.name = "ScriptZodValidationError";

@@ -200,12 +200,14 @@ import { z } from "zod";
 const ResultSchema = z.object({ id: z.number(), name: z.string() });
 ```
 
+**Always use `parseJson` (from `@adda/lib`) instead of bare `JSON.parse`** at all external data boundaries — it wraps `JSON.parse` and throws a diagnostic `ScriptError` (with the raw content included) on invalid input, rather than a bare `SyntaxError`.
+
 **Always use `.safeParse()`, never `.parse()`** — let `ScriptZodValidationError` handle the failure path:
 
 ```typescript
-import { ScriptZodValidationError } from "@adda/lib";
+import { parseJson, ScriptZodValidationError } from "@adda/lib";
 
-const raw = JSON.parse(ghResult.stdout);
+const raw = parseJson(ghResult.stdout);
 const parsed = ResultSchema.safeParse(raw);
 if (!parsed.success)
     throw new ScriptZodValidationError("unexpected API response", parsed.error, raw);

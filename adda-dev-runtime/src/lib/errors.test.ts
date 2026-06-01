@@ -160,7 +160,7 @@ describe("ScriptZodValidationError", () => {
         expect(err.message).toContain("API response");
         expect(err.message).toContain("data.id");
         expect(err.message).toContain("Expected number");
-        expect(err.message).toContain("raw input:");
+        expect(err.message).toContain("raw data:");
         expect(err.message).toContain(JSON.stringify(raw));
     });
 
@@ -171,7 +171,7 @@ describe("ScriptZodValidationError", () => {
         expect(err.short).toContain("API response");
         expect(err.short).toContain("data.id");
         expect(err.short).toContain("Expected number");
-        expect(err.short).not.toContain("raw input:");
+        expect(err.short).not.toContain("raw data:");
     });
 
     test("message and short converge when rawInput is omitted", () => {
@@ -203,7 +203,7 @@ describe("ScriptZodValidationError", () => {
         const raw = [1, 2, 3];
         const zodErr = makeZodError([{ path: ["0"], message: "Bad" }]);
         const err = new ScriptZodValidationError("ctx", zodErr, raw);
-        expect(err.message).toContain(`raw input: ${JSON.stringify(raw)}`);
+        expect(err.message).toContain(`raw data:\n\n${JSON.stringify(raw)}`);
     });
 
     test("exitCode is 1 (inherited from ScriptError default)", () => {

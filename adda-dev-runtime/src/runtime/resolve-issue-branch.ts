@@ -1,6 +1,6 @@
 import type { parseArgs } from "node:util";
 import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
-import { defaultDeps, ScriptArgsError, ScriptBase, ScriptError, ScriptZodValidationError } from "@adda/lib";
+import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError, ScriptZodValidationError } from "@adda/lib";
 import { z } from "zod";
 
 type ResolveIssueBranchDeps = ShellDep & EnvDep & StdioDep;
@@ -121,7 +121,13 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps,
             throw new ScriptError(details);
         }
 
-        const raw = JSON.parse(ghResult.stdout);
+        let raw: unknown;
+        try {
+            raw = parseJson(ghResult.stdout);
+        } catch (e) {
+            this.emit(issueId, "error", "", "", "invalid JSON");
+            throw e;
+        }
         const parsed = GraphQLSchema.safeParse(raw);
         if (!parsed.success) {
             const err = new ScriptZodValidationError("unexpected API response", parsed.error, raw);

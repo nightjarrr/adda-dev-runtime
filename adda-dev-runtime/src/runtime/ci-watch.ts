@@ -1,6 +1,6 @@
 import type { parseArgs } from "node:util";
 import type { ShellDep, SleepDep, StdioDep, TmpDep } from "@adda/lib";
-import { defaultDeps, ScriptArgsError, ScriptBase, ScriptError, ScriptZodValidationError } from "@adda/lib";
+import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError, ScriptZodValidationError } from "@adda/lib";
 import { z } from "zod";
 
 const ChecksSchema = z.array(z.object({ name: z.string(), state: z.string(), link: z.string() }));
@@ -170,7 +170,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         await this.deps.shell.run(["gh", "pr", "checks", prNumber, "--watch"], { strict: false });
 
         const checksResult = await this.deps.shell.run(["gh", "pr", "checks", prNumber, "--json", "name,state,link"]);
-        const checksRaw = JSON.parse(checksResult.stdout.trim() || "[]");
+        const checksRaw = parseJson(checksResult.stdout.trim() || "[]");
         const checksParsed = ChecksSchema.safeParse(checksRaw);
         if (!checksParsed.success)
             throw new ScriptZodValidationError("unexpected gh pr checks output", checksParsed.error, checksRaw);
@@ -237,13 +237,10 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
 
     private parseRunIds(json: string): string[] {
         if (!json) return [];
-        try {
-            const result = RunListSchema.safeParse(JSON.parse(json));
-            if (!result.success || result.data.length === 0) return [];
-            return result.data.map((r) => String(r.databaseId));
-        } catch {
-            return [];
-        }
+        const raw = parseJson(json);
+        const result = RunListSchema.safeParse(raw);
+        if (!result.success) throw new ScriptZodValidationError("unexpected gh run list output", result.error, raw);
+        return result.data.map((r) => String(r.databaseId));
     }
 
     private emit(output: CiWatchOutput): void {

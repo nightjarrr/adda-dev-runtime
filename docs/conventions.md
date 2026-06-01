@@ -101,27 +101,38 @@ if (import.meta.main)
 
 Use Zod (`import { z } from "zod"`) for all external API responses and parsed JSON. Import `ScriptZodValidationError` from `@adda/lib` for the failure path.
 
-**Canonical pattern:**
+**JSON parsing:**
+
+Always use `parseJson` (from `@adda/lib`) instead of bare `JSON.parse` at external data boundaries — it catches `SyntaxError` and produces a diagnostic `ScriptError` that includes the raw content:
+
+```typescript
+import { parseJson } from "@adda/lib";
+
+const raw = parseJson(ghResult.stdout); // throws ScriptError with raw content on invalid JSON
+const parsed = ResultSchema.safeParse(raw);
+```
+
+**Canonical Zod pattern:**
 
 ```typescript
 import { z } from "zod";
-import { ScriptZodValidationError } from "@adda/lib";
+import { parseJson, ScriptZodValidationError } from "@adda/lib";
 
 const ResultSchema = z.object({ id: z.number(), name: z.string() });
 
-const raw = JSON.parse(ghResult.stdout);
+const raw = parseJson(ghResult.stdout);
 const parsed = ResultSchema.safeParse(raw);
 if (!parsed.success)
     throw new ScriptZodValidationError("unexpected API response", parsed.error, raw);
 const { id, name } = parsed.data;
 ```
 
-For scripts that also emit structured stdout on error (e.g. `resolve-issue-branch`):
+For scripts that also emit structured stdout on error:
 
 ```typescript
 if (!parsed.success) {
     const err = new ScriptZodValidationError("unexpected API response", parsed.error, raw);
-    this.emit(issueId, "error", "", "", err.short);
+    this.deps.stdio.stdout.write(`${err.short}\n`);
     throw err;
 }
 ```
