@@ -26,14 +26,18 @@ FROM oven/bun:${BUN_VERSION}-slim AS bun-builder
 WORKDIR /build
 COPY package.json bun.lock tsconfig.json /build/
 COPY adda-dev-runtime/src/ /build/adda-dev-runtime/src/
+COPY adda-dev-runtime/build/ /build/build/
 RUN bun install --frozen-lockfile \
     && bun build /build/adda-dev-runtime/src/runtime/*.ts \
         --outdir /build/out/bin/ \
         --target bun \
+        --packages=external \
         --sourcemap=inline \
         --banner '#!/usr/bin/env bun' \
     && for f in /build/out/bin/*.js; do mv "$f" "${f%.js}"; done \
-    && chmod +x /build/out/bin/*
+    && chmod +x /build/out/bin/* \
+    && bun install --production \
+    && bash /build/build/prune-node-modules.sh /build/node_modules
 
 # ======================================================================
 # BASE — generic dev runtime (project-agnostic, AI-tool-agnostic)
@@ -188,6 +192,7 @@ RUN mkdir -p /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d \
     && chmod +x /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh \
                 /usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh
 COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/
+COPY --from=bun-builder /build/node_modules/ /usr/local/libexec/adda-dev-runtime/node_modules/
 
 
 # ======================================================================

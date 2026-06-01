@@ -23,6 +23,9 @@ regardless of tier:
 - Tier 2 scripts live under `proto-adda/content/scripts/<bootstrap|runtime>/`.
   Hook scripts (sourced by entrypoint) additionally live under `entrypoint.d/` within the bootstrap directory.
 
+Scripts used only during Docker image build stages (not baked into any image) live under
+`adda-dev-runtime/build/` and use a plain `.sh` extension with the exec bit set in the repo.
+
 Apply all bash conventions above.
 
 ## Dockerfiles
