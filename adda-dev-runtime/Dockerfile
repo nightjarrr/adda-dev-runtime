@@ -36,7 +36,7 @@ RUN bun install --frozen-lockfile \
         --banner '#!/usr/bin/env bun' \
     && for f in /build/out/bin/*.js; do mv "$f" "${f%.js}"; done \
     && chmod +x /build/out/bin/* \
-    && bun install --production \
+    && bun install --production --frozen-lockfile \
     && bash /build/build/prune-node-modules.sh /build/node_modules
 
 # ======================================================================
