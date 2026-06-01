@@ -188,6 +188,50 @@ Bun resolves path aliases from `tsconfig.json` at runtime — no separate bundle
 
 ---
 
+## Runtime data validation
+
+Use Zod for all external API responses and parsed JSON. It is a `dependencies` entry in `package.json` (bundled into executables by `bun build`).
+
+**Declare a schema:**
+
+```typescript
+import { z } from "zod";
+
+const ResultSchema = z.object({ id: z.number(), name: z.string() });
+```
+
+**Always use `parseJson` (from `@adda/lib`) instead of bare `JSON.parse`** at all external data boundaries — it wraps `JSON.parse` and throws a diagnostic `ScriptError` (with the raw content included) on invalid input, rather than a bare `SyntaxError`.
+
+**Always use `.safeParse()`, never `.parse()`** — let `ScriptZodValidationError` handle the failure path:
+
+```typescript
+import { parseJson, ScriptZodValidationError } from "@adda/lib";
+
+const raw = parseJson(ghResult.stdout);
+const parsed = ResultSchema.safeParse(raw);
+if (!parsed.success)
+    throw new ScriptZodValidationError("unexpected API response", parsed.error, raw);
+const { id, name } = parsed.data;
+```
+
+**`ScriptZodValidationError(context, error, rawInput?)`:**
+- `error.message` — full diagnostics (all Zod issue paths + raw input); written to stderr by `ScriptBase`
+- `error.short` — compact issues-only string; available for callers that also emit structured stdout (e.g. `emit()`)
+
+For scripts that emit structured stdout on error:
+
+```typescript
+if (!parsed.success) {
+    const err = new ScriptZodValidationError("unexpected API response", parsed.error, raw);
+    this.emit(issueId, "error", "", "", err.short);
+    throw err;
+}
+```
+
+**Schema violation vs domain condition:** use `.nullable()` on fields the API legitimately returns null (e.g. repository not found, issue not found); keep non-nullable for fields that must always be present — their absence is a schema failure.
+
+---
+
 ## Build pipeline
 
 **Source placement:**
@@ -199,11 +243,12 @@ adda-dev-runtime/src/lib/        # ScriptBase, capability interfaces, Bun implem
 
 **Multi-stage Docker build:**
 1. `FROM oven/bun:<version>-slim AS bun-builder` — builder stage at top of Dockerfile
-2. `COPY adda-dev-runtime/src/ /build/adda-dev-runtime/src/` — copies `runtime/`, `bootstrap/`, and `lib/` together so relative imports work
-3. Build runtime scripts: `bun build /build/adda-dev-runtime/src/runtime/*.ts --outdir /build/out/bin/ --target bun --sourcemap=inline --banner "#!/usr/bin/env bun"` — shebang injected by banner, not present in source
+2. `COPY package.json bun.lock tsconfig.json /build/` + `COPY adda-dev-runtime/src/ /build/adda-dev-runtime/src/` — package manifest and lockfile included so `bun install` can resolve production dependencies (e.g. Zod) before bundling
+3. `RUN bun install --frozen-lockfile` — installs production deps into the builder stage; `bun build` then bundles them into the output executables
+4. Build runtime scripts: `bun build /build/adda-dev-runtime/src/runtime/*.ts --outdir /build/out/bin/ --target bun --sourcemap=inline --banner "#!/usr/bin/env bun"` — shebang injected by banner, not present in source
    - Add `bun build /build/adda-dev-runtime/src/bootstrap/*.ts --outdir /build/out/bootstrap/ ...` when bootstrap Bun scripts exist
-4. Strip `.js` extensions from outputs per subdirectory → `chmod +x` per subdirectory. `out/` mirrors the target's `bin/`/`bootstrap/` layout.
-5. Final Tier 1 stage: `COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/` — Docker merges directories; bootstrap shell scripts already present under `bootstrap/` are untouched.
+5. Strip `.js` extensions from outputs per subdirectory → `chmod +x` per subdirectory. `out/` mirrors the target's `bin/`/`bootstrap/` layout.
+6. Final Tier 1 stage: `COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/` — Docker merges directories; bootstrap shell scripts already present under `bootstrap/` are untouched.
 
 **`.dockerignore`** excludes:
 - `**/*.test.ts`
@@ -245,8 +290,10 @@ Tier 1 made the Bun runtime choice; bundling its verification toolchain is consi
 
 ## Package manifest
 
-- `package.json` at repo root — settled convention; available for future use
-- `@types/bun` is globally installed in the Tier 1 image; CI installs it the same way via `BUN_INSTALL=/usr/local bun install -g`
+- `package.json` at repo root — settled convention
+- `@types/bun` is globally installed in the Tier 1 image; CI installs it the same way via `BUN_INSTALL=/usr/local bun install -g`. It is listed under `devDependencies` for version tracking only — it is type-only and never bundled.
+- **`dependencies`** — packages imported in production source and bundled into executables by `bun build`. Example: `"zod": "4.4.3"`. Add new production deps here.
+- **`devDependencies`** — packages used only for type-checking or tooling, never bundled. Example: `"@types/bun": "1.3.14"`. These are never imported in runtime source.
 - Biome is globally installed; not a devDep
 - `tsconfig.json`: strict, `noEmit`, `ESNext` target/module, `moduleResolution: bundler`, `skipLibCheck`, `types: ["bun"]`, `typeRoots: ["/usr/local/install/global/node_modules/@types"]`, `baseUrl: "."`, `paths` for `@adda/lib`
 - `bunfig.toml`: `coverageThreshold` line/function/statement = 90

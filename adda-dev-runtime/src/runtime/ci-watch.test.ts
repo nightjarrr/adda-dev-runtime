@@ -362,19 +362,16 @@ describe("CiWatchScript", () => {
             expect(errLines.join("")).toContain("Error:");
         });
 
-        test("run list returns malformed JSON — treated as no runs, retries and succeeds", async () => {
-            const { deps, sleepCalls } = makeMockDeps({
+        test("run list returns malformed JSON — exits 1 with ScriptError", async () => {
+            const { deps, errLines } = makeMockDeps({
                 runQueue: [
-                    makeShellResult("not-valid-json"), // first fetchPushRunIds: bad JSON → []
-                    makeShellResult(makeRunListJson([99999])), // second poll: valid
-                    makeShellResult(""), // run watch
-                    makeShellResult("success\n"), // run view conclusion
+                    makeShellResult("not-valid-json"), // fetchPushRunIds: bad JSON → ScriptError
                 ],
             });
             const script = new CiWatchScript(deps);
             const code = await script.run(["bun", "ci-watch.ts", "push", "--commit", "abc123"]);
-            expect(code).toBe(0);
-            expect(sleepCalls.length).toBe(1);
+            expect(code).toBe(1);
+            expect(errLines.join("")).toContain("Error:");
         });
     });
 
@@ -603,6 +600,48 @@ describe("CiWatchScript", () => {
             expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
             if (out.conclusion !== "failure") throw new Error("expected failure");
             expect(out.runs).toHaveLength(0);
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // parseRunIds — error cases (via fetchPushRunIds)
+    // ---------------------------------------------------------------
+    describe("parseRunIds — error cases", () => {
+        test("invalid JSON in run list — throws ScriptError (exits 1)", async () => {
+            const { deps, errLines } = makeMockDeps({
+                runQueue: [
+                    makeShellResult("{invalid json}"), // fetchPushRunIds: bad JSON
+                ],
+            });
+            const script = new CiWatchScript(deps);
+            const code = await script.run(["bun", "ci-watch.ts", "push", "--commit", "sha-bad-json"]);
+            expect(code).toBe(1);
+            const stderr = errLines.join("");
+            expect(stderr).toContain("Error:");
+        });
+
+        test("valid JSON that fails RunListSchema — throws ScriptZodValidationError (exits 1)", async () => {
+            // An object instead of an array fails the schema
+            const { deps, errLines } = makeMockDeps({
+                runQueue: [
+                    makeShellResult('{"not":"an array"}'), // fetchPushRunIds: wrong shape
+                ],
+            });
+            const script = new CiWatchScript(deps);
+            const code = await script.run(["bun", "ci-watch.ts", "push", "--commit", "sha-bad-schema"]);
+            expect(code).toBe(1);
+            const stderr = errLines.join("");
+            expect(stderr).toContain("Error:");
+            expect(stderr).toContain("unexpected gh run list output");
+        });
+
+        test("empty string run list — returns empty array without throwing (exits 1 from timeout, not parse error)", async () => {
+            // Empty string guard: returns [] immediately; poll loop hits timeout
+            const emptyPolls = Array.from({ length: 6 }, () => makeShellResult(""));
+            const { deps } = makeMockDeps({ runQueue: emptyPolls });
+            const script = new CiWatchScript(deps);
+            const code = await script.run(["bun", "ci-watch.ts", "push", "--commit", "sha-empty"]);
+            expect(code).toBe(1);
         });
     });
 

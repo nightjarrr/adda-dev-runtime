@@ -1,3 +1,5 @@
+import type { z } from "zod";
+
 export class ScriptError extends Error {
     readonly exitCode: number;
 
@@ -32,5 +34,17 @@ export class ScriptShellError extends ScriptError {
             1,
         );
         this.name = "ScriptShellError";
+    }
+}
+
+export class ScriptZodValidationError extends ScriptError {
+    readonly short: string;
+
+    constructor(context: string, error: z.ZodError, rawInput?: unknown) {
+        const issues = error.issues.map((i) => `${i.path.length > 0 ? i.path.join(".") : "(root)"}: ${i.message}`).join("; ");
+        const raw = rawInput !== undefined ? `\nraw data:\n\n${JSON.stringify(rawInput)}` : "";
+        super(`${context}: ${issues}${raw}`);
+        this.short = `${context}: ${issues}`;
+        this.name = "ScriptZodValidationError";
     }
 }
