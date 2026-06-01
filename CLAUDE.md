@@ -44,10 +44,9 @@ after all image-defined `entrypoint.d` hooks and before CMD handoff.
 
 - Reads `@types/bun` version from `package.json` and compares it to `$BUN_VERSION`
   (the version baked into the image).
-- **Match:** runs `bun install --frozen-lockfile` and creates an empty
-  `/workspace/.adda-init-notes.md`.
+- **Match:** runs `bun install --frozen-lockfile`.
 - **Mismatch:** runs `bun add --dev "@types/bun@${BUN_VERSION}"` to auto-correct,
-  then writes `/workspace/.adda-init-notes.md` with exact versions and a
+  then writes `/workspace/CLAUDE.local.md` with exact versions and a
   ready-to-paste commit message.
 
 **Lockfile:** `bun.lock` (text format, Bun 1.3.14 default) is committed to the
@@ -55,7 +54,7 @@ repo. The `--frozen-lockfile` flag keeps it authoritative on the happy path.
 
 **Session start signal:** if `package.json` and/or `bun.lock` are dirty at the
 start of a session with an `@types/bun` version change, the init hook auto-corrected
-a version mismatch. Check `.adda-init-notes.md` for details and the commit command.
+a version mismatch. Check `CLAUDE.local.md` for details and the commit command.
 
 ## Script placement decision model
 
@@ -127,5 +126,3 @@ edge image on main merge → versioned release on tag.
 ## Conventions
 
 Script and Dockerfile conventions: `docs/conventions.md`.
-
-@import .adda-init-notes.md
