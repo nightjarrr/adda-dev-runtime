@@ -1,6 +1,18 @@
-# ADDA Dev Runtime
+# Proto-ADDA
 
-Hardened, ephemeral, Docker container-based runtime for agentic development. Design and current state are in `docs/adda-dev-runtime.md` and `docs/adda-dev-runtime-current-state.md`.
+## Runtime Environment
+
+This is a hardened, ephemeral container: no root access, read-only rootfs except for designated writable paths, no direct network access — only traffic routed through `HTTP_PROXY`/`HTTPS_PROXY` reaches the outside — and `~/.claude/` is re-seeded from the image on every start; changes there do not survive a restart.
+
+| Path | Writable | Persistence |
+|---|---|---|
+| `/workspace` | yes | durable — commit and push to persist |
+| `/home/adda/`, `/tmp` | yes | ephemeral — wiped at container stop |
+| everything else | **no** | rootfs is read-only; write attempts fail |
+
+## Available CLI tools
+
+Use the `adda-shell-tools` skill to get a live table of registered CLI tools and warnings about commonly expected tools that are absent. Load it when you want to use a CLI tool and are unsure what's available.
 
 ## Roles
 

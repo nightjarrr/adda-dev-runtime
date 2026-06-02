@@ -42,6 +42,9 @@ mkdir -p "${HOME}/.claude"
 cp -r /usr/local/share/adda-dev-runtime/.claude/. "${HOME}/.claude/"
 success "Claude configuration initialized in ~/.claude."
 
+list_shell_tools > "${HOME}/.claude/shell-tools.jsonl"
+success "Shell tool list written to ~/.claude/shell-tools.jsonl."
+
 sed "s/__CLAUDE_CODE_VERSION__/${CLAUDE_CODE_VERSION}/" \
     /usr/local/share/adda-dev-runtime/templates/.claude.json.template > "${HOME}/.claude.json"
 chmod 600 "${HOME}/.claude.json"

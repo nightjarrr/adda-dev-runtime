@@ -50,3 +50,25 @@ require_tool() {
     fi
     success "$tool"
 }
+
+# ----------------------------------------------------------------------
+# Shell tools helpers
+# ----------------------------------------------------------------------
+
+_ANNOUNCED_SHELL_TOOLS=""
+
+# announce_shell_tool name cmd desc
+# Registers a shell tool entry in JSONL format.
+# Tier 3 hooks call this before 10-claude-config.sh runs to extend the list.
+announce_shell_tool() {
+    local name="$1" cmd="$2" desc="$3"
+    local entry
+    entry=$(jq -cn --arg n "$name" --arg c "$cmd" --arg d "$desc" \
+        '{"name":$n,"cmd":$c,"desc":$d}')
+    _ANNOUNCED_SHELL_TOOLS="${_ANNOUNCED_SHELL_TOOLS}${entry}"$'\n'
+}
+
+# list_shell_tools — prints accumulated JSONL to stdout, one object per line.
+list_shell_tools() {
+    printf '%s' "${_ANNOUNCED_SHELL_TOOLS}"
+}

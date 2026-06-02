@@ -5,12 +5,33 @@
 # FROM adda-dev-runtime (Tier 1). Adds:
 #   - Claude Code (Bun global, version-pinned)
 #   - Bootstrap hook: Claude config init
+#   - render-adda-shell-tools Bun executable
 #
 # Pinned versions:
 #   Claude Code:  2.1.112
 # ======================================================================
 
+ARG BUN_VERSION=1.3.14
 ARG BASE_TAG=latest
+
+# ======================================================================
+# BUN BUILDER — compile Tier 2 TypeScript scripts to extensionless executables
+# ======================================================================
+FROM oven/bun:${BUN_VERSION}-slim AS bun-builder
+WORKDIR /build
+COPY package.json bun.lock tsconfig.json /build/
+COPY adda-dev-runtime/src/lib/ /build/adda-dev-runtime/src/lib/
+COPY proto-adda/src/ /build/proto-adda/src/
+RUN bun install --frozen-lockfile \
+    && bun build /build/proto-adda/src/runtime/*.ts \
+        --outdir /build/out/bin/ \
+        --target bun \
+        --packages=external \
+        --sourcemap=inline \
+        --banner '#!/usr/bin/env bun' \
+    && for f in /build/out/bin/*.js; do mv "$f" "${f%.js}"; done \
+    && chmod +x /build/out/bin/*
+
 FROM ghcr.io/nightjarrr/adda-dev-runtime:${BASE_TAG}
 
 # Build steps require root to write to /usr/local; Tier 1 leaves USER as adda.
@@ -38,6 +59,11 @@ RUN for f in /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/*.sh.sou
 # ----------------------------------------------------------------------
 COPY proto-adda/content/.claude/ /usr/local/share/adda-dev-runtime/.claude/
 COPY proto-adda/content/templates/.claude.json.template /usr/local/share/adda-dev-runtime/templates/.claude.json.template
+
+# ----------------------------------------------------------------------
+# Tier 2 runtime executables — built by bun-builder stage above
+# ----------------------------------------------------------------------
+COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/
 
 # Restore runtime user before handoff.
 USER adda

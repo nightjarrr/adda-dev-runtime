@@ -68,7 +68,7 @@ jobs:
 
       - name: Lint (biome)
         if: steps.ts-changed.outputs.changed == 'true'
-        run: bunx @biomejs/biome@2.4.15 check adda-dev-runtime/src/
+        run: bunx @biomejs/biome@2.4.15 check adda-dev-runtime/src/ proto-adda/src/
 
       - name: Install local dependencies
         if: steps.ts-changed.outputs.changed == 'true'
@@ -88,6 +88,11 @@ jobs:
           for d in runtime bootstrap; do
             if [ -d "adda-dev-runtime/src/$d" ] && ls adda-dev-runtime/src/$d/*.ts >/dev/null 2>&1; then
               bun build adda-dev-runtime/src/$d/*.ts --outdir /tmp/ci-build-check/$d/ --target bun
+            fi
+          done
+          for d in runtime bootstrap; do
+            if [ -d "proto-adda/src/$d" ] && ls proto-adda/src/$d/*.ts >/dev/null 2>&1; then
+              bun build proto-adda/src/$d/*.ts --outdir /tmp/ci-build-check/proto-adda-$d/ --target bun
             fi
           done
 

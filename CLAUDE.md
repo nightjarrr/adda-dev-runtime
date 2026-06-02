@@ -1,7 +1,6 @@
 # ADDA Dev Runtime
 
-This repo *is* the dev runtime. Design and current state are in
-`docs/adda-dev-runtime.md` and `docs/adda-dev-runtime-current-state.md`.
+This repo *is* the dev runtime. Design is documented in `docs/adda-dev-runtime.md`.
 
 ## Repo layout
 
@@ -18,7 +17,7 @@ container built from this same repo. Two consequences:
 - **No Docker in the container.** Image builds and launch tests are run by
   PO on the host, not by the agent. Verification inside the container is
   limited to file/path checks and `quality-gates`.
-- **`/workspace` is the only durable path.** See *Path model* below.
+- **`/workspace` is the only durable path.**
 
 ## Tier architecture
 
@@ -91,17 +90,6 @@ Correct invocations:
 - `biome check <source dir>`
 - `tsc --noEmit`
 
-## Path model
-
-| Path | Nature | Persistence |
-|---|---|---|
-| `/home/adda/`, `/tmp` | ephemeral tmpfs | wiped at container stop |
-| `/usr/local/**` | immutable (read-only rootfs) | write attempts fail |
-| `/workspace` | cloned repo (git-backed) | wiped — **commit and push to persist** |
-
-`~/.claude/` is bootstrapped from the image at startup; editing it does not
-affect future containers.
-
 ## Artifact routing
 
 Edit repo source only — never runtime copies. Changes affect future image builds,
@@ -116,6 +104,7 @@ not the running container.
 | `quality-gates` (Bun executable) | `adda-dev-runtime/src/runtime/quality-gates.ts` | `/usr/local/libexec/adda-dev-runtime/bin/quality-gates` | — |
 | Tier 2 bootstrap hook | `proto-adda/content/scripts/bootstrap/entrypoint.d/10-claude-config.sh.source` | `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/10-claude-config.sh` | — |
 | Claude config (CLAUDE.md, settings.json, agents/, skills/) | `proto-adda/content/.claude/` | `/usr/local/share/adda-dev-runtime/.claude/` | `~/.claude/` (ephemeral) |
+| `render-adda-shell-tools` (Bun executable) | `proto-adda/src/runtime/render-adda-shell-tools.ts` | `/usr/local/libexec/adda-dev-runtime/bin/render-adda-shell-tools` | — |
 | `prune-node-modules.sh` (build script) | `adda-dev-runtime/build/prune-node-modules.sh` | (build-stage only, not in final image) | — |
 
 Scripts baked to `/usr/local/libexec/` use a `.sh.source` extension in the repo
