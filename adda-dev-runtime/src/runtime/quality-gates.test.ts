@@ -33,6 +33,30 @@ function makeShellFailure(stdout = "", stderr = ""): ShellResult {
     return { stdout, stderr, exitCode: 1 };
 }
 
+// --- TOML fixture helpers ---
+
+function makeTomlGate(name: string, description: string, command: string): string {
+    return `[[gate]]\nname = "${name}"\ndescription = "${description}"\ncommand = "${command}"\n`;
+}
+
+function makeSingleGateToml(name = "my-gate", description = "My gate description", command = "my-cmd"): string {
+    return makeTomlGate(name, description, command);
+}
+
+function makeTwoGateToml(): string {
+    return makeTomlGate("gate-a", "Gate A description", "cmd-a") + "\n" + makeTomlGate("gate-b", "Gate B description", "cmd-b");
+}
+
+function makeThreeGateToml(): string {
+    return (
+        makeTomlGate("gate-pass", "Pass gate", "cmd-pass") +
+        "\n" +
+        makeTomlGate("gate-fail", "Fail gate", "cmd-fail") +
+        "\n" +
+        makeTomlGate("gate-pass2", "Pass gate 2", "cmd-pass2")
+    );
+}
+
 interface MockDepsOptions {
     gitResult?: ShellResult;
     runShResults?: ShellResult[];
@@ -158,19 +182,77 @@ describe("QualityGatesScript", () => {
         });
     });
 
-    describe("empty conf", () => {
-        test("all blank and comment lines — exits 2", async () => {
+    describe("invalid TOML syntax", () => {
+        test("invalid TOML — exits 2", async () => {
             const { deps } = makeMockDeps({
-                confContent: "# comment\n  \n# another comment\n",
+                confContent: "= invalid key assignment\n",
             });
             const script = new QualityGatesScript(deps);
             const code = await script.run(["bun", "quality-gates.ts"]);
             expect(code).toBe(2);
         });
 
-        test("all blank and comment lines — stderr contains 'Config error:'", async () => {
+        test("invalid TOML — stderr contains 'Config error:'", async () => {
             const { deps, errLines } = makeMockDeps({
-                confContent: "# comment\n  \n",
+                confContent: "= invalid key assignment\n",
+            });
+            const script = new QualityGatesScript(deps);
+            await script.run(["bun", "quality-gates.ts"]);
+            expect(errLines.join("")).toContain("Config error:");
+        });
+    });
+
+    describe("missing required fields", () => {
+        test("gate entry missing name field — exits 2", async () => {
+            const { deps } = makeMockDeps({
+                confContent: '[[gate]]\ndescription = "desc"\ncommand = "cmd"\n',
+            });
+            const script = new QualityGatesScript(deps);
+            const code = await script.run(["bun", "quality-gates.ts"]);
+            expect(code).toBe(2);
+        });
+
+        test("gate entry missing name field — stderr contains 'Config error:'", async () => {
+            const { deps, errLines } = makeMockDeps({
+                confContent: '[[gate]]\ndescription = "desc"\ncommand = "cmd"\n',
+            });
+            const script = new QualityGatesScript(deps);
+            await script.run(["bun", "quality-gates.ts"]);
+            expect(errLines.join("")).toContain("Config error:");
+        });
+
+        test("gate entry missing description field — exits 2", async () => {
+            const { deps } = makeMockDeps({
+                confContent: '[[gate]]\nname = "my-gate"\ncommand = "cmd"\n',
+            });
+            const script = new QualityGatesScript(deps);
+            const code = await script.run(["bun", "quality-gates.ts"]);
+            expect(code).toBe(2);
+        });
+
+        test("gate entry missing command field — exits 2", async () => {
+            const { deps } = makeMockDeps({
+                confContent: '[[gate]]\nname = "my-gate"\ndescription = "desc"\n',
+            });
+            const script = new QualityGatesScript(deps);
+            const code = await script.run(["bun", "quality-gates.ts"]);
+            expect(code).toBe(2);
+        });
+    });
+
+    describe("empty or absent gate array", () => {
+        test("gate key absent — exits 2", async () => {
+            const { deps } = makeMockDeps({
+                confContent: '[other]\nkey = "value"\n',
+            });
+            const script = new QualityGatesScript(deps);
+            const code = await script.run(["bun", "quality-gates.ts"]);
+            expect(code).toBe(2);
+        });
+
+        test("gate key absent — stderr contains 'Config error:'", async () => {
+            const { deps, errLines } = makeMockDeps({
+                confContent: '[other]\nkey = "value"\n',
             });
             const script = new QualityGatesScript(deps);
             await script.run(["bun", "quality-gates.ts"]);
@@ -179,50 +261,48 @@ describe("QualityGatesScript", () => {
     });
 
     describe("conf parsing", () => {
-        test("blank lines are excluded", async () => {
+        test("two gates are both executed", async () => {
             const { deps } = makeMockDeps({
-                confContent: "\ncmd-one\n\ncmd-two\n",
+                confContent: makeTwoGateToml(),
                 runShResults: [makeShellSuccess(), makeShellSuccess()],
             });
             const script = new QualityGatesScript(deps);
             const code = await script.run(["bun", "quality-gates.ts"]);
             expect(code).toBe(0);
             const stdout = deps.stdio.stdout.write as ReturnType<typeof mock>;
-            // Should have two [N/total] lines
             const calls = stdout.mock.calls.map((c: string[]) => c[0]);
             expect(calls.filter((l: string) => l.startsWith("[")).length).toBe(2);
         });
 
-        test("# prefixed lines are excluded", async () => {
-            const { deps } = makeMockDeps({
-                confContent: "# skip me\ncmd-one\n# skip me too\n",
-                runShResults: [makeShellSuccess()],
-            });
-            const script = new QualityGatesScript(deps);
-            const code = await script.run(["bun", "quality-gates.ts"]);
-            expect(code).toBe(0);
-            const stdout = deps.stdio.stdout.write as ReturnType<typeof mock>;
-            const calls = stdout.mock.calls.map((c: string[]) => c[0]);
-            expect(calls.filter((l: string) => l.startsWith("[")).length).toBe(1);
-        });
-
-        test("valid commands are preserved in order", async () => {
+        test("gates are preserved in order", async () => {
             const { deps, writtenFiles } = makeMockDeps({
-                confContent: "first-cmd\nsecond-cmd\n",
+                confContent: makeTwoGateToml(),
                 runShResults: [makeShellSuccess(), makeShellSuccess()],
             });
             const script = new QualityGatesScript(deps);
             await script.run(["bun", "quality-gates.ts"]);
             const result = readWrittenJson(writtenFiles);
-            expect(result.checks[0].command).toBe("first-cmd");
-            expect(result.checks[1].command).toBe("second-cmd");
+            expect(result.gates[0].name).toBe("gate-a");
+            expect(result.gates[1].name).toBe("gate-b");
+        });
+
+        test("gates carry correct name and description in result JSON", async () => {
+            const { deps, writtenFiles } = makeMockDeps({
+                confContent: makeSingleGateToml("my-gate", "My gate description", "my-cmd"),
+                runShResults: [makeShellSuccess()],
+            });
+            const script = new QualityGatesScript(deps);
+            await script.run(["bun", "quality-gates.ts"]);
+            const result = readWrittenJson(writtenFiles);
+            expect(result.gates[0].name).toBe("my-gate");
+            expect(result.gates[0].description).toBe("My gate description");
         });
     });
 
-    describe("all checks pass", () => {
+    describe("all gates pass", () => {
         test("exits 0", async () => {
             const { deps } = makeMockDeps({
-                confContent: "cmd-a\ncmd-b\n",
+                confContent: makeTwoGateToml(),
                 runShResults: [makeShellSuccess(), makeShellSuccess()],
             });
             const script = new QualityGatesScript(deps);
@@ -230,21 +310,21 @@ describe("QualityGatesScript", () => {
             expect(code).toBe(0);
         });
 
-        test("stdout has [1/N] prefix line", async () => {
+        test("stdout has [1/N] name — description progress line", async () => {
             const { deps, outLines } = makeMockDeps({
-                confContent: "cmd-a\ncmd-b\n",
+                confContent: makeTwoGateToml(),
                 runShResults: [makeShellSuccess(), makeShellSuccess()],
             });
             const script = new QualityGatesScript(deps);
             await script.run(["bun", "quality-gates.ts"]);
             const joined = outLines.join("");
-            expect(joined).toContain("[1/2] cmd-a");
-            expect(joined).toContain("[2/2] cmd-b");
+            expect(joined).toContain("[1/2] gate-a — Gate A description");
+            expect(joined).toContain("[2/2] gate-b — Gate B description");
         });
 
-        test("stdout has PASS after each check", async () => {
+        test("stdout has PASS after each gate", async () => {
             const { deps, outLines } = makeMockDeps({
-                confContent: "cmd-a\n",
+                confContent: makeSingleGateToml(),
                 runShResults: [makeShellSuccess()],
             });
             const script = new QualityGatesScript(deps);
@@ -255,7 +335,7 @@ describe("QualityGatesScript", () => {
 
         test("stdout has === delimiter and overall PASS", async () => {
             const { deps, outLines } = makeMockDeps({
-                confContent: "cmd-a\n",
+                confContent: makeSingleGateToml(),
                 runShResults: [makeShellSuccess()],
             });
             const script = new QualityGatesScript(deps);
@@ -267,7 +347,7 @@ describe("QualityGatesScript", () => {
 
         test("stdout has Results: line with result path", async () => {
             const { deps, outLines } = makeMockDeps({
-                confContent: "cmd-a\n",
+                confContent: makeSingleGateToml(),
                 runShResults: [makeShellSuccess()],
             });
             const script = new QualityGatesScript(deps);
@@ -278,7 +358,7 @@ describe("QualityGatesScript", () => {
 
         test("JSON overall is PASS", async () => {
             const { deps, writtenFiles } = makeMockDeps({
-                confContent: "cmd-a\n",
+                confContent: makeSingleGateToml(),
                 runShResults: [makeShellSuccess()],
             });
             const script = new QualityGatesScript(deps);
@@ -288,10 +368,10 @@ describe("QualityGatesScript", () => {
         });
     });
 
-    describe("one check fails", () => {
+    describe("one gate fails", () => {
         test("exits 1", async () => {
             const { deps } = makeMockDeps({
-                confContent: "cmd-pass\ncmd-fail\ncmd-pass2\n",
+                confContent: makeThreeGateToml(),
                 runShResults: [makeShellSuccess(), makeShellFailure(), makeShellSuccess()],
             });
             const script = new QualityGatesScript(deps);
@@ -301,7 +381,7 @@ describe("QualityGatesScript", () => {
 
         test("stdout has FAIL", async () => {
             const { deps, outLines } = makeMockDeps({
-                confContent: "cmd-pass\ncmd-fail\n",
+                confContent: makeTwoGateToml(),
                 runShResults: [makeShellSuccess(), makeShellFailure()],
             });
             const script = new QualityGatesScript(deps);
@@ -309,9 +389,9 @@ describe("QualityGatesScript", () => {
             expect(outLines.join("")).toContain("FAIL");
         });
 
-        test("all checks still run (run-all, no early exit)", async () => {
+        test("all gates still run (run-all, no early exit)", async () => {
             const { deps } = makeMockDeps({
-                confContent: "cmd-fail\ncmd-pass\ncmd-pass2\n",
+                confContent: makeThreeGateToml(),
                 runShResults: [makeShellFailure(), makeShellSuccess(), makeShellSuccess()],
             });
             const script = new QualityGatesScript(deps);
@@ -322,7 +402,7 @@ describe("QualityGatesScript", () => {
 
         test("JSON overall is FAIL", async () => {
             const { deps, writtenFiles } = makeMockDeps({
-                confContent: "cmd-fail\n",
+                confContent: makeSingleGateToml(),
                 runShResults: [makeShellFailure()],
             });
             const script = new QualityGatesScript(deps);
@@ -333,53 +413,67 @@ describe("QualityGatesScript", () => {
     });
 
     describe("JSON output shape", () => {
-        test("written JSON has correct overall, checks[].command, checks[].status, checks[].output", async () => {
+        test("written JSON has correct overall, gates[].name, gates[].description, gates[].command, gates[].status", async () => {
             const { deps, writtenFiles } = makeMockDeps({
-                confContent: "my-cmd\n",
+                confContent: makeSingleGateToml("my-gate", "My gate description", "my-cmd"),
                 runShResults: [makeShellSuccess("cmd stdout", "cmd stderr")],
             });
             const script = new QualityGatesScript(deps);
             await script.run(["bun", "quality-gates.ts"]);
             const result = readWrittenJson(writtenFiles);
             expect(result.overall).toBe("PASS");
-            expect(result.checks).toHaveLength(1);
-            expect(result.checks[0].command).toBe("my-cmd");
-            expect(result.checks[0].status).toBe("PASS");
+            expect(result.gates).toHaveLength(1);
+            expect(result.gates[0].name).toBe("my-gate");
+            expect(result.gates[0].description).toBe("My gate description");
+            expect(result.gates[0].command).toBe("my-cmd");
+            expect(result.gates[0].status).toBe("PASS");
+        });
+
+        test("JSON result has 'gates' key (not 'checks')", async () => {
+            const { deps, writtenFiles } = makeMockDeps({
+                confContent: makeSingleGateToml(),
+                runShResults: [makeShellSuccess()],
+            });
+            const script = new QualityGatesScript(deps);
+            await script.run(["bun", "quality-gates.ts"]);
+            const result = readWrittenJson(writtenFiles);
+            expect(result.gates).toBeDefined();
+            expect(result.checks).toBeUndefined();
         });
     });
 
-    describe("check output captured", () => {
-        test("stdout from runSh appears in checks[].output", async () => {
+    describe("gate output captured", () => {
+        test("stdout from runSh appears in gates[].output", async () => {
             const { deps, writtenFiles } = makeMockDeps({
-                confContent: "my-cmd\n",
+                confContent: makeSingleGateToml(),
                 runShResults: [makeShellSuccess("hello from stdout", "")],
             });
             const script = new QualityGatesScript(deps);
             await script.run(["bun", "quality-gates.ts"]);
             const result = readWrittenJson(writtenFiles);
-            expect(result.checks[0].output).toContain("hello from stdout");
+            expect(result.gates[0].output).toContain("hello from stdout");
         });
 
-        test("stderr from runSh appears in checks[].output (merged via 2>&1 in shell)", async () => {
+        test("stderr from runSh appears in gates[].output (merged via 2>&1 in shell)", async () => {
             const { deps, writtenFiles } = makeMockDeps({
-                confContent: "my-cmd\n",
+                confContent: makeSingleGateToml(),
                 runShResults: [makeShellFailure("error on stderr", "")],
             });
             const script = new QualityGatesScript(deps);
             await script.run(["bun", "quality-gates.ts"]);
             const result = readWrittenJson(writtenFiles);
-            expect(result.checks[0].output).toContain("error on stderr");
+            expect(result.gates[0].output).toContain("error on stderr");
         });
 
         test("output is result.stdout only (streams merged at shell level via 2>&1)", async () => {
             const { deps, writtenFiles } = makeMockDeps({
-                confContent: "my-cmd\n",
+                confContent: makeSingleGateToml(),
                 runShResults: [makeShellSuccess("out-part", "")],
             });
             const script = new QualityGatesScript(deps);
             await script.run(["bun", "quality-gates.ts"]);
             const result = readWrittenJson(writtenFiles);
-            expect(result.checks[0].output).toBe("out-part");
+            expect(result.gates[0].output).toBe("out-part");
         });
     });
 });

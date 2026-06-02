@@ -1,0 +1,34 @@
+[[gate]]
+name = "tests"
+description = "Run unit tests with coverage"
+command = "bun test --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=/tmp/coverage"
+
+[[gate]]
+name = "build-adda-dev-runtime"
+description = "Build adda-dev-runtime TypeScript sources"
+command = "for d in runtime bootstrap; do if [ -d \"adda-dev-runtime/src/$d\" ] && ls adda-dev-runtime/src/$d/*.ts >/dev/null 2>&1; then bun build adda-dev-runtime/src/$d/*.ts --outdir /tmp/qg-build/$d/ --target bun; fi; done"
+
+[[gate]]
+name = "build-proto-adda"
+description = "Build proto-adda TypeScript sources"
+command = "for d in runtime bootstrap; do if [ -d \"proto-adda/src/$d\" ] && ls proto-adda/src/$d/*.ts >/dev/null 2>&1; then bun build proto-adda/src/$d/*.ts --outdir /tmp/qg-build/proto-adda-$d/ --target bun; fi; done"
+
+[[gate]]
+name = "typecheck"
+description = "TypeScript type checking"
+command = "tsc --noEmit"
+
+[[gate]]
+name = "lint"
+description = "Lint TypeScript sources"
+command = "oxlint adda-dev-runtime/src/ proto-adda/src/"
+
+[[gate]]
+name = "format"
+description = "Check TypeScript formatting"
+command = "oxfmt --check adda-dev-runtime/src/ proto-adda/src/"
+
+[[gate]]
+name = "bun-version"
+description = "Verify @types/bun matches BUN_VERSION"
+command = "jq -e '.devDependencies[\"@types/bun\"] == env.BUN_VERSION' package.json"
