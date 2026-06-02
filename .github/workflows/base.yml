@@ -68,7 +68,7 @@ jobs:
 
       - name: Lint (biome)
         if: steps.ts-changed.outputs.changed == 'true'
-        run: bunx @biomejs/biome@2.4.15 check adda-dev-runtime/src/
+        run: bunx @biomejs/biome@2.4.15 check adda-dev-runtime/src/ proto-adda/src/
 
       - name: Install local dependencies
         if: steps.ts-changed.outputs.changed == 'true'
@@ -90,6 +90,8 @@ jobs:
               bun build adda-dev-runtime/src/$d/*.ts --outdir /tmp/ci-build-check/$d/ --target bun
             fi
           done
+          bun build proto-adda/src/runtime/render-adda-shell-tools.ts \
+              --outdir /tmp/ci-build-check/proto-adda-runtime/ --target bun
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

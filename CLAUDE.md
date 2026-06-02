@@ -116,6 +116,7 @@ not the running container.
 | `quality-gates` (Bun executable) | `adda-dev-runtime/src/runtime/quality-gates.ts` | `/usr/local/libexec/adda-dev-runtime/bin/quality-gates` | — |
 | Tier 2 bootstrap hook | `proto-adda/content/scripts/bootstrap/entrypoint.d/10-claude-config.sh.source` | `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/10-claude-config.sh` | — |
 | Claude config (CLAUDE.md, settings.json, agents/, skills/) | `proto-adda/content/.claude/` | `/usr/local/share/adda-dev-runtime/.claude/` | `~/.claude/` (ephemeral) |
+| `render-adda-shell-tools` (Bun executable) | `proto-adda/src/runtime/render-adda-shell-tools.ts` | `/usr/local/libexec/adda-dev-runtime/bin/render-adda-shell-tools` | — |
 | `prune-node-modules.sh` (build script) | `adda-dev-runtime/build/prune-node-modules.sh` | (build-stage only, not in final image) | — |
 
 Scripts baked to `/usr/local/libexec/` use a `.sh.source` extension in the repo
