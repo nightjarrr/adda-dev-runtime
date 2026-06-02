@@ -236,6 +236,7 @@ require_var ADDA_DEV_UID
 require_var ADDA_DEV_GID
 require_var ADDA_DEV_HOME_TMPFS_SIZE
 require_var ADDA_DEV_WORKSPACE_TMPFS_SIZE
+require_var ADDA_DEV_TMP_TMPFS_SIZE
 require_var ADDA_DEV_PROXY_SOCKET_CONTAINER_PATH
 require_var ADDA_DEV_PROXY_PORT
 
@@ -548,7 +549,7 @@ DOCKER_ARGS=(
   --read-only
   --tmpfs "/tmp:rw,exec,nosuid,nodev,size=64m,mode=700,uid=${ADDA_DEV_UID},gid=${ADDA_DEV_GID}"
   --tmpfs "/run:rw,nosuid,nodev,noexec,size=32m,mode=700,uid=${ADDA_DEV_UID},gid=${ADDA_DEV_GID}"
-  --tmpfs "/var/tmp:rw,nosuid,nodev,size=64m,mode=700,uid=${ADDA_DEV_UID},gid=${ADDA_DEV_GID}"
+  --tmpfs "/var/tmp:rw,nosuid,nodev,size=${ADDA_DEV_TMP_TMPFS_SIZE},mode=700,uid=${ADDA_DEV_UID},gid=${ADDA_DEV_GID}"
   --tmpfs "/home/${ADDA_DEV_USER}:rw,exec,nosuid,nodev,size=${ADDA_DEV_HOME_TMPFS_SIZE},mode=700,uid=${ADDA_DEV_UID},gid=${ADDA_DEV_GID}"
   --tmpfs "/workspace:rw,exec,nosuid,nodev,size=${ADDA_DEV_WORKSPACE_TMPFS_SIZE},mode=700,uid=${ADDA_DEV_UID},gid=${ADDA_DEV_GID}"
 
