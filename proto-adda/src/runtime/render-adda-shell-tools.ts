@@ -11,17 +11,31 @@ type RenderAddaShellToolsDeps = FileReaderDep & ShellDep & StdioDep;
 
 // --- Constants ---
 
-/** Tools to probe for absence — familiar names that are not installed in Tier 1/2. */
-export const TOOL_PROBES: string[] = ["python", "python3", "docker", "apt", "pip", "npm", "node"];
+/**
+ * Scripting tools absent from the container — when bun is available, each has
+ * a tailored "use bun instead" message; otherwise they fold into the absent list.
+ */
+export const SCRIPTING_PROBES: Record<string, string> = {
+    python: "use `bun -e '<code>'` for inline scripts or `bun run <file.ts>`",
+    python3: "use `bun -e '<code>'` for inline scripts or `bun run <file.ts>`",
+    node: "use `bun run <file.ts>` or `bun -e '<code>'`",
+    pip: "use `bun add <package>` to install dependencies",
+    npm: "use `bun install` / `bun add <package>` for dependency management",
+};
 
 /**
- * Appended after the missing-tools section when no tools table was rendered,
- * to guide the agent toward the registered alternatives.
+ * Tools that are present in the container image but non-functional due to
+ * container security policy or read-only filesystem constraints.
  */
-export const PROBE_HINT = "Load the `adda-shell-tools` skill to see which tools are registered and available.";
+export const CONSTRAINED_PROBES: Record<string, string> = {
+    su: "privilege escalation is disabled by container security policy",
+    sudo: "privilege escalation is disabled by container security policy",
+    apt: "package installation fails — the container filesystem is read-only",
+    docker: "Docker daemon is not accessible in this container",
+};
 
-/** Rendered when neither registered tools nor missing tools are found. */
-export const FALLBACK = "No shell tool information is available. Load the `adda-shell-tools` skill for guidance.";
+/** Rendered when no tools, no scripting alternatives, no constrained present, and no absent tools are found. */
+export const FALLBACK = "No shell tool information is available for this container.";
 
 // --- Pure functions ---
 
@@ -53,26 +67,50 @@ export function renderToolsTable(tools: Tool[]): string {
     return [header, ...rows].join("\n");
 }
 
-/** Renders the missing-tools section with one line per absent tool. */
-export function renderMissingTools(missing: string[]): string {
-    const lines = missing.map((name) => `- \`${name}\` is not available — use available tools only for smooth operation`);
-    return `**Absent tools:**\n${lines.join("\n")}`;
+/**
+ * Renders the "use bun" section for scripting tools that are absent but have
+ * a bun-based alternative.
+ */
+export function renderScriptingAlternatives(entries: Array<{ name: string; message: string }>): string {
+    const bullets = entries.map((e) => `- \`${e.name}\`: ${e.message}`);
+    return `**Scripting runtimes not available — use bun:**\n${bullets.join("\n")}`;
 }
 
 /**
- * Composes the full rendered output from tools and missing lists.
- * Returns FALLBACK when both are empty.
+ * Renders the "do not use" section for constrained tools that are present
+ * in the container but non-functional.
  */
-export function render(tools: Tool[], missing: string[]): string {
-    const toolsSection = tools.length > 0 ? renderToolsTable(tools) : null;
-    const missingSection = missing.length > 0 ? renderMissingTools(missing) : null;
+export function renderConstrainedPresent(entries: Array<{ name: string; message: string }>): string {
+    const bullets = entries.map((e) => `- \`${e.name}\`: ${e.message}`);
+    return `**Do not use — blocked by container:**\n${bullets.join("\n")}`;
+}
 
-    if (!toolsSection && !missingSection) return FALLBACK;
+/** Renders the compact grouped line for all absent tools with no tailored message. */
+export function renderAbsent(names: string[]): string {
+    const list = names.map((n) => `\`${n}\``).join(", ");
+    return `**Not available:** ${list}`;
+}
 
-    const parts: string[] = [];
-    if (toolsSection) parts.push(toolsSection);
-    if (missingSection) parts.push(missingSection);
-    if (!toolsSection) parts.push(PROBE_HINT);
+/**
+ * Assembles the full rendered output under the ## Container shell tools heading.
+ * Returns FALLBACK when all inputs are empty.
+ */
+export function render(
+    tools: Tool[],
+    scriptingAlternatives: Array<{ name: string; message: string }>,
+    constrainedPresent: Array<{ name: string; message: string }>,
+    allAbsent: string[],
+): string {
+    if (tools.length === 0 && scriptingAlternatives.length === 0 && constrainedPresent.length === 0 && allAbsent.length === 0) {
+        return FALLBACK;
+    }
+
+    const parts: string[] = ["## Container shell tools"];
+
+    if (tools.length > 0) parts.push(renderToolsTable(tools));
+    if (scriptingAlternatives.length > 0) parts.push(renderScriptingAlternatives(scriptingAlternatives));
+    if (constrainedPresent.length > 0) parts.push(renderConstrainedPresent(constrainedPresent));
+    if (allAbsent.length > 0) parts.push(renderAbsent(allAbsent));
 
     return parts.join("\n\n");
 }
@@ -99,16 +137,36 @@ export class RenderAddaShellTools extends ScriptBase<RenderAddaShellToolsDeps, E
         }
 
         const tools = parseTools(raw);
+        const registeredNames = new Set(tools.map((t) => t.name));
+        const bunAvailable = registeredNames.has("bun");
 
-        const missing: string[] = [];
-        for (const toolName of TOOL_PROBES) {
-            const result = await this.deps.shell.run(["which", toolName], { strict: false });
+        const scriptingAlternatives: Array<{ name: string; message: string }> = [];
+        const allAbsent: string[] = [];
+
+        for (const [name, bunMessage] of Object.entries(SCRIPTING_PROBES)) {
+            const result = await this.deps.shell.run(["which", name], { strict: false });
             if (result.exitCode !== 0) {
-                missing.push(toolName);
+                if (bunAvailable) {
+                    scriptingAlternatives.push({ name, message: bunMessage });
+                } else {
+                    allAbsent.push(name);
+                }
+            }
+            // present → silent
+        }
+
+        const constrainedPresent: Array<{ name: string; message: string }> = [];
+
+        for (const [name, constraintMsg] of Object.entries(CONSTRAINED_PROBES)) {
+            const result = await this.deps.shell.run(["which", name], { strict: false });
+            if (result.exitCode === 0) {
+                constrainedPresent.push({ name, message: constraintMsg });
+            } else {
+                allAbsent.push(name);
             }
         }
 
-        const output = render(tools, missing);
+        const output = render(tools, scriptingAlternatives, constrainedPresent, allAbsent);
         this.deps.stdio.stdout.write(`${output}\n`);
     }
 }

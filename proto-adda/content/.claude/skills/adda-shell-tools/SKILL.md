@@ -1,13 +1,14 @@
 ---
 description: >
-  Renders a live table of CLI tools registered for this container and warns about
-  commonly expected tools that are absent. Load this skill whenever you are about
-  to invoke a CLI tool and are uncertain whether it is available — for example,
-  before reaching for grep (use rg), find (use fdfind), python (not installed),
-  docker (not available), npm (not available), or any tool you have not confirmed
-  is present. The output tells you exactly which tools are registered, their
-  canonical usage patterns, and which familiar tool names are missing so you pick
-  the right alternative immediately.
+  Load this skill before using any CLI tool that is not already documented in
+  the current context — especially on first use in a session. Do not wait until
+  you are uncertain: load it proactively. Common cases where loading prevents
+  errors: reaching for grep (use rg instead), find (use fdfind), python or node
+  (not installed — use bun), docker (not accessible in this container), npm or
+  pip (use bun). The skill renders a live table of registered tools with their
+  canonical usage patterns and identifies constrained or absent tools so you pick
+  the right alternative immediately. When in doubt, load it — undertriggering
+  wastes more effort than loading it unnecessarily.
 user-invocable: false
 ---
 
