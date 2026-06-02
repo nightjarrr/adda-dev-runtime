@@ -151,7 +151,6 @@ export class RenderAddaShellTools extends ScriptBase<RenderAddaShellToolsDeps, E
         } catch {
             const readFileWarning =
                 "Warning: ~/.claude/shell-tools.jsonl could not be read — the container may not have bootstrapped correctly. If you encounter unexpected tool availability issues, consider mentioning this to PO.";
-            this.deps.stdio.stderr.write(`${readFileWarning}\n`);
             warnings.push(readFileWarning);
             raw = "";
         }
@@ -161,7 +160,6 @@ export class RenderAddaShellTools extends ScriptBase<RenderAddaShellToolsDeps, E
         if (skippedLines.length > 0) {
             const malformedWarning =
                 "Warning: some entries in ~/.claude/shell-tools.jsonl were skipped due to malformed content. If tool availability seems incorrect, consider asking PO for guidance.";
-            this.deps.stdio.stderr.write(`${malformedWarning}\n`);
             warnings.push(malformedWarning);
         }
 

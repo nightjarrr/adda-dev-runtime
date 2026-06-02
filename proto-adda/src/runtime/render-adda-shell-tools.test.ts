@@ -428,36 +428,32 @@ describe("RenderAddaShellTools", () => {
         expect(out).toContain("| `jq`");
     });
 
-    test("readFile failure produces warning text in stdout and stderr", async () => {
-        const { deps, outLines, errLines } = makeMockDeps({
+    test("readFile failure produces warning text in stdout", async () => {
+        const { deps, outLines } = makeMockDeps({
             fileContent: new Error("ENOENT"),
             whichResults: allPresent(),
         });
         const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
         expect(code).toBe(0);
         const out = outLines.join("");
-        const err = errLines.join("");
         const expectedWarning =
             "Warning: ~/.claude/shell-tools.jsonl could not be read — the container may not have bootstrapped correctly. If you encounter unexpected tool availability issues, consider mentioning this to PO.";
         expect(out).toContain(expectedWarning);
-        expect(err).toContain(expectedWarning);
     });
 
-    test("malformed JSONL produces warning text in stdout and stderr", async () => {
+    test("malformed JSONL produces warning text in stdout", async () => {
         const jsonl =
             '{"name":"rg","cmd":"rg <pattern>","desc":"Fast search"}\nnot-valid-json\n{"name":"jq","cmd":"jq .","desc":"JSON"}';
-        const { deps, outLines, errLines } = makeMockDeps({
+        const { deps, outLines } = makeMockDeps({
             fileContent: jsonl,
             whichResults: allPresent(),
         });
         const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
         expect(code).toBe(0);
         const out = outLines.join("");
-        const err = errLines.join("");
         const expectedWarning =
             "Warning: some entries in ~/.claude/shell-tools.jsonl were skipped due to malformed content. If tool availability seems incorrect, consider asking PO for guidance.";
         expect(out).toContain(expectedWarning);
-        expect(err).toContain(expectedWarning);
     });
 
     test("HOME unset — throws ScriptError and exits non-zero", async () => {
