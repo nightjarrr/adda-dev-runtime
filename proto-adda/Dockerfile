@@ -12,6 +12,7 @@
 # ======================================================================
 
 ARG BUN_VERSION=1.3.14
+ARG BASE_TAG=latest
 
 # ======================================================================
 # BUN BUILDER — compile Tier 2 TypeScript scripts to extensionless executables
@@ -31,7 +32,6 @@ RUN bun install --frozen-lockfile \
     && for f in /build/out/bin/*.js; do mv "$f" "${f%.js}"; done \
     && chmod +x /build/out/bin/*
 
-ARG BASE_TAG=latest
 FROM ghcr.io/nightjarrr/adda-dev-runtime:${BASE_TAG}
 
 # Build steps require root to write to /usr/local; Tier 1 leaves USER as adda.
