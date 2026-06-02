@@ -1,15 +1,17 @@
-import { homedir } from "node:os";
 import type { parseArgs } from "node:util";
-import type { EmptyArgs, FileReaderDep, ShellDep, StdioDep } from "@adda/lib";
-import { defaultDeps, ScriptBase } from "@adda/lib";
+import type { EmptyArgs, EnvDep, FileReaderDep, ShellDep, StdioDep } from "@adda/lib";
+import { defaultDeps, parseJson, ScriptBase, ScriptError } from "@adda/lib";
+import { z } from "zod";
 
 // --- Types ---
 
 export type Tool = { name: string; cmd: string; desc: string };
 
-type RenderAddaShellToolsDeps = FileReaderDep & ShellDep & StdioDep;
+type RenderAddaShellToolsDeps = FileReaderDep & ShellDep & StdioDep & EnvDep;
 
 // --- Constants ---
+
+const ToolSchema = z.object({ name: z.string(), cmd: z.string(), desc: z.string() });
 
 /**
  * Scripting tools absent from the container — when bun is available, each has
@@ -30,34 +32,41 @@ export const SCRIPTING_PROBES: Record<string, string> = {
 export const CONSTRAINED_PROBES: Record<string, string> = {
     su: "privilege escalation is disabled by container security policy",
     sudo: "privilege escalation is disabled by container security policy",
-    apt: "package installation fails — the container filesystem is read-only",
-    docker: "Docker daemon is not accessible in this container",
+    apt: "requires root and will fail — no sudo access and the container filesystem is read-only",
+    docker: "not available — this environment runs inside a container, Docker and other container runtimes cannot be used from within",
 };
 
 /** Rendered when no tools, no scripting alternatives, no constrained present, and no absent tools are found. */
-export const FALLBACK = "No shell tool information is available for this container.";
+export const FALLBACK =
+    "Warning: no shell tool information is available — the container may not have bootstrapped correctly. Use `which` <tool> to check whether a specific tool is present.";
 
 // --- Pure functions ---
 
 /**
  * Parses a JSONL string into Tool records.
- * Blank lines and malformed lines are silently skipped.
+ * Blank lines are skipped. Malformed lines are collected in skippedLines.
  */
-export function parseTools(raw: string): Tool[] {
+export function parseTools(raw: string): { tools: Tool[]; skippedLines: string[] } {
     const tools: Tool[] = [];
+    const skippedLines: string[] = [];
     for (const line of raw.split("\n")) {
         const trimmed = line.trim();
         if (!trimmed) continue;
+        let parsed: unknown;
         try {
-            const obj = JSON.parse(trimmed) as Record<string, unknown>;
-            if (typeof obj.name === "string" && typeof obj.cmd === "string" && typeof obj.desc === "string") {
-                tools.push({ name: obj.name, cmd: obj.cmd, desc: obj.desc });
-            }
+            parsed = parseJson(trimmed);
         } catch {
-            // skip malformed lines
+            skippedLines.push(trimmed);
+            continue;
+        }
+        const result = ToolSchema.safeParse(parsed);
+        if (result.success) {
+            tools.push(result.data);
+        } else {
+            skippedLines.push(trimmed);
         }
     }
-    return tools;
+    return { tools, skippedLines };
 }
 
 /** Renders a markdown table of registered tools. */
@@ -73,7 +82,7 @@ export function renderToolsTable(tools: Tool[]): string {
  */
 export function renderScriptingAlternatives(entries: Array<{ name: string; message: string }>): string {
     const bullets = entries.map((e) => `- \`${e.name}\`: ${e.message}`);
-    return `**Scripting runtimes not available — use bun:**\n${bullets.join("\n")}`;
+    return `**The following scripting runtimes are not available in this container — see the suggested alternative for each:**\n${bullets.join("\n")}`;
 }
 
 /**
@@ -82,13 +91,13 @@ export function renderScriptingAlternatives(entries: Array<{ name: string; messa
  */
 export function renderConstrainedPresent(entries: Array<{ name: string; message: string }>): string {
     const bullets = entries.map((e) => `- \`${e.name}\`: ${e.message}`);
-    return `**Do not use — blocked by container:**\n${bullets.join("\n")}`;
+    return `**The following tools will not work in this container environment:**\n${bullets.join("\n")}`;
 }
 
 /** Renders the compact grouped line for all absent tools with no tailored message. */
 export function renderAbsent(names: string[]): string {
     const list = names.map((n) => `\`${n}\``).join(", ");
-    return `**Not available:** ${list}`;
+    return `**Not available** (calls will result in \`command not found\`): ${list}`;
 }
 
 /**
@@ -107,7 +116,10 @@ export function render(
 
     const parts: string[] = ["## Container shell tools"];
 
-    if (tools.length > 0) parts.push(renderToolsTable(tools));
+    if (tools.length > 0) {
+        parts.push("Use the following tools — they are available in this container:");
+        parts.push(renderToolsTable(tools));
+    }
     if (scriptingAlternatives.length > 0) parts.push(renderScriptingAlternatives(scriptingAlternatives));
     if (constrainedPresent.length > 0) parts.push(renderConstrainedPresent(constrainedPresent));
     if (allAbsent.length > 0) parts.push(renderAbsent(allAbsent));
@@ -127,16 +139,32 @@ export class RenderAddaShellTools extends ScriptBase<RenderAddaShellToolsDeps, E
     }
 
     protected async execute(_args: EmptyArgs): Promise<void> {
-        const shellToolsPath = `${homedir()}/.claude/shell-tools.jsonl`;
+        const home = this.deps.env.get("HOME");
+        if (!home) throw new ScriptError("HOME environment variable is not set");
+        const shellToolsPath = `${home}/.claude/shell-tools.jsonl`;
+
+        const warnings: string[] = [];
 
         let raw: string;
         try {
             raw = await this.deps.fileReader.readFile(shellToolsPath);
         } catch {
+            const readFileWarning =
+                "Warning: ~/.claude/shell-tools.jsonl could not be read — the container may not have bootstrapped correctly. If you encounter unexpected tool availability issues, consider mentioning this to PO.";
+            this.deps.stdio.stderr.write(`${readFileWarning}\n`);
+            warnings.push(readFileWarning);
             raw = "";
         }
 
-        const tools = parseTools(raw);
+        const { tools, skippedLines } = parseTools(raw);
+
+        if (skippedLines.length > 0) {
+            const malformedWarning =
+                "Warning: some entries in ~/.claude/shell-tools.jsonl were skipped due to malformed content. If tool availability seems incorrect, consider asking PO for guidance.";
+            this.deps.stdio.stderr.write(`${malformedWarning}\n`);
+            warnings.push(malformedWarning);
+        }
+
         const registeredNames = new Set(tools.map((t) => t.name));
         const bunAvailable = registeredNames.has("bun");
 
@@ -166,8 +194,10 @@ export class RenderAddaShellTools extends ScriptBase<RenderAddaShellToolsDeps, E
             }
         }
 
-        const output = render(tools, scriptingAlternatives, constrainedPresent, allAbsent);
-        this.deps.stdio.stdout.write(`${output}\n`);
+        const rendered = render(tools, scriptingAlternatives, constrainedPresent, allAbsent);
+
+        const outputParts: string[] = [...warnings, rendered];
+        this.deps.stdio.stdout.write(`${outputParts.join("\n\n")}\n`);
     }
 }
 

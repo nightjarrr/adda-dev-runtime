@@ -18,7 +18,7 @@ container built from this same repo. Two consequences:
 - **No Docker in the container.** Image builds and launch tests are run by
   PO on the host, not by the agent. Verification inside the container is
   limited to file/path checks and `quality-gates`.
-- **`/workspace` is the only durable path.** See *Path model* below.
+- **`/workspace` is the only durable path.**
 
 ## Tier architecture
 
@@ -90,17 +90,6 @@ Correct invocations:
 - `bun build <source dir> --outdir <output dir> --target bun --banner '#!/usr/bin/env bun'`
 - `biome check <source dir>`
 - `tsc --noEmit`
-
-## Path model
-
-| Path | Nature | Persistence |
-|---|---|---|
-| `/home/adda/`, `/tmp` | ephemeral tmpfs | wiped at container stop |
-| `/usr/local/**` | immutable (read-only rootfs) | write attempts fail |
-| `/workspace` | cloned repo (git-backed) | wiped — **commit and push to persist** |
-
-`~/.claude/` is bootstrapped from the image at startup; editing it does not
-affect future containers.
 
 ## Artifact routing
 

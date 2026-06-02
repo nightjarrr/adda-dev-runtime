@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { FileReader, FileReaderDep, Shell, ShellDep, ShellResult, StdioDep } from "@adda/lib";
+import type { Env, EnvDep, FileReader, FileReaderDep, Shell, ShellDep, ShellResult, StdioDep } from "@adda/lib";
 import {
     CONSTRAINED_PROBES,
     FALLBACK,
@@ -15,7 +15,7 @@ import {
 
 // --- Mock helpers ---
 
-type RenderAddaShellToolsDeps = FileReaderDep & ShellDep & StdioDep;
+type RenderAddaShellToolsDeps = FileReaderDep & ShellDep & StdioDep & EnvDep;
 
 /**
  * All known probe names: used by tests that want a specific set to be present or absent.
@@ -55,9 +55,17 @@ function makeMockDeps(options: { fileContent?: string | Error; whichResults?: Re
         ),
     };
 
+    const mockEnv: Env = {
+        get: mock((_name: string): string | undefined => {
+            if (_name === "HOME") return "/tmp";
+            return undefined;
+        }),
+    };
+
     const deps: RenderAddaShellToolsDeps = {
         fileReader: mockFileReader,
         shell: mockShell,
+        env: mockEnv,
         stdio: {
             stdin: { text: mock(async () => "") },
             stdout: {
@@ -91,7 +99,7 @@ function allAbsent(): Record<string, number> {
 describe("parseTools", () => {
     test("parses valid JSONL with multiple tools", () => {
         const raw = '{"name":"rg","cmd":"rg <pattern>","desc":"Fast search"}\n{"name":"jq","cmd":"jq .","desc":"JSON"}';
-        const tools = parseTools(raw);
+        const { tools } = parseTools(raw);
         expect(tools).toHaveLength(2);
         expect(tools[0]).toEqual({ name: "rg", cmd: "rg <pattern>", desc: "Fast search" });
         expect(tools[1]).toEqual({ name: "jq", cmd: "jq .", desc: "JSON" });
@@ -99,26 +107,38 @@ describe("parseTools", () => {
 
     test("skips blank lines", () => {
         const raw = '{"name":"rg","cmd":"rg <pattern>","desc":"Fast search"}\n\n{"name":"jq","cmd":"jq .","desc":"JSON"}';
-        expect(parseTools(raw)).toHaveLength(2);
+        const { tools } = parseTools(raw);
+        expect(tools).toHaveLength(2);
     });
 
     test("skips malformed lines among good lines", () => {
         const raw =
             '{"name":"rg","cmd":"rg <pattern>","desc":"Fast search"}\nnot-json-at-all\n{"name":"jq","cmd":"jq .","desc":"JSON"}';
-        const tools = parseTools(raw);
+        const { tools } = parseTools(raw);
         expect(tools).toHaveLength(2);
         expect(tools.map((t) => t.name)).toEqual(["rg", "jq"]);
     });
 
-    test("skips object missing required fields", () => {
-        const raw = '{"name":"rg","cmd":"rg <pattern>"}\n{"name":"jq","cmd":"jq .","desc":"JSON"}';
-        const tools = parseTools(raw);
-        expect(tools).toHaveLength(1);
-        expect(tools[0].name).toBe("jq");
+    test("malformed line populates skippedLines, valid lines still parsed", () => {
+        const raw =
+            '{"name":"rg","cmd":"rg <pattern>","desc":"Fast search"}\nnot-json-at-all\n{"name":"jq","cmd":"jq .","desc":"JSON"}';
+        const { tools, skippedLines } = parseTools(raw);
+        expect(tools).toHaveLength(2);
+        expect(skippedLines).toEqual(["not-json-at-all"]);
     });
 
-    test("empty string returns empty array", () => {
-        expect(parseTools("")).toHaveLength(0);
+    test("skips object missing required fields — populates skippedLines", () => {
+        const raw = '{"name":"rg","cmd":"rg <pattern>"}\n{"name":"jq","cmd":"jq .","desc":"JSON"}';
+        const { tools, skippedLines } = parseTools(raw);
+        expect(tools).toHaveLength(1);
+        expect(tools[0].name).toBe("jq");
+        expect(skippedLines).toHaveLength(1);
+    });
+
+    test("empty string returns empty tools and no skipped lines", () => {
+        const { tools, skippedLines } = parseTools("");
+        expect(tools).toHaveLength(0);
+        expect(skippedLines).toHaveLength(0);
     });
 });
 
@@ -137,10 +157,12 @@ describe("renderToolsTable", () => {
 // --- renderScriptingAlternatives ---
 
 describe("renderScriptingAlternatives", () => {
-    test("renders use-bun heading and bullet per entry", () => {
+    test("renders updated heading and bullet per entry", () => {
         const entries = [{ name: "python", message: "use `bun -e '<code>'` for inline scripts or `bun run <file.ts>`" }];
         const output = renderScriptingAlternatives(entries);
-        expect(output).toContain("**Scripting runtimes not available — use bun:**");
+        expect(output).toContain(
+            "**The following scripting runtimes are not available in this container — see the suggested alternative for each:**",
+        );
         expect(output).toContain("- `python`: use `bun -e '<code>'`");
     });
 
@@ -158,10 +180,10 @@ describe("renderScriptingAlternatives", () => {
 // --- renderConstrainedPresent ---
 
 describe("renderConstrainedPresent", () => {
-    test("renders do-not-use heading and bullet per entry", () => {
+    test("renders updated heading and bullet per entry", () => {
         const entries = [{ name: "su", message: "privilege escalation is disabled by container security policy" }];
         const output = renderConstrainedPresent(entries);
-        expect(output).toContain("**Do not use — blocked by container:**");
+        expect(output).toContain("**The following tools will not work in this container environment:**");
         expect(output).toContain("- `su`: privilege escalation is disabled");
     });
 
@@ -179,14 +201,14 @@ describe("renderConstrainedPresent", () => {
 // --- renderAbsent ---
 
 describe("renderAbsent", () => {
-    test("renders compact not-available line with backtick-quoted names", () => {
+    test("renders updated not-available line with backtick-quoted names and command not found note", () => {
         const output = renderAbsent(["docker", "python", "node"]);
-        expect(output).toBe("**Not available:** `docker`, `python`, `node`");
+        expect(output).toBe("**Not available** (calls will result in `command not found`): `docker`, `python`, `node`");
     });
 
     test("renders single name correctly", () => {
         const output = renderAbsent(["docker"]);
-        expect(output).toBe("**Not available:** `docker`");
+        expect(output).toBe("**Not available** (calls will result in `command not found`): `docker`");
     });
 });
 
@@ -200,41 +222,44 @@ describe("render", () => {
         expect(output).toBe(FALLBACK);
     });
 
-    test("tools only — returns heading and tools table", () => {
+    test("tools only — returns heading, intro sentence, and tools table", () => {
         const output = render(singleTool, [], [], []);
         expect(output).toContain("## Container shell tools");
+        expect(output).toContain("Use the following tools — they are available in this container:");
         expect(output).toContain("| `rg`");
         expect(output).not.toContain("not available");
         expect(output).not.toContain("use bun");
     });
 
-    test("scripting alternatives present — includes use-bun section", () => {
+    test("scripting alternatives present — includes updated heading section", () => {
         const sa = [{ name: "python", message: "use bun" }];
         const output = render(singleTool, sa, [], []);
         expect(output).toContain("## Container shell tools");
         expect(output).toContain("| `rg`");
-        expect(output).toContain("**Scripting runtimes not available — use bun:**");
+        expect(output).toContain(
+            "**The following scripting runtimes are not available in this container — see the suggested alternative for each:**",
+        );
         expect(output).toContain("- `python`: use bun");
     });
 
-    test("constrained present — includes do-not-use section", () => {
+    test("constrained present — includes updated heading section", () => {
         const cp = [{ name: "su", message: "privilege escalation is disabled by container security policy" }];
         const output = render(singleTool, [], cp, []);
         expect(output).toContain("## Container shell tools");
-        expect(output).toContain("**Do not use — blocked by container:**");
+        expect(output).toContain("**The following tools will not work in this container environment:**");
         expect(output).toContain("- `su`:");
     });
 
-    test("absent names — includes compact not-available line", () => {
+    test("absent names — includes updated not-available line", () => {
         const output = render(singleTool, [], [], ["docker"]);
         expect(output).toContain("## Container shell tools");
-        expect(output).toContain("**Not available:** `docker`");
+        expect(output).toContain("**Not available** (calls will result in `command not found`): `docker`");
     });
 
     test("sections are omitted when empty", () => {
         const output = render(singleTool, [], [], []);
-        expect(output).not.toContain("use bun");
-        expect(output).not.toContain("Do not use");
+        expect(output).not.toContain("scripting runtimes");
+        expect(output).not.toContain("will not work");
         expect(output).not.toContain("Not available");
     });
 
@@ -244,12 +269,17 @@ describe("render", () => {
         expect(render([], [], [{ name: "su", message: "msg" }], [])).toContain("## Container shell tools");
         expect(render([], [], [], ["docker"])).toContain("## Container shell tools");
     });
+
+    test("intro sentence only rendered when tools are present", () => {
+        const output = render([], [{ name: "python", message: "msg" }], [], []);
+        expect(output).not.toContain("Use the following tools");
+    });
 });
 
 // --- RenderAddaShellTools (execute via run) ---
 
 describe("RenderAddaShellTools", () => {
-    test("scripting alternatives — bun in tools, python absent — renders use-bun section", async () => {
+    test("scripting alternatives — bun in tools, python absent — renders updated use-bun section", async () => {
         const jsonl = '{"name":"bun","cmd":"bun run <file>","desc":"Scripting"}';
         // python absent (exit 1), everything else present
         const { deps, outLines } = makeMockDeps({
@@ -259,12 +289,14 @@ describe("RenderAddaShellTools", () => {
         const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
         expect(code).toBe(0);
         const out = outLines.join("");
-        expect(out).toContain("**Scripting runtimes not available — use bun:**");
+        expect(out).toContain(
+            "**The following scripting runtimes are not available in this container — see the suggested alternative for each:**",
+        );
         expect(out).toContain("- `python`:");
-        expect(out).not.toContain("**Not available:** `python`");
+        expect(out).not.toContain("**Not available** (calls will result in `command not found`): `python`");
     });
 
-    test("scripting absent grouped — bun not in tools, python+node absent — compact not-available line", async () => {
+    test("scripting absent grouped — bun not in tools, python+node absent — updated compact not-available line", async () => {
         // No bun in tools table, python and node absent
         const jsonl = '{"name":"rg","cmd":"rg <pattern>","desc":"Fast search"}';
         const { deps, outLines } = makeMockDeps({
@@ -274,13 +306,13 @@ describe("RenderAddaShellTools", () => {
         const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
         expect(code).toBe(0);
         const out = outLines.join("");
-        expect(out).not.toContain("**Scripting runtimes not available — use bun:**");
-        expect(out).toContain("**Not available:**");
+        expect(out).not.toContain("scripting runtimes are not available");
+        expect(out).toContain("**Not available** (calls will result in `command not found`):");
         expect(out).toContain("`python`");
         expect(out).toContain("`node`");
     });
 
-    test("constrained present — su present — renders do-not-use section", async () => {
+    test("constrained present — su present — renders updated do-not-use section", async () => {
         const jsonl = '{"name":"rg","cmd":"rg <pattern>","desc":"Fast search"}';
         // su present (0), everything else absent (1) for constrained probes
         const { deps, outLines } = makeMockDeps({
@@ -290,12 +322,12 @@ describe("RenderAddaShellTools", () => {
         const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
         expect(code).toBe(0);
         const out = outLines.join("");
-        expect(out).toContain("**Do not use — blocked by container:**");
+        expect(out).toContain("**The following tools will not work in this container environment:**");
         expect(out).toContain("- `su`:");
         expect(out).toContain("privilege escalation is disabled by container security policy");
     });
 
-    test("constrained absent — docker absent — compact not-available line includes docker", async () => {
+    test("constrained absent — docker absent — updated compact not-available line includes docker", async () => {
         const jsonl = '{"name":"bun","cmd":"bun run <file>","desc":"Scripting"}';
         // docker absent, everything else present
         const { deps, outLines } = makeMockDeps({
@@ -305,7 +337,7 @@ describe("RenderAddaShellTools", () => {
         const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
         expect(code).toBe(0);
         const out = outLines.join("");
-        expect(out).toContain("**Not available:**");
+        expect(out).toContain("**Not available** (calls will result in `command not found`):");
         expect(out).toContain("`docker`");
     });
 
@@ -331,28 +363,29 @@ describe("RenderAddaShellTools", () => {
         const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
         expect(code).toBe(0);
         const out = outLines.join("");
-        // tools table
+        // tools table with intro
+        expect(out).toContain("Use the following tools — they are available in this container:");
         expect(out).toContain("| `bun`");
         expect(out).toContain("| `rg`");
         // use-bun section for absent scripting tools
-        expect(out).toContain("**Scripting runtimes not available — use bun:**");
+        expect(out).toContain(
+            "**The following scripting runtimes are not available in this container — see the suggested alternative for each:**",
+        );
         expect(out).toContain("- `python`:");
         expect(out).toContain("- `node`:");
         // do-not-use section for present constrained tools
-        expect(out).toContain("**Do not use — blocked by container:**");
+        expect(out).toContain("**The following tools will not work in this container environment:**");
         expect(out).toContain("- `su`:");
         expect(out).toContain("- `sudo`:");
         expect(out).toContain("- `apt`:");
         // compact absent line for docker
-        expect(out).toContain("**Not available:** `docker`");
+        expect(out).toContain("**Not available** (calls will result in `command not found`): `docker`");
     });
 
     test("FALLBACK constant has expected value", () => {
-        // FALLBACK is unreachable via execute() in practice: absent constrained probes always
-        // populate allAbsent, and present constrained probes populate constrainedPresent.
-        // The pure render() FALLBACK path is covered by the render() describe block above.
-        // This test simply guards the constant value itself.
-        expect(FALLBACK).toBe("No shell tool information is available for this container.");
+        expect(FALLBACK).toBe(
+            "Warning: no shell tool information is available — the container may not have bootstrapped correctly. Use `which` <tool> to check whether a specific tool is present.",
+        );
     });
 
     test("silent scripting — bun in tools, python present — no scripting section in output", async () => {
@@ -364,7 +397,7 @@ describe("RenderAddaShellTools", () => {
         const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
         expect(code).toBe(0);
         const out = outLines.join("");
-        expect(out).not.toContain("**Scripting runtimes not available");
+        expect(out).not.toContain("scripting runtimes are not available");
     });
 
     test("renders tools table and absent section when both are present", async () => {
@@ -378,7 +411,7 @@ describe("RenderAddaShellTools", () => {
         const out = outLines.join("");
         expect(out).toContain("| `rg`");
         // scripting absent (no bun in tools) → compact line
-        expect(out).toContain("**Not available:**");
+        expect(out).toContain("**Not available** (calls will result in `command not found`):");
     });
 
     test("skips malformed lines in JSONL and renders valid entries", async () => {
@@ -393,5 +426,45 @@ describe("RenderAddaShellTools", () => {
         const out = outLines.join("");
         expect(out).toContain("| `rg`");
         expect(out).toContain("| `jq`");
+    });
+
+    test("readFile failure produces warning text in stdout and stderr", async () => {
+        const { deps, outLines, errLines } = makeMockDeps({
+            fileContent: new Error("ENOENT"),
+            whichResults: allPresent(),
+        });
+        const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
+        expect(code).toBe(0);
+        const out = outLines.join("");
+        const err = errLines.join("");
+        const expectedWarning =
+            "Warning: ~/.claude/shell-tools.jsonl could not be read — the container may not have bootstrapped correctly. If you encounter unexpected tool availability issues, consider mentioning this to PO.";
+        expect(out).toContain(expectedWarning);
+        expect(err).toContain(expectedWarning);
+    });
+
+    test("malformed JSONL produces warning text in stdout and stderr", async () => {
+        const jsonl =
+            '{"name":"rg","cmd":"rg <pattern>","desc":"Fast search"}\nnot-valid-json\n{"name":"jq","cmd":"jq .","desc":"JSON"}';
+        const { deps, outLines, errLines } = makeMockDeps({
+            fileContent: jsonl,
+            whichResults: allPresent(),
+        });
+        const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
+        expect(code).toBe(0);
+        const out = outLines.join("");
+        const err = errLines.join("");
+        const expectedWarning =
+            "Warning: some entries in ~/.claude/shell-tools.jsonl were skipped due to malformed content. If tool availability seems incorrect, consider asking PO for guidance.";
+        expect(out).toContain(expectedWarning);
+        expect(err).toContain(expectedWarning);
+    });
+
+    test("HOME unset — throws ScriptError and exits non-zero", async () => {
+        const { deps } = makeMockDeps({ fileContent: "" });
+        // Override env to return undefined for HOME
+        deps.env = { get: mock((_name: string) => undefined) };
+        const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
+        expect(code).not.toBe(0);
     });
 });

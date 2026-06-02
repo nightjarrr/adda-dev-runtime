@@ -1,14 +1,12 @@
 ---
 description: >
-  Load this skill before using any CLI tool that is not already documented in
-  the current context — especially on first use in a session. Do not wait until
-  you are uncertain: load it proactively. Common cases where loading prevents
-  errors: reaching for grep (use rg instead), find (use fdfind), python or node
-  (not installed — use bun), docker (not accessible in this container), npm or
-  pip (use bun). The skill renders a live table of registered tools with their
-  canonical usage patterns and identifies constrained or absent tools so you pick
-  the right alternative immediately. When in doubt, load it — undertriggering
-  wastes more effort than loading it unnecessarily.
+  Always load this skill the first time you reach for any CLI tool in a session —
+  this container is a specialized runtime where common assumptions about available
+  tooling are often wrong. Reaching for grep, find, python, node, pip, npm, docker,
+  or sudo without checking first leads to errors, wasted calls, and failed operations.
+  The skill renders a live table of what is actually installed (use rg not grep,
+  fdfind not find, bun not python/node) and explicitly warns about tools that are
+  blocked by the container environment.
 user-invocable: false
 ---
 

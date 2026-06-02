@@ -63,7 +63,7 @@ COPY proto-adda/content/templates/.claude.json.template /usr/local/share/adda-de
 # ----------------------------------------------------------------------
 # Tier 2 runtime executables — built by bun-builder stage above
 # ----------------------------------------------------------------------
-COPY --from=bun-builder /build/out/bin/ /usr/local/libexec/adda-dev-runtime/bin/
+COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/
 
 # Restore runtime user before handoff.
 USER adda

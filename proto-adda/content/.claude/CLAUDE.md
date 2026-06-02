@@ -4,13 +4,13 @@ You are running inside an isolated, ephemeral Docker container. Understanding th
 
 ## What this container is
 
-- **Ephemeral** — the home directory (`/home/adda/`) and `/tmp` are RAM-backed tmpfs mounts; they are wiped when the container stops. Anything written there is gone on the next container start.
-- **Read-only rootfs** — `/usr/local/**` is immutable. Write attempts to those paths return a permission error immediately.
-- **No container runtime** — Docker is not available inside the container. Image builds and container launches are run by the human operator on the host.
-- **No package managers** — `apt`, `pip`, `npm -g`, and similar system-wide install commands are not available or will fail. Do not attempt to install software.
-- **Proxy-only network** — outbound traffic is routed exclusively through an Envoy proxy. Tools that bypass `HTTP_PROXY`/`HTTPS_PROXY` (raw TCP, custom TLS stacks) have no network path and will hang or fail.
-- **`/workspace` is the only durable path** — it is a bind-mounted git repository. Commit and push to persist work across container restarts.
-- **`~/.claude/` is ephemeral** — it is bootstrapped from the image at every container start; edits do not survive a restart.
+| Path | Writable | Persistence |
+|---|---|---|
+| `/workspace` | yes | durable — commit and push to persist |
+| `/home/adda/`, `/tmp` | yes | ephemeral — wiped at container stop |
+| everything else | **no** | rootfs is read-only; write attempts fail |
+
+Docker is not available inside the container — image builds and container launches are run by the human operator on the host. Outbound traffic is routed exclusively through an Envoy proxy; tools that bypass `HTTP_PROXY`/`HTTPS_PROXY` (raw TCP, custom TLS stacks) have no network path and will hang or fail. `~/.claude/` is bootstrapped from the image at every container start; edits do not survive a restart.
 
 ## Available CLI tools
 

@@ -32,10 +32,10 @@ require_tool bun
 # Register general-purpose runtime tools for agent discovery.
 # Infra tools (socat, bwrap) and human-comfort tools (micro, delta)
 # are excluded; dev workflow tools (biome, tsc) belong in docs/conventions.md.
-announce_shell_tool "rg"     "rg <pattern> [path]"                     "Fast text search — prefer over grep"
+announce_shell_tool "rg"     "rg <pattern> [path]"                     "ripgrep — fast text search, prefer over grep"
 announce_shell_tool "fdfind" "fdfind <pattern> [path]"                 "Fast file finder — prefer over find"
 announce_shell_tool "jq"     "jq '<filter>' [file]"                    "JSON processor"
-announce_shell_tool "bun"    "bun run <script.ts> / bun -e '<inline>'" "Scripting tasks that fit bun's stdlib capabilities"
+announce_shell_tool "bun"    "bun run <script.ts> / bun -e '<inline>'" "TypeScript/JavaScript scripting runtime"
 announce_shell_tool "gh"     "gh <command>"                            "GitHub CLI"
 announce_shell_tool "git"    "git <command>"                           "Git version control"
 
