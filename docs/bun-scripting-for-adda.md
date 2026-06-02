@@ -265,7 +265,7 @@ Two distinct layers:
 
 **Local (`.quality-gates.conf`, runs in container):**
 - `bun test --coverage`, `bun build`
-- `tsc --noEmit`, `biome check adda-dev-runtime/src/`
+- `tsc --noEmit`, `oxlint adda-dev-runtime/src/ proto-adda/src/`, `oxfmt --check adda-dev-runtime/src/ proto-adda/src/`
 
 **CI-only (`.github/workflows/base.yml`, not in container):**
 - `shellcheck` — pre-installed on `ubuntu-latest` runner
@@ -274,27 +274,30 @@ Two distinct layers:
 
 ---
 
-## Toolchain — global in Tier 1 image
+## Toolchain — repo devDependencies, installed at bootstrap
 
-Installed globally so tools are always available regardless of project tier:
+`oxlint`, `oxfmt`, and `typescript` (for `tsc`) are listed as `devDependencies`
+in `package.json` and installed by `.adda-init.sh` at container start. They are
+available on `PATH` via `/workspace/node_modules/.bin`.
 
-| Tool | Install method | Rationale |
-|------|---------------|-----------|
-| Biome | `curl` from GitHub releases, standalone binary, pinned version | No npm needed; consistent with delta/micro/ripgrep pattern |
-| `tsc` | `BUN_INSTALL=/usr/local bun install -g typescript@<pin>` | Bun-native global install |
-| `@types/bun` | `BUN_INSTALL=/usr/local bun install -g @types/bun@<pin>` | Required by tsc; globally available |
+| Tool | devDependency | Rationale |
+|------|--------------|-----------|
+| `oxlint` | `oxlint@<pin>` | Fast TypeScript/JS linter; replaces Biome lint |
+| `oxfmt` | `oxfmt@<pin>` | TypeScript/JS formatter; replaces Biome format |
+| `tsc` | `typescript@<pin>` | Type checking; previously a Tier 1 global |
 
-Tier 1 made the Bun runtime choice; bundling its verification toolchain is consistent with existing dev tools already in the image.
+These are dev-time tools for this repo only — not runtime tools any Tier 2/3
+consumer needs. Keeping them out of the Tier 1 image reduces image size by ~78 MB.
 
 ---
 
 ## Package manifest
 
 - `package.json` at repo root — settled convention
-- `@types/bun` is globally installed in the Tier 1 image; CI installs it the same way via `BUN_INSTALL=/usr/local bun install -g`. It is listed under `devDependencies` for version tracking only — it is type-only and never bundled.
+- `@types/bun` is listed under `devDependencies` and installed at bootstrap time; it is type-only and never bundled.
 - **`dependencies`** — packages imported in production source and bundled into executables by `bun build`. Example: `"zod": "4.4.3"`. Add new production deps here.
-- **`devDependencies`** — packages used only for type-checking or tooling, never bundled. Example: `"@types/bun": "1.3.14"`. These are never imported in runtime source.
-- Biome is globally installed; not a devDep
-- `tsconfig.json`: strict, `noEmit`, `ESNext` target/module, `moduleResolution: bundler`, `skipLibCheck`, `types: ["bun"]`, `typeRoots: ["/usr/local/install/global/node_modules/@types"]`, `baseUrl: "."`, `paths` for `@adda/lib`
+- **`devDependencies`** — packages used only for type-checking or tooling, never bundled. Examples: `"@types/bun": "1.3.14"`, `"oxlint": "1.68.0"`, `"oxfmt": "0.53.0"`, `"typescript": "6.0.3"`. These are never imported in runtime source.
+- `tsconfig.json`: strict, `noEmit`, `ESNext` target/module, `moduleResolution: bundler`, `skipLibCheck`, `types: ["bun"]`, `baseUrl: "."`, `paths` for `@adda/lib`
 - `bunfig.toml`: `coverageThreshold` line/function/statement = 90
-- `biome.json`: recommended TS rules + `no-console` enforcement on `adda-dev-runtime/src/`
+- `.oxlintrc.json`: recommended rules + `no-console: error`
+- `.oxfmtrc.json`: `useTabs: false`, `tabWidth: 4`, `printWidth: 128`

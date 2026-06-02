@@ -13,8 +13,6 @@
 #   Micro:         2.0.15
 #   Delta:         0.19.2
 #   Bun:           1.3.14                        # 2026-05-24
-#   Biome:         2.4.15
-#   TypeScript:    6.0.3
 # ======================================================================
 
 ARG BUN_VERSION=1.3.14
@@ -154,19 +152,6 @@ RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com
     && unzip -j /tmp/bun.zip 'bun-linux-x64-baseline/bun' -d /usr/local/bin/ \
     && rm /tmp/bun.zip \
     && ln -s /usr/local/bin/bun /usr/local/bin/node
-
-# ----------------------------------------------------------------------
-# Biome — standalone binary linter/formatter, from official GitHub release.
-# TypeScript — installed globally via bun for tsc in container sessions;
-# BUN_INSTALL sets the global prefix.
-# ----------------------------------------------------------------------
-ENV BIOME_VERSION=2.4.15 \
-    TYPESCRIPT_VERSION=6.0.3
-RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors \
-        "https://github.com/biomejs/biome/releases/download/%40biomejs%2Fbiome%40${BIOME_VERSION}/biome-linux-x64-musl" \
-        -o /usr/local/bin/biome \
-    && chmod +x /usr/local/bin/biome \
-    && BUN_INSTALL=/usr/local bun install -g typescript@${TYPESCRIPT_VERSION}
 
 # Create the runtime user explicitly. UID/GID align with the launcher's
 # ADDA_DEV_USER/UID/GID defaults. Higher-tier images FROM this image

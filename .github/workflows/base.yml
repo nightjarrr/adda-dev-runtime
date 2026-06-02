@@ -62,17 +62,19 @@ jobs:
         with:
           bun-version: "1.3.14"
 
-      - name: Install tsc globally
-        if: steps.ts-changed.outputs.changed == 'true'
-        run: sudo env PATH="$PATH" BUN_INSTALL=/usr/local bun install -g typescript@6.0.3
-
-      - name: Lint (biome)
-        if: steps.ts-changed.outputs.changed == 'true'
-        run: bunx @biomejs/biome@2.4.15 check adda-dev-runtime/src/ proto-adda/src/
-
       - name: Install local dependencies
         if: steps.ts-changed.outputs.changed == 'true'
-        run: bun install --frozen-lockfile
+        run: |
+          bun install --frozen-lockfile
+          echo "$GITHUB_WORKSPACE/node_modules/.bin" >> $GITHUB_PATH
+
+      - name: Lint (oxlint)
+        if: steps.ts-changed.outputs.changed == 'true'
+        run: oxlint adda-dev-runtime/src/ proto-adda/src/
+
+      - name: Format check (oxfmt)
+        if: steps.ts-changed.outputs.changed == 'true'
+        run: oxfmt --check adda-dev-runtime/src/ proto-adda/src/
 
       - name: Type check (tsc)
         if: steps.ts-changed.outputs.changed == 'true'
