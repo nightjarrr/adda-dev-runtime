@@ -26,6 +26,7 @@
       "Bash(gh run *)",
       "Bash(gh pr comment *)",
       "Bash(gh api repos/*/pulls/*/comments *)",
+      "Bash(gh api repos/*/pulls/*/comments)",
       "Bash(gh api repos/*/pulls/comments *)",
       "Skill(new-issue)",
       "WebFetch(domain:github.com)",
@@ -34,7 +35,8 @@
       "WebFetch(domain:docs.astral.sh)",
       "WebFetch(domain:docs.python.org)",
       "WebSearch",
-      "Write(~/.issue)"
+      "Write(~/.issue)",
+      "Write(/tmp/*)"
     ],
     "deny": [
       "Bash(gh pr merge *)",

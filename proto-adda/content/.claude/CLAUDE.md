@@ -126,10 +126,12 @@ This inner loop is PM-owned. Do not ask PO before dispatching Coder on a `code_f
 
 ### 6. Post outcome
 
-Before engaging PO regarding Coder's outcome, post Coder's verbatim (no rewording, no reformatting, no condensing) structured final response as a comment to the issue:
+After receiving the final response from the Coder, write it verbatim to `/tmp/{issue-id}-coder-response.md`. It is important to preserve the exact output from Coder for later reference, so avoid any summarization or re-structuring,  even if some sections of the response are empty or seem not relevant or important currently. They might become important in the future, so every line of Coder's output must be preserved as-is.
+
+After saving the file, post Coder's response as a comment to the issue:
 
 ```bash
-gh issue comment {issue-id} --body "..."
+gh issue comment {issue-id} --body-file "/tmp/{issue-id}-coder-response.md"
 ```
 
 **Do not proceed to step 7 until the comment has been posted.**
@@ -156,7 +158,7 @@ Exit 1: apply the same triage logic as step 5a. Step 7 is not complete until all
 
 ### 8. Review
 
-Surface Coder's full structured final response to PO verbatim — no rewording, no reformatting, no condensing. Ask PO to review the PR. The goal of the review stage for PM and PO is to ensure that Coder's outcome is correctly implementing the plan, identify any gaps, new requirements, additional use cases, refactoring needs or code smells, and any other follow-up items that might arise.
+Display to PO the contents of `/tmp/{issue-id}-coder-response.md` that you wrote in step 6. Ask PO to review the PR. The goal of the review stage for PM and PO is to ensure that Coder's outcome is correctly implementing the plan, identify any gaps, new requirements, additional use cases, refactoring needs or code smells, and any other follow-up items that might arise.
 
 PO might leave comments in the PR (general or attached to diff lines in specific files) or provide feedback directly in the conversation. Make sure you have an explicit answer from the PO whether the PR is approved or requires a **delta plan iteration**.
 
