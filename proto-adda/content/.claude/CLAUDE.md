@@ -1,8 +1,8 @@
-# Container environment
+# Proto-ADDA
 
-You are running inside an isolated, ephemeral Docker container. Understanding the environment prevents wasted effort on actions that will always fail.
+## Runtime Environment
 
-## What this container is
+This is a hardened, ephemeral container: no root access, read-only rootfs except for designated writable paths, no direct network access — only traffic routed through `HTTP_PROXY`/`HTTPS_PROXY` reaches the outside — and `~/.claude/` is re-seeded from the image on every start; changes there do not survive a restart.
 
 | Path | Writable | Persistence |
 |---|---|---|
@@ -10,15 +10,9 @@ You are running inside an isolated, ephemeral Docker container. Understanding th
 | `/home/adda/`, `/tmp` | yes | ephemeral — wiped at container stop |
 | everything else | **no** | rootfs is read-only; write attempts fail |
 
-Docker is not available inside the container — image builds and container launches are run by the human operator on the host. Outbound traffic is routed exclusively through an Envoy proxy; tools that bypass `HTTP_PROXY`/`HTTPS_PROXY` (raw TCP, custom TLS stacks) have no network path and will hang or fail. `~/.claude/` is bootstrapped from the image at every container start; edits do not survive a restart.
-
 ## Available CLI tools
 
 Use the `adda-shell-tools` skill to get a live table of registered CLI tools and warnings about commonly expected tools that are absent. Load it when you want to use a CLI tool and are unsure what's available.
-
-# ADDA Dev Runtime
-
-Hardened, ephemeral, Docker container-based runtime for agentic development. Design and current state are in `docs/adda-dev-runtime.md` and `docs/adda-dev-runtime-current-state.md`.
 
 ## Roles
 

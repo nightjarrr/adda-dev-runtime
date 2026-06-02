@@ -1,7 +1,6 @@
 # ADDA Dev Runtime
 
-This repo *is* the dev runtime. Design and current state are in
-`docs/adda-dev-runtime.md` and `docs/adda-dev-runtime-current-state.md`.
+This repo *is* the dev runtime. Design is documented in `docs/adda-dev-runtime.md`.
 
 ## Repo layout
 
