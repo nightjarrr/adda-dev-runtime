@@ -90,8 +90,10 @@ jobs:
               bun build adda-dev-runtime/src/$d/*.ts --outdir /tmp/ci-build-check/$d/ --target bun
             fi
           done
-          for f in proto-adda/src/runtime/*.ts proto-adda/src/bootstrap/*.ts; do
-            [ -f "$f" ] && bun build "$f" --outdir /tmp/ci-build-check/proto-adda/ --target bun
+          for d in runtime bootstrap; do
+            if [ -d "proto-adda/src/$d" ] && ls proto-adda/src/$d/*.ts >/dev/null 2>&1; then
+              bun build proto-adda/src/$d/*.ts --outdir /tmp/ci-build-check/proto-adda-$d/ --target bun
+            fi
           done
 
       - name: Set up Docker Buildx
