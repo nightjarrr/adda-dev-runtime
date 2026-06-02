@@ -25,11 +25,12 @@ container built from this same repo. Two consequences:
 container startup scripts under `/usr/local/libexec/adda-dev-runtime/bootstrap/`
 (including `entrypoint.sh` and the `entrypoint.d/` hook directory), runtime tools
 invokable by the agent under `/usr/local/libexec/adda-dev-runtime/bin/`, system
-tools (git, gh, socat, rg, fdfind, etc.), and Bun, tsc, and Biome — making
-TypeScript a first-class scripting language for Tier 1 scripts; see
-`docs/bun-scripting-for-adda.md`. Note: `@types/bun` is **not** an image global —
-it is a repo `devDependency` in `package.json`, installed at bootstrap time via
-`.adda-init.sh`.
+tools (git, gh, socat, rg, fdfind, etc.), and Bun — making TypeScript a
+first-class scripting language for Tier 1 scripts; see
+`docs/bun-scripting-for-adda.md`. Note: `@types/bun`, `oxlint`, `oxfmt`, and
+`typescript` are **not** image globals — they are repo `devDependencies` in
+`package.json`, installed at bootstrap time via `.adda-init.sh` and available on
+`PATH` in `/workspace/node_modules/.bin`.
 
 **Tier 2** (`proto-adda/`) — AI harness. Builds `FROM` Tier 1. Ships Claude
 Code, the Claude config, and the `10-claude-config.sh` bootstrap hook.
@@ -80,14 +81,16 @@ When adding a new script, use these four axes to determine where it goes:
 
 ## Toolchain
 
-Bun, Biome, and tsc are pre-installed globals. Never use `bunx` for any of
-them — `bunx` downloads on demand and risks version mismatches.
+Bun is a pre-installed global. `oxlint`, `oxfmt`, and `tsc` are repo
+`devDependencies` installed by `.adda-init.sh` at bootstrap time; they are
+available on `PATH` via `/workspace/node_modules/.bin`.
 
 Correct invocations:
 
 - `bun test --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=<output dir>`
 - `bun build <source dir> --outdir <output dir> --target bun --banner '#!/usr/bin/env bun'`
-- `biome check <source dir>`
+- `oxlint <src>`
+- `oxfmt --check <src>` (check only) / `oxfmt <src>` (format in place)
 - `tsc --noEmit`
 
 ## Artifact routing

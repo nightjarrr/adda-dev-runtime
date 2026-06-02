@@ -26,3 +26,7 @@ EOF
 else
     bun install --frozen-lockfile
 fi
+
+rm -rf node_modules/@oxlint/binding-linux-x64-musl \
+       node_modules/@oxfmt/binding-linux-x64-musl
+export PATH="/workspace/node_modules/.bin:$PATH"
