@@ -170,7 +170,7 @@ Exit 1: apply the same triage logic as step 5a. Step 7 is not complete until all
 
 ### 8. Review
 
-Display to PO the contents of `/tmp/{issue-id}-coder-response.md` that you wrote in step 6. Ask PO to review the PR. The goal of the review stage for PM and PO is to ensure that Coder's outcome is correctly implementing the plan, identify any gaps, new requirements, additional use cases, refactoring needs or code smells, and any other follow-up items that might arise.
+ Output the full contents of `/tmp/{issue-id}-coder-response.md` verbatim as Markdown text in your response message. Do not summarize. Reading the file with Read tool is not sufficient — tool results are not visible to PO; the content must appear in your text output. The goal of the review stage for PM and PO is to ensure that Coder's outcome is correctly implementing the plan, identify any gaps, new requirements, additional use cases, refactoring needs or code smells, and any other follow-up items that might arise.
 
 PO might leave comments in the PR (general or attached to diff lines in specific files) or provide feedback directly in the conversation. Make sure you have an explicit answer from the PO whether the PR is approved or requires a **delta plan iteration**.
 
