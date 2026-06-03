@@ -27,8 +27,8 @@ export async function executeSwitch(
     output: ScriptOutput,
 ): Promise<void> {
     // Step 1: Validate env vars
-    const owner = requireEnvVar(deps, "GITHUB_OWNER", output);
-    const repo = requireEnvVar(deps, "GITHUB_REPO", output);
+    requireEnvVar(deps, "GITHUB_OWNER", output);
+    requireEnvVar(deps, "GITHUB_REPO", output);
 
     // Step 2: Check dirty tree
     const statusResult = await deps.shell.run(["git", "status", "--porcelain"], { strict: false });
