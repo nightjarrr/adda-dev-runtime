@@ -68,7 +68,7 @@ function makeMockDeps(options: MockDepsOptions = {}): {
         if (cmd === "gh") {
             return makeShellResult({ stdout: makeGhIssueResponse() });
         }
-        if (cmd === "resolve-issue-branch") {
+        if (cmd === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
             return makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/28-test-issue", "42") });
         }
         if (cmd === "git" && command[1] === "checkout") {
@@ -276,7 +276,7 @@ describe("CurrentIssueScript", () => {
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
                     if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
-                    if (command[0] === "resolve-issue-branch") {
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({ stdout: "<html>503 Service Unavailable</html>", exitCode: 0 });
                     }
                     return makeShellResult();
@@ -296,7 +296,7 @@ describe("CurrentIssueScript", () => {
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
                     if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
-                    if (command[0] === "resolve-issue-branch") {
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({ stdout: JSON.stringify({ unexpected: "shape" }), exitCode: 0 });
                     }
                     return makeShellResult();
@@ -318,7 +318,7 @@ describe("CurrentIssueScript", () => {
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
                     if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
-                    if (command[0] === "resolve-issue-branch") {
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({
                             stdout: makeResolveResponse("ambiguous", "", "", "multiple linked branches: a, b"),
                             stderr: "ambiguity warning from resolve\n",
@@ -341,7 +341,7 @@ describe("CurrentIssueScript", () => {
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
                     if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
-                    if (command[0] === "resolve-issue-branch") {
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({
                             stdout: makeResolveResponse("error", "", "", "issue not found"),
                             stderr: "error details from resolve\n",
@@ -364,7 +364,7 @@ describe("CurrentIssueScript", () => {
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
                     if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
-                    if (command[0] === "resolve-issue-branch") {
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({ stdout: "", stderr: "fatal resolve error\n", exitCode: 1 });
                     }
                     return makeShellResult();
@@ -388,7 +388,7 @@ describe("CurrentIssueScript", () => {
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
                     if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
-                    if (command[0] === "resolve-issue-branch") {
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/28-test", "42") });
                     }
                     if (command[0] === "git" && command[1] === "checkout") {
@@ -419,7 +419,7 @@ describe("CurrentIssueScript", () => {
                             stdout: makeGhIssueResponse("My feature issue", ["feature", "phase: implement"], "OPEN"),
                         });
                     }
-                    if (command[0] === "resolve-issue-branch") {
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({
                             stdout: makeResolveResponse("feature_branch", "feature/28-my-feature", "42"),
                         });
@@ -458,7 +458,7 @@ describe("CurrentIssueScript", () => {
                             stdout: makeGhIssueResponse("Main issue", ["chore"], "OPEN"),
                         });
                     }
-                    if (command[0] === "resolve-issue-branch") {
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({ stdout: makeResolveResponse("main", "", "") });
                     }
                     if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
@@ -486,7 +486,7 @@ describe("CurrentIssueScript", () => {
                             stdout: makeGhIssueResponse("No-label issue", [], "CLOSED"),
                         });
                     }
-                    if (command[0] === "resolve-issue-branch") {
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/28-no-label", "") });
                     }
                     if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
