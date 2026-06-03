@@ -1,12 +1,6 @@
 import type { ShellResult } from "@adda/lib";
 import { z } from "zod";
 
-// --- Constants ---
-
-export const STATE_PATH = "/run/.adda-current-issue";
-export const STATE_TMP_PATH = "/run/.adda-current-issue.tmp";
-export const RESOLVE_ISSUE_BRANCH_BIN = "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch";
-
 // --- Schemas ---
 
 export const IssueStateSchema = z.object({
@@ -22,13 +16,6 @@ export const GhIssueSchema = z.object({
     title: z.string(),
     labels: z.array(z.object({ name: z.string() })),
     state: z.enum(["OPEN", "CLOSED"]),
-});
-
-export const ResolveIssueBranchOutputSchema = z.object({
-    status: z.string(),
-    branch: z.string(),
-    pr: z.string(),
-    details: z.string(),
 });
 
 // --- Types ---

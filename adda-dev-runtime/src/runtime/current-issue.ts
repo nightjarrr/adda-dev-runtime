@@ -4,7 +4,10 @@ import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError } from
 
 import { executeSwitch } from "./current-issue/switch";
 import type { Envelope, IssueState, IssueStateStore, ScriptOutput } from "./current-issue/types";
-import { IssueStateSchema, STATE_PATH, STATE_TMP_PATH } from "./current-issue/types";
+import { IssueStateSchema } from "./current-issue/types";
+
+const STATE_PATH = "/run/.adda-current-issue";
+const STATE_TMP_PATH = "/run/.adda-current-issue.tmp";
 
 export type { IssueStateStore, ScriptOutput } from "./current-issue/types";
 

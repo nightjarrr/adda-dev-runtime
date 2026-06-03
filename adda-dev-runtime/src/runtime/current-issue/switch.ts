@@ -1,8 +1,24 @@
 import type { EnvDep, ShellDep } from "@adda/lib";
 import { parseJson, ScriptZodValidationError } from "@adda/lib";
+import { z } from "zod";
 
-import { GhIssueSchema, RESOLVE_ISSUE_BRANCH_BIN, ResolveIssueBranchOutputSchema } from "./types";
+import { GhIssueSchema } from "./types";
 import type { IssueState, IssueStateStore, ScriptOutput } from "./types";
+
+const RESOLVE_ISSUE_BRANCH_BIN = "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch";
+
+const ResolveIssueBranchOutputSchema = z.object({
+    status: z.string(),
+    branch: z.string(),
+    pr: z.string(),
+    details: z.string(),
+});
+
+function requireEnvVar(deps: EnvDep, name: string, output: ScriptOutput): string {
+    const value = deps.env.get(name);
+    if (!value) output.fail(`required environment variable '${name}' is not set`);
+    return value;
+}
 
 export async function executeSwitch(
     issueId: string,
@@ -11,15 +27,8 @@ export async function executeSwitch(
     output: ScriptOutput,
 ): Promise<void> {
     // Step 1: Validate env vars
-    const owner = deps.env.get("GITHUB_OWNER");
-    if (!owner) {
-        output.fail("required environment variable 'GITHUB_OWNER' is not set");
-    }
-
-    const repo = deps.env.get("GITHUB_REPO");
-    if (!repo) {
-        output.fail("required environment variable 'GITHUB_REPO' is not set");
-    }
+    const owner = requireEnvVar(deps, "GITHUB_OWNER", output);
+    const repo = requireEnvVar(deps, "GITHUB_REPO", output);
 
     // Step 2: Check dirty tree
     const statusResult = await deps.shell.run(["git", "status", "--porcelain"], { strict: false });
