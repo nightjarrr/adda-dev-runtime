@@ -4,6 +4,7 @@ import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError } from
 
 import { executeShow } from "./current-issue/show";
 import { executeSwitch } from "./current-issue/switch";
+import { executeSync } from "./current-issue/sync";
 import type { Envelope, IssueState, IssueStateStore, ScriptOutput } from "./current-issue/types";
 import { IssueStateSchema } from "./current-issue/types";
 
@@ -19,6 +20,7 @@ type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReade
 type CurrentIssueArgs =
     | { subcommand: "switch"; issueId: string }
     | { subcommand: "show" }
+    | { subcommand: "sync" }
     | { subcommand: "unknown"; name: string };
 
 // --- Script ---
@@ -53,6 +55,10 @@ export class CurrentIssueScript
             return { subcommand: "show" };
         }
 
+        if (subcommand === "sync") {
+            return { subcommand: "sync" };
+        }
+
         return { subcommand: "unknown", name: subcommand };
     }
 
@@ -63,6 +69,9 @@ export class CurrentIssueScript
                 return;
             case "show":
                 await executeShow(this, this);
+                return;
+            case "sync":
+                await executeSync(this.deps, this, this);
                 return;
             default: {
                 const message = `unknown subcommand: ${args.name}`;

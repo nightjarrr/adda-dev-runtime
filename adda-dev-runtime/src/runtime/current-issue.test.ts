@@ -575,6 +575,60 @@ describe("CurrentIssueScript", () => {
         });
     });
 
+    describe("sync", () => {
+        const validStateJson = JSON.stringify({
+            id: "28",
+            title: "A test issue",
+            type: "feature",
+            phase: "phase:implement",
+            state: "OPEN",
+            pr: "42",
+        });
+
+        test("no active issue (ENOENT) — exits 1, error envelope, error contains 'no active issue to sync'", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "sync"]);
+            expect(code).toBe(1);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(out.issue).toBeNull();
+            expect(String(out.error)).toContain("no active issue to sync");
+        });
+
+        test("active issue with empty id — exits 1, error envelope, error contains 'no active issue to sync'", async () => {
+            const emptyIdState = JSON.stringify({
+                id: "",
+                title: "A test issue",
+                type: "feature",
+                phase: "phase:implement",
+                state: "OPEN",
+                pr: "42",
+            });
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => emptyIdState,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "sync"]);
+            expect(code).toBe(1);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(out.issue).toBeNull();
+            expect(String(out.error)).toContain("no active issue to sync");
+        });
+
+        test("active issue with valid id — exits 0, success envelope, issue.id matches state", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => validStateJson,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "sync"]);
+            expect(code).toBe(0);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("success");
+            expect(out.error).toBe("");
+            const issue = out.issue as Record<string, string>;
+            expect(issue.id).toBe("28");
+        });
+    });
+
     describe("IssueStateStore", () => {
         const validStateJson = JSON.stringify({
             id: "42",
