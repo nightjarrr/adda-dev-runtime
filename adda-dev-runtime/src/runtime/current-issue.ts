@@ -7,6 +7,7 @@ import { z } from "zod";
 
 const STATE_PATH = "/run/.adda-current-issue";
 const STATE_TMP_PATH = "/run/.adda-current-issue.tmp";
+const RESOLVE_ISSUE_BRANCH_BIN = "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch";
 
 // --- Schemas ---
 
@@ -205,7 +206,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
         const phaseLabel = labels.find((l) => l.name.startsWith("phase:"))?.name ?? "";
 
         // Step 4: Resolve branch
-        const resolveResult = await this.deps.shell.run(["resolve-issue-branch", issueId], { strict: false });
+        const resolveResult = await this.deps.shell.run([RESOLVE_ISSUE_BRANCH_BIN, issueId], { strict: false });
         if (resolveResult.exitCode !== 0) {
             this.forwardStderr(resolveResult);
             this.fail(`resolve-issue-branch failed for issue #${issueId}`);
