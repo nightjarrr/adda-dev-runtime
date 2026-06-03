@@ -1,4 +1,5 @@
 import { mkdtempSync } from "node:fs";
+import { rename, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { ScriptShellError } from "./errors";
 
@@ -33,6 +34,15 @@ export interface FileWriter {
 
 export interface FileWriterDep {
     fileWriter: FileWriter;
+}
+
+export interface FileSys {
+    renameFile(from: string, to: string): Promise<void>;
+    deleteFile(path: string): Promise<void>;
+}
+
+export interface FileSysDep {
+    fileSys: FileSys;
 }
 
 export interface Stdio {
@@ -94,6 +104,16 @@ export class BunFileWriter implements FileWriter {
     }
 }
 
+export class BunFileSys implements FileSys {
+    async renameFile(from: string, to: string): Promise<void> {
+        await rename(from, to);
+    }
+
+    async deleteFile(path: string): Promise<void> {
+        await unlink(path);
+    }
+}
+
 export class BunStdio implements Stdio {
     readonly stdin = Bun.stdin;
     readonly stdout = process.stdout;
@@ -130,10 +150,11 @@ export class BunSleep implements Sleep {
     }
 }
 
-export const defaultDeps: ShellDep & FileReaderDep & FileWriterDep & StdioDep & EnvDep & TmpDep & SleepDep = {
+export const defaultDeps: ShellDep & FileReaderDep & FileWriterDep & FileSysDep & StdioDep & EnvDep & TmpDep & SleepDep = {
     shell: new BunShell(),
     fileReader: new BunFileReader(),
     fileWriter: new BunFileWriter(),
+    fileSys: new BunFileSys(),
     stdio: new BunStdio(),
     env: new BunEnv(),
     tmp: new BunTmp(),

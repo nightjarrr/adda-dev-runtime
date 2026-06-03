@@ -3,6 +3,8 @@ export type {
     EnvDep,
     FileReader,
     FileReaderDep,
+    FileSys,
+    FileSysDep,
     FileWriter,
     FileWriterDep,
     Shell,
@@ -16,7 +18,7 @@ export type {
     TmpDep,
 } from "./capabilities";
 
-export { defaultDeps } from "./capabilities";
+export { BunFileSys, defaultDeps } from "./capabilities";
 
 export { ConfigError, ScriptArgsError, ScriptError, ScriptZodValidationError } from "./errors";
 export type { EmptyArgs } from "./ScriptBase";
