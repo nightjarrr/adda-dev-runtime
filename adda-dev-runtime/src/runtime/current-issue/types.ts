@@ -62,7 +62,7 @@ export interface IssueStateStore {
     readState(): Promise<IssueState | null>;
     writeState(state: IssueState): Promise<void>;
     deleteState(): Promise<void>;
-    stateFileExists(): Promise<boolean>;
+    stateExists(): Promise<boolean>;
 }
 
 export interface ScriptOutput {

@@ -4,7 +4,7 @@ import type { IssueStateStore, ScriptOutput } from "./types";
 import { EMPTY_ISSUE_VIEW } from "./types";
 
 export async function executeClear(deps: ShellDep, store: IssueStateStore, output: ScriptOutput): Promise<void> {
-    if (!(await store.stateFileExists())) {
+    if (!(await store.stateExists())) {
         output.emit({ status: "success", issue: EMPTY_ISSUE_VIEW, details: { resolution: "no-op" }, error: "" });
         return;
     }

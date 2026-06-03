@@ -147,7 +147,7 @@ export class CurrentIssueScript
         await this.deps.fileSys.deleteFile(STATE_PATH);
     }
 
-    async stateFileExists(): Promise<boolean> {
+    async stateExists(): Promise<boolean> {
         return this.deps.fileSys.fileExists(STATE_PATH);
     }
 }
