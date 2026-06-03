@@ -2,6 +2,7 @@ import type { parseArgs } from "node:util";
 import type { EnvDep, FileReaderDep, FileSysDep, FileWriterDep, ShellDep, ShellResult, StdioDep } from "@adda/lib";
 import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
 
+import { executeShow } from "./current-issue/show";
 import { executeSwitch } from "./current-issue/switch";
 import type { Envelope, IssueState, IssueStateStore, ScriptOutput } from "./current-issue/types";
 import { IssueStateSchema } from "./current-issue/types";
@@ -15,7 +16,10 @@ export type { IssueStateStore, ScriptOutput } from "./current-issue/types";
 
 type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep;
 
-type CurrentIssueArgs = { subcommand: "switch"; issueId: string } | { subcommand: "unknown"; name: string };
+type CurrentIssueArgs =
+    | { subcommand: "switch"; issueId: string }
+    | { subcommand: "show" }
+    | { subcommand: "unknown"; name: string };
 
 // --- Script ---
 
@@ -45,18 +49,26 @@ export class CurrentIssueScript
             return { subcommand: "switch", issueId };
         }
 
+        if (subcommand === "show") {
+            return { subcommand: "show" };
+        }
+
         return { subcommand: "unknown", name: subcommand };
     }
 
     protected async execute(args: CurrentIssueArgs): Promise<void> {
-        if (args.subcommand === "switch") {
-            await executeSwitch(args.issueId, this.deps, this, this);
-            return;
+        switch (args.subcommand) {
+            case "switch":
+                await executeSwitch(args.issueId, this.deps, this, this);
+                return;
+            case "show":
+                await executeShow(this, this);
+                return;
+            default: {
+                const message = `unknown subcommand: ${args.name}`;
+                this.fail(message);
+            }
         }
-
-        const message = `unknown subcommand: ${args.name}`;
-        this.emit({ status: "error", issue: null, details: {}, error: message });
-        throw new ScriptError(message);
     }
 
     // --- ScriptOutput ---

@@ -506,6 +506,75 @@ describe("CurrentIssueScript", () => {
         });
     });
 
+    describe("show", () => {
+        const validStateJson = JSON.stringify({
+            id: "42",
+            title: "A test issue",
+            type: "feature",
+            phase: "phase:implement",
+            state: "OPEN",
+            pr: "99",
+        });
+
+        test("no active issue (ENOENT) — exits 0, success envelope, all issue fields empty, details is {}", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show"]);
+            expect(code).toBe(0);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("success");
+            expect(out.error).toBe("");
+            const issue = out.issue as Record<string, string>;
+            expect(issue.id).toBe("");
+            expect(issue.title).toBe("");
+            expect(issue.type).toBe("");
+            expect(issue.phase).toBe("");
+            expect(issue.state).toBe("");
+            expect(issue.pr).toBe("");
+            expect(out.details).toEqual({});
+        });
+
+        test("active issue — exits 0, success envelope, issue fields match state", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => validStateJson,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show"]);
+            expect(code).toBe(0);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("success");
+            expect(out.error).toBe("");
+            const issue = out.issue as Record<string, string>;
+            expect(issue.id).toBe("42");
+            expect(issue.title).toBe("A test issue");
+            expect(issue.type).toBe("feature");
+            expect(issue.phase).toBe("phase:implement");
+            expect(issue.state).toBe("OPEN");
+            expect(issue.pr).toBe("99");
+            expect(out.details).toEqual({});
+        });
+
+        test("corrupt state (invalid JSON) — exits 1, error envelope, error contains 'state file is corrupt'", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => "not json",
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show"]);
+            expect(code).toBe(1);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(String(out.error)).toContain("state file is corrupt");
+        });
+
+        test("corrupt state (schema mismatch) — exits 1, error envelope, error contains 'state file is corrupt'", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => JSON.stringify({ foo: "bar" }),
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show"]);
+            expect(code).toBe(1);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(String(out.error)).toContain("state file is corrupt");
+        });
+    });
+
     describe("IssueStateStore", () => {
         const validStateJson = JSON.stringify({
             id: "42",
