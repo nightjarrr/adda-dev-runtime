@@ -91,7 +91,8 @@ function makeMockDeps(options: MockDepsOptions = {}): {
         readFile: mock(
             options.fileReaderReadFile ??
                 (async (_path: string) => {
-                    throw new Error("ENOENT");
+                    const enoent = Object.assign(new Error("ENOENT: no such file or directory"), { code: "ENOENT" });
+                    throw enoent;
                 }),
         ),
     };
@@ -516,15 +517,28 @@ describe("CurrentIssueScript", () => {
         });
 
         describe("readState", () => {
-            test("fileReader throws — returns null (absent file)", async () => {
+            test("fileReader throws ENOENT — returns null (absent file)", async () => {
                 const { deps } = makeMockDeps({
                     fileReaderReadFile: async (_path: string) => {
-                        throw new Error("ENOENT: no such file or directory");
+                        const enoent = Object.assign(new Error("ENOENT: no such file or directory"), { code: "ENOENT" });
+                        throw enoent;
                     },
                 });
                 const script: IssueStateStore = new CurrentIssueScript(deps);
                 const result = await script.readState();
                 expect(result).toBeNull();
+            });
+
+            test("fileReader throws non-ENOENT error — propagates the error", async () => {
+                const { deps } = makeMockDeps({
+                    fileReaderReadFile: async (_path: string) => {
+                        throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+                    },
+                });
+                const script: IssueStateStore = new CurrentIssueScript(deps);
+                await expect(script.readState()).rejects.toMatchObject({
+                    message: expect.stringContaining("EACCES"),
+                });
             });
 
             test("fileReader returns empty string — returns null", async () => {
@@ -560,24 +574,30 @@ describe("CurrentIssueScript", () => {
                 expect(result?.pr).toBe("99");
             });
 
-            test("fileReader returns invalid JSON — throws ScriptError with 'state file is corrupt'", async () => {
-                const { deps } = makeMockDeps({
+            test("fileReader returns invalid JSON — throws ScriptError with 'state file is corrupt' and emits error envelope", async () => {
+                const { deps, outLines } = makeMockDeps({
                     fileReaderReadFile: async (_path: string) => "not valid json {{{",
                 });
                 const script: IssueStateStore = new CurrentIssueScript(deps);
                 await expect(script.readState()).rejects.toMatchObject({
                     message: expect.stringContaining("state file is corrupt"),
                 });
+                const out = parseStdoutJson(outLines);
+                expect(out.status).toBe("error");
+                expect(String(out.error)).toContain("state file is corrupt");
             });
 
-            test("fileReader returns valid JSON but wrong schema — throws ScriptError with 'state file is corrupt'", async () => {
-                const { deps } = makeMockDeps({
+            test("fileReader returns valid JSON but wrong schema — throws ScriptError with 'state file is corrupt' and emits error envelope", async () => {
+                const { deps, outLines } = makeMockDeps({
                     fileReaderReadFile: async (_path: string) => JSON.stringify({ foo: "bar" }),
                 });
                 const script: IssueStateStore = new CurrentIssueScript(deps);
                 await expect(script.readState()).rejects.toMatchObject({
                     message: expect.stringContaining("state file is corrupt"),
                 });
+                const out = parseStdoutJson(outLines);
+                expect(out.status).toBe("error");
+                expect(String(out.error)).toContain("state file is corrupt");
             });
         });
 

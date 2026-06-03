@@ -15,7 +15,7 @@ const IssueStateSchema = z.object({
     title: z.string(),
     type: z.string(),
     phase: z.string(),
-    state: z.string(),
+    state: z.enum(["OPEN", "CLOSED"]),
     pr: z.string(),
 });
 
@@ -115,12 +115,20 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
         }
     }
 
+    private fail(message: string): never {
+        this.emit({ status: "error", issue: null, details: {}, error: message });
+        throw new ScriptError(message);
+    }
+
     async readState(): Promise<IssueState | null> {
         let content: string;
         try {
             content = await this.deps.fileReader.readFile(STATE_PATH);
-        } catch {
-            return null;
+        } catch (err) {
+            if (err instanceof Error && (err as NodeJS.ErrnoException).code === "ENOENT") {
+                return null;
+            }
+            throw err;
         }
 
         if (!content.trim()) {
@@ -131,12 +139,12 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
         try {
             raw = parseJson(content);
         } catch {
-            throw new ScriptError("state file is corrupt — run 'current-issue clear' to reset");
+            this.fail("state file is corrupt — run 'current-issue clear' to reset");
         }
 
         const parsed = IssueStateSchema.safeParse(raw);
         if (!parsed.success) {
-            throw new ScriptError("state file is corrupt — run 'current-issue clear' to reset");
+            this.fail("state file is corrupt — run 'current-issue clear' to reset");
         }
 
         return parsed.data;
@@ -155,24 +163,18 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
         // Step 1: Validate env vars
         const owner = this.deps.env.get("GITHUB_OWNER");
         if (!owner) {
-            const message = "required environment variable 'GITHUB_OWNER' is not set";
-            this.emit({ status: "error", issue: null, details: {}, error: message });
-            throw new ScriptError(message);
+            this.fail("required environment variable 'GITHUB_OWNER' is not set");
         }
 
         const repo = this.deps.env.get("GITHUB_REPO");
         if (!repo) {
-            const message = "required environment variable 'GITHUB_REPO' is not set";
-            this.emit({ status: "error", issue: null, details: {}, error: message });
-            throw new ScriptError(message);
+            this.fail("required environment variable 'GITHUB_REPO' is not set");
         }
 
         // Step 2: Check dirty tree
         const statusResult = await this.deps.shell.run(["git", "status", "--porcelain"], { strict: false });
         if (statusResult.stdout.trim()) {
-            const message = "working tree is dirty — commit or stash changes before switching issues";
-            this.emit({ status: "error", issue: null, details: {}, error: message });
-            throw new ScriptError(message);
+            this.fail("working tree is dirty — commit or stash changes before switching issues");
         }
 
         // Step 3: Fetch issue metadata
@@ -180,18 +182,14 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
             strict: false,
         });
         if (ghResult.exitCode !== 0) {
-            const message = `failed to fetch issue #${issueId}: ${ghResult.stderr.trim() || ghResult.stdout.trim()}`;
-            this.emit({ status: "error", issue: null, details: {}, error: message });
-            throw new ScriptError(message);
+            this.fail(`failed to fetch issue #${issueId}: ${ghResult.stderr.trim() || ghResult.stdout.trim()}`);
         }
 
         let ghRaw: unknown;
         try {
             ghRaw = parseJson(ghResult.stdout);
         } catch {
-            const message = `invalid JSON from gh issue view #${issueId}`;
-            this.emit({ status: "error", issue: null, details: {}, error: message });
-            throw new ScriptError(message);
+            this.fail(`invalid JSON from gh issue view #${issueId}`);
         }
 
         const ghParsed = GhIssueSchema.safeParse(ghRaw);
@@ -210,18 +208,14 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
         const resolveResult = await this.deps.shell.run(["resolve-issue-branch", issueId], { strict: false });
         if (resolveResult.exitCode !== 0) {
             this.forwardStderr(resolveResult);
-            const message = `resolve-issue-branch failed for issue #${issueId}`;
-            this.emit({ status: "error", issue: null, details: {}, error: message });
-            throw new ScriptError(message);
+            this.fail(`resolve-issue-branch failed for issue #${issueId}`);
         }
 
         let resolveRaw: unknown;
         try {
             resolveRaw = parseJson(resolveResult.stdout);
         } catch {
-            const message = `invalid JSON from resolve-issue-branch for issue #${issueId}`;
-            this.emit({ status: "error", issue: null, details: {}, error: message });
-            throw new ScriptError(message);
+            this.fail(`invalid JSON from resolve-issue-branch for issue #${issueId}`);
         }
 
         const resolveParsed = ResolveIssueBranchOutputSchema.safeParse(resolveRaw);
@@ -235,9 +229,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
 
         if (resolveData.status === "ambiguous" || resolveData.status === "error") {
             this.forwardStderr(resolveResult);
-            const message = `resolve-issue-branch returned '${resolveData.status}' for issue #${issueId}: ${resolveData.details}`;
-            this.emit({ status: "error", issue: null, details: {}, error: message });
-            throw new ScriptError(message);
+            this.fail(`resolve-issue-branch returned '${resolveData.status}' for issue #${issueId}: ${resolveData.details}`);
         }
 
         // Step 5: Determine branch
@@ -246,9 +238,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
         // Step 6: Checkout branch
         const checkoutResult = await this.deps.shell.run(["git", "checkout", branch], { strict: false });
         if (checkoutResult.exitCode !== 0) {
-            const message = `git checkout '${branch}' failed: ${checkoutResult.stderr.trim() || checkoutResult.stdout.trim()}`;
-            this.emit({ status: "error", issue: null, details: {}, error: message });
-            throw new ScriptError(message);
+            this.fail(`git checkout '${branch}' failed: ${checkoutResult.stderr.trim() || checkoutResult.stdout.trim()}`);
         }
 
         // Step 7: Write state and emit success
