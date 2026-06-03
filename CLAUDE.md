@@ -109,6 +109,7 @@ not the running container.
 | Claude config (CLAUDE.md, settings.json, agents/, skills/) | `proto-adda/content/.claude/` | `/usr/local/share/adda-dev-runtime/.claude/` | `~/.claude/` (ephemeral) |
 | `render-adda-shell-tools` (Bun executable) | `proto-adda/src/runtime/render-adda-shell-tools.ts` | `/usr/local/libexec/adda-dev-runtime/bin/render-adda-shell-tools` | — |
 | `prune-node-modules.sh` (build script) | `adda-dev-runtime/build/prune-node-modules.sh` | (build-stage only, not in final image) | — |
+| `current-issue` (Bun executable) | `adda-dev-runtime/src/runtime/current-issue.ts` | `/usr/local/libexec/adda-dev-runtime/bin/current-issue` | — |
 
 Scripts baked to `/usr/local/libexec/` use a `.sh.source` extension in the repo
 and carry no exec bit; the Dockerfile `RUN chmod` sets the exec bit at build time.

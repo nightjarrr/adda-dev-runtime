@@ -2,7 +2,7 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BunEnv, BunFileReader, BunFileWriter, BunShell, BunStdio, BunTmp } from "./capabilities";
+import { BunEnv, BunFileSys, BunFileReader, BunFileWriter, BunShell, BunStdio, BunTmp } from "./capabilities";
 import { ScriptShellError } from "./errors";
 
 // --- BunShell ---
@@ -257,5 +257,42 @@ describe("BunTmp", () => {
             const basename = dir.slice(tmpdir().length + 1);
             expect(basename.startsWith("tmp-")).toBe(true);
         });
+    });
+});
+
+// --- BunFileSys ---
+
+describe("BunFileSys", () => {
+    let tmpDir: string;
+
+    afterEach(async () => {
+        if (tmpDir) await rm(tmpDir, { recursive: true, force: true });
+    });
+
+    test("renameFile moves file — old path gone, content at new path", async () => {
+        tmpDir = await mkdtemp(join(tmpdir(), "adda-test-"));
+        const fromPath = join(tmpDir, "original.txt");
+        const toPath = join(tmpDir, "renamed.txt");
+        await Bun.write(fromPath, "rename-content");
+
+        const fileSys = new BunFileSys();
+        await fileSys.renameFile(fromPath, toPath);
+
+        const readBack = await Bun.file(toPath).text();
+        expect(readBack).toBe("rename-content");
+        const fromExists = await Bun.file(fromPath).exists();
+        expect(fromExists).toBe(false);
+    });
+
+    test("deleteFile removes the file", async () => {
+        tmpDir = await mkdtemp(join(tmpdir(), "adda-test-"));
+        const filePath = join(tmpDir, "to-delete.txt");
+        await Bun.write(filePath, "will be deleted");
+
+        const fileSys = new BunFileSys();
+        await fileSys.deleteFile(filePath);
+
+        const exists = await Bun.file(filePath).exists();
+        expect(exists).toBe(false);
     });
 });
