@@ -2,6 +2,7 @@ import type { parseArgs } from "node:util";
 import type { EnvDep, FileReaderDep, FileSysDep, FileWriterDep, ShellDep, ShellResult, StdioDep } from "@adda/lib";
 import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
 
+import { executeClear } from "./current-issue/clear";
 import { executeShow } from "./current-issue/show";
 import { executeSwitch } from "./current-issue/switch";
 import { executeSync } from "./current-issue/sync";
@@ -21,6 +22,7 @@ type CurrentIssueArgs =
     | { subcommand: "switch"; issueId: string }
     | { subcommand: "show" }
     | { subcommand: "sync" }
+    | { subcommand: "clear" }
     | { subcommand: "unknown"; name: string };
 
 // --- Script ---
@@ -59,6 +61,10 @@ export class CurrentIssueScript
             return { subcommand: "sync" };
         }
 
+        if (subcommand === "clear") {
+            return { subcommand: "clear" };
+        }
+
         return { subcommand: "unknown", name: subcommand };
     }
 
@@ -72,6 +78,9 @@ export class CurrentIssueScript
                 return;
             case "sync":
                 await executeSync(this.deps, this, this);
+                return;
+            case "clear":
+                await executeClear(this.deps, this, this);
                 return;
             default: {
                 const message = `unknown subcommand: ${args.name}`;
@@ -136,6 +145,10 @@ export class CurrentIssueScript
 
     async deleteState(): Promise<void> {
         await this.deps.fileSys.deleteFile(STATE_PATH);
+    }
+
+    async stateExists(): Promise<boolean> {
+        return this.deps.fileSys.fileExists(STATE_PATH);
     }
 }
 

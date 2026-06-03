@@ -44,6 +44,7 @@ interface MockDepsOptions {
     fileWriterWriteFile?: (path: string, content: string) => Promise<void>;
     fileSysRenameFile?: (from: string, to: string) => Promise<void>;
     fileSysDeleteFile?: (path: string) => Promise<void>;
+    fileSysFileExists?: (path: string) => Promise<boolean>;
 }
 
 function makeMockDeps(options: MockDepsOptions = {}): {
@@ -104,6 +105,7 @@ function makeMockDeps(options: MockDepsOptions = {}): {
     const mockFileSys: FileSys = {
         renameFile: mock(options.fileSysRenameFile ?? (async (_from: string, _to: string) => {})),
         deleteFile: mock(options.fileSysDeleteFile ?? (async (_path: string) => {})),
+        fileExists: mock(options.fileSysFileExists ?? (async (_path: string) => false)),
     };
 
     const deps: CurrentIssueDeps = {
@@ -626,6 +628,108 @@ describe("CurrentIssueScript", () => {
             expect(out.error).toBe("");
             const issue = out.issue as Record<string, string>;
             expect(issue.id).toBe("28");
+        });
+    });
+
+    describe("clear", () => {
+        test("no state file — no-op envelope, exit 0, no git calls made", async () => {
+            const shellRunMock = mock(async (_command: string[]) => makeShellResult());
+            const { deps, outLines } = makeMockDeps({
+                shellRun: shellRunMock,
+                fileSysFileExists: async (_path: string) => false,
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "clear"]);
+            expect(code).toBe(0);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("success");
+            expect(out.error).toBe("");
+            const details = out.details as Record<string, string>;
+            expect(details.resolution).toBe("no-op");
+            expect(shellRunMock).not.toHaveBeenCalled();
+        });
+
+        test("state file present, dirty tree — error envelope, exit 1", async () => {
+            const deleteFileMock = mock(async (_path: string) => {});
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") {
+                        return makeShellResult({ stdout: " M some-file.ts\n" });
+                    }
+                    return makeShellResult();
+                },
+                fileSysFileExists: async (_path: string) => true,
+                fileSysDeleteFile: deleteFileMock,
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "clear"]);
+            expect(code).toBe(1);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(String(out.error)).toContain("working tree is dirty");
+            expect(deleteFileMock).not.toHaveBeenCalled();
+        });
+
+        test("state file present, clean tree, git checkout main fails — error envelope, exit 1, stderr forwarded", async () => {
+            const deleteFileMock = mock(async (_path: string) => {});
+            const { deps, outLines, errLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") {
+                        return makeShellResult({ stdout: "" });
+                    }
+                    if (command[0] === "git" && command[1] === "checkout") {
+                        return makeShellResult({ stdout: "", stderr: "error: pathspec 'main' did not match", exitCode: 1 });
+                    }
+                    return makeShellResult();
+                },
+                fileSysFileExists: async (_path: string) => true,
+                fileSysDeleteFile: deleteFileMock,
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "clear"]);
+            expect(code).toBe(1);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(String(out.error)).toContain("pathspec 'main' did not match");
+            expect(deleteFileMock).not.toHaveBeenCalled();
+        });
+
+        test("happy path — deleteState called, success envelope with branch: main and resolution: main, exit 0", async () => {
+            const deleteFileMock = mock(async (_path: string) => {});
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") {
+                        return makeShellResult({ stdout: "" });
+                    }
+                    if (command[0] === "git" && command[1] === "checkout") {
+                        return makeShellResult();
+                    }
+                    return makeShellResult();
+                },
+                fileSysFileExists: async (_path: string) => true,
+                fileSysDeleteFile: deleteFileMock,
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "clear"]);
+            expect(code).toBe(0);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("success");
+            expect(out.error).toBe("");
+
+            const issue = out.issue as Record<string, string>;
+            expect(issue.id).toBe("");
+            expect(issue.title).toBe("");
+
+            const details = out.details as Record<string, string>;
+            expect(details.branch).toBe("main");
+            expect(details.resolution).toBe("main");
+
+            expect(deleteFileMock).toHaveBeenCalledTimes(1);
+            expect(deleteFileMock).toHaveBeenCalledWith("/run/.adda-current-issue");
         });
     });
 

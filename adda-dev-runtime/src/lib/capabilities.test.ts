@@ -295,4 +295,21 @@ describe("BunFileSys", () => {
         const exists = await Bun.file(filePath).exists();
         expect(exists).toBe(false);
     });
+
+    test("fileExists returns true when file exists", async () => {
+        tmpDir = await mkdtemp(join(tmpdir(), "adda-test-"));
+        const filePath = join(tmpDir, "existing.txt");
+        await Bun.write(filePath, "content");
+
+        const fileSys = new BunFileSys();
+        expect(await fileSys.fileExists(filePath)).toBe(true);
+    });
+
+    test("fileExists returns false when file does not exist", async () => {
+        tmpDir = await mkdtemp(join(tmpdir(), "adda-test-"));
+        const filePath = join(tmpDir, "no-such-file.txt");
+
+        const fileSys = new BunFileSys();
+        expect(await fileSys.fileExists(filePath)).toBe(false);
+    });
 });
