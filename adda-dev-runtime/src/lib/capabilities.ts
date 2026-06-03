@@ -39,6 +39,7 @@ export interface FileWriterDep {
 export interface FileSys {
     renameFile(from: string, to: string): Promise<void>;
     deleteFile(path: string): Promise<void>;
+    fileExists(path: string): Promise<boolean>;
 }
 
 export interface FileSysDep {
@@ -111,6 +112,10 @@ export class BunFileSys implements FileSys {
 
     async deleteFile(path: string): Promise<void> {
         await unlink(path);
+    }
+
+    async fileExists(path: string): Promise<boolean> {
+        return Bun.file(path).exists();
     }
 }
 
