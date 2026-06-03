@@ -185,7 +185,15 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
             throw new ScriptError(message);
         }
 
-        const ghRaw = parseJson(ghResult.stdout);
+        let ghRaw: unknown;
+        try {
+            ghRaw = parseJson(ghResult.stdout);
+        } catch {
+            const message = `invalid JSON from gh issue view #${issueId}`;
+            this.emit({ status: "error", issue: null, details: {}, error: message });
+            throw new ScriptError(message);
+        }
+
         const ghParsed = GhIssueSchema.safeParse(ghRaw);
         if (!ghParsed.success) {
             const err = new ScriptZodValidationError("unexpected gh issue response", ghParsed.error, ghRaw);
@@ -207,7 +215,15 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
             throw new ScriptError(message);
         }
 
-        const resolveRaw = parseJson(resolveResult.stdout);
+        let resolveRaw: unknown;
+        try {
+            resolveRaw = parseJson(resolveResult.stdout);
+        } catch {
+            const message = `invalid JSON from resolve-issue-branch for issue #${issueId}`;
+            this.emit({ status: "error", issue: null, details: {}, error: message });
+            throw new ScriptError(message);
+        }
+
         const resolveParsed = ResolveIssueBranchOutputSchema.safeParse(resolveRaw);
         if (!resolveParsed.success) {
             const err = new ScriptZodValidationError("unexpected resolve-issue-branch output", resolveParsed.error, resolveRaw);

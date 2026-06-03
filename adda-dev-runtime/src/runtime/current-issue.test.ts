@@ -231,6 +231,86 @@ describe("CurrentIssueScript", () => {
         });
     });
 
+    describe("switch — invalid JSON / schema mismatch", () => {
+        test("gh issue view returns invalid JSON — exits 1, error envelope with 'invalid JSON'", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "gh") {
+                        return makeShellResult({ stdout: "<html>503 Service Unavailable</html>", exitCode: 0 });
+                    }
+                    return makeShellResult();
+                },
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
+            expect(code).toBe(1);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(out.issue).toBeNull();
+            expect(String(out.error)).toContain("invalid JSON");
+        });
+
+        test("gh issue view returns unexpected schema — exits 1, error envelope with 'unexpected gh issue response'", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "gh") {
+                        return makeShellResult({ stdout: JSON.stringify({ unexpected: "shape" }), exitCode: 0 });
+                    }
+                    return makeShellResult();
+                },
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
+            expect(code).toBe(1);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(out.issue).toBeNull();
+            expect(String(out.error)).toContain("unexpected gh issue response");
+        });
+
+        test("resolve-issue-branch returns invalid JSON — exits 1, error envelope with 'invalid JSON'", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
+                    if (command[0] === "resolve-issue-branch") {
+                        return makeShellResult({ stdout: "<html>503 Service Unavailable</html>", exitCode: 0 });
+                    }
+                    return makeShellResult();
+                },
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
+            expect(code).toBe(1);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(out.issue).toBeNull();
+            expect(String(out.error)).toContain("invalid JSON");
+        });
+
+        test("resolve-issue-branch returns unexpected schema — exits 1, error envelope with 'unexpected resolve-issue-branch output'", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
+                    if (command[0] === "resolve-issue-branch") {
+                        return makeShellResult({ stdout: JSON.stringify({ unexpected: "shape" }), exitCode: 0 });
+                    }
+                    return makeShellResult();
+                },
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
+            expect(code).toBe(1);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(out.issue).toBeNull();
+            expect(String(out.error)).toContain("unexpected resolve-issue-branch output");
+        });
+    });
+
     describe("switch — resolve-issue-branch failures", () => {
         test("resolve-issue-branch returns ambiguous — exits 1, error envelope, subprocess stderr forwarded", async () => {
             const { deps, outLines, errLines } = makeMockDeps({
