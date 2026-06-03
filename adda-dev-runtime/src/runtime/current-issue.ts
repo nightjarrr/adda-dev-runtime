@@ -1,73 +1,28 @@
 import type { parseArgs } from "node:util";
 import type { EnvDep, FileReaderDep, FileSysDep, FileWriterDep, ShellDep, ShellResult, StdioDep } from "@adda/lib";
-import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError, ScriptZodValidationError } from "@adda/lib";
-import { z } from "zod";
+import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
 
-// --- Constants ---
+import { executeSwitch } from "./current-issue/switch";
+import type { Envelope, IssueState, IssueStateStore, ScriptOutput } from "./current-issue/types";
+import { IssueStateSchema } from "./current-issue/types";
 
 const STATE_PATH = "/run/.adda-current-issue";
 const STATE_TMP_PATH = "/run/.adda-current-issue.tmp";
-const RESOLVE_ISSUE_BRANCH_BIN = "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch";
 
-// --- Schemas ---
-
-const IssueStateSchema = z.object({
-    id: z.string(),
-    title: z.string(),
-    type: z.string(),
-    phase: z.string(),
-    state: z.enum(["OPEN", "CLOSED"]),
-    pr: z.string(),
-});
-
-const GhIssueSchema = z.object({
-    title: z.string(),
-    labels: z.array(z.object({ name: z.string() })),
-    state: z.enum(["OPEN", "CLOSED"]),
-});
-
-const ResolveIssueBranchOutputSchema = z.object({
-    status: z.string(),
-    branch: z.string(),
-    pr: z.string(),
-    details: z.string(),
-});
+export type { IssueStateStore, ScriptOutput } from "./current-issue/types";
 
 // --- Types ---
-
-type IssueState = z.infer<typeof IssueStateSchema>;
 
 type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep;
 
 type CurrentIssueArgs = { subcommand: "switch"; issueId: string } | { subcommand: "unknown"; name: string };
 
-export interface IssueStateStore {
-    readState(): Promise<IssueState | null>;
-    writeState(state: IssueState): Promise<void>;
-    deleteState(): Promise<void>;
-}
-
-// --- Output envelope ---
-
-interface SuccessEnvelope {
-    status: "success";
-    issue: IssueState;
-    details: { branch: string; resolution: string };
-    error: "";
-}
-
-interface ErrorEnvelope {
-    status: "error";
-    issue: null;
-    details: Record<string, never>;
-    error: string;
-}
-
-type Envelope = SuccessEnvelope | ErrorEnvelope;
-
 // --- Script ---
 
-export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssueArgs> implements IssueStateStore {
+export class CurrentIssueScript
+    extends ScriptBase<CurrentIssueDeps, CurrentIssueArgs>
+    implements IssueStateStore, ScriptOutput
+{
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return { allowPositionals: true, options: {} };
     }
@@ -95,7 +50,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
 
     protected async execute(args: CurrentIssueArgs): Promise<void> {
         if (args.subcommand === "switch") {
-            await this.executeSwitch(args.issueId);
+            await executeSwitch(args.issueId, this.deps, this, this);
             return;
         }
 
@@ -104,22 +59,24 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
         throw new ScriptError(message);
     }
 
-    // --- Private helpers ---
+    // --- ScriptOutput ---
 
-    private emit(envelope: Envelope): void {
+    emit(envelope: Envelope): void {
         this.deps.stdio.stdout.write(`${JSON.stringify(envelope)}\n`);
     }
 
-    private forwardStderr(result: ShellResult): void {
+    forwardStderr(result: ShellResult): void {
         if (result.stderr) {
             this.deps.stdio.stderr.write(result.stderr);
         }
     }
 
-    private fail(message: string): never {
+    fail(message: string): never {
         this.emit({ status: "error", issue: null, details: {}, error: message });
         throw new ScriptError(message);
     }
+
+    // --- IssueStateStore ---
 
     async readState(): Promise<IssueState | null> {
         let content: string;
@@ -158,108 +115,6 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
 
     async deleteState(): Promise<void> {
         await this.deps.fileSys.deleteFile(STATE_PATH);
-    }
-
-    private async executeSwitch(issueId: string): Promise<void> {
-        // Step 1: Validate env vars
-        const owner = this.deps.env.get("GITHUB_OWNER");
-        if (!owner) {
-            this.fail("required environment variable 'GITHUB_OWNER' is not set");
-        }
-
-        const repo = this.deps.env.get("GITHUB_REPO");
-        if (!repo) {
-            this.fail("required environment variable 'GITHUB_REPO' is not set");
-        }
-
-        // Step 2: Check dirty tree
-        const statusResult = await this.deps.shell.run(["git", "status", "--porcelain"], { strict: false });
-        if (statusResult.stdout.trim()) {
-            this.fail("working tree is dirty — commit or stash changes before switching issues");
-        }
-
-        // Step 3: Fetch issue metadata
-        const ghResult = await this.deps.shell.run(["gh", "issue", "view", issueId, "--json", "title,labels,state"], {
-            strict: false,
-        });
-        if (ghResult.exitCode !== 0) {
-            this.fail(`failed to fetch issue #${issueId}: ${ghResult.stderr.trim() || ghResult.stdout.trim()}`);
-        }
-
-        let ghRaw: unknown;
-        try {
-            ghRaw = parseJson(ghResult.stdout);
-        } catch {
-            this.fail(`invalid JSON from gh issue view #${issueId}`);
-        }
-
-        const ghParsed = GhIssueSchema.safeParse(ghRaw);
-        if (!ghParsed.success) {
-            const err = new ScriptZodValidationError("unexpected gh issue response", ghParsed.error, ghRaw);
-            this.emit({ status: "error", issue: null, details: {}, error: err.short });
-            throw err;
-        }
-
-        const { title, labels, state } = ghParsed.data;
-
-        const typeLabel = labels.find((l) => /^(feature|bug|chore|docs)$/.test(l.name))?.name ?? "";
-        const phaseLabel = labels.find((l) => l.name.startsWith("phase:"))?.name ?? "";
-
-        // Step 4: Resolve branch
-        const resolveResult = await this.deps.shell.run([RESOLVE_ISSUE_BRANCH_BIN, issueId], { strict: false });
-        if (resolveResult.exitCode !== 0) {
-            this.forwardStderr(resolveResult);
-            this.fail(`resolve-issue-branch failed for issue #${issueId}`);
-        }
-
-        let resolveRaw: unknown;
-        try {
-            resolveRaw = parseJson(resolveResult.stdout);
-        } catch {
-            this.fail(`invalid JSON from resolve-issue-branch for issue #${issueId}`);
-        }
-
-        const resolveParsed = ResolveIssueBranchOutputSchema.safeParse(resolveRaw);
-        if (!resolveParsed.success) {
-            const err = new ScriptZodValidationError("unexpected resolve-issue-branch output", resolveParsed.error, resolveRaw);
-            this.emit({ status: "error", issue: null, details: {}, error: err.short });
-            throw err;
-        }
-
-        const resolveData = resolveParsed.data;
-
-        if (resolveData.status === "ambiguous" || resolveData.status === "error") {
-            this.forwardStderr(resolveResult);
-            this.fail(`resolve-issue-branch returned '${resolveData.status}' for issue #${issueId}: ${resolveData.details}`);
-        }
-
-        // Step 5: Determine branch
-        const branch = resolveData.status === "main" ? "main" : resolveData.branch;
-
-        // Step 6: Checkout branch
-        const checkoutResult = await this.deps.shell.run(["git", "checkout", branch], { strict: false });
-        if (checkoutResult.exitCode !== 0) {
-            this.fail(`git checkout '${branch}' failed: ${checkoutResult.stderr.trim() || checkoutResult.stdout.trim()}`);
-        }
-
-        // Step 7: Write state and emit success
-        const issueState: IssueState = {
-            id: issueId,
-            title,
-            type: typeLabel,
-            phase: phaseLabel,
-            state,
-            pr: resolveData.pr,
-        };
-
-        await this.writeState(issueState);
-
-        this.emit({
-            status: "success",
-            issue: issueState,
-            details: { branch, resolution: resolveData.status },
-            error: "",
-        });
     }
 }
 
