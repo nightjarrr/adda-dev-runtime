@@ -29,4 +29,6 @@ fi
 
 rm -rf node_modules/@oxlint/binding-linux-x64-musl \
        node_modules/@oxfmt/binding-linux-x64-musl
+
+rm -rf "${HOME}/.bun/install/cache"
 export PATH="/workspace/node_modules/.bin:$PATH"
