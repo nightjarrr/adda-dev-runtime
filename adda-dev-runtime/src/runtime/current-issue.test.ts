@@ -13,7 +13,7 @@ import type {
     ShellResult,
     StdioDep,
 } from "../lib/index";
-import { CurrentIssueScript } from "./current-issue";
+import { CurrentIssueScript, type IssueStateStore } from "./current-issue";
 
 type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep;
 
@@ -422,6 +422,105 @@ describe("CurrentIssueScript", () => {
             expect(issue.phase).toBe("");
             expect(issue.state).toBe("CLOSED");
             expect(issue.pr).toBe("");
+        });
+    });
+
+    describe("IssueStateStore", () => {
+        const validStateJson = JSON.stringify({
+            id: "42",
+            title: "A test issue",
+            type: "feature",
+            phase: "phase:implement",
+            state: "OPEN",
+            pr: "99",
+        });
+
+        describe("readState", () => {
+            test("fileReader throws — returns null (absent file)", async () => {
+                const { deps } = makeMockDeps({
+                    fileReaderReadFile: async (_path: string) => {
+                        throw new Error("ENOENT: no such file or directory");
+                    },
+                });
+                const script: IssueStateStore = new CurrentIssueScript(deps);
+                const result = await script.readState();
+                expect(result).toBeNull();
+            });
+
+            test("fileReader returns empty string — returns null", async () => {
+                const { deps } = makeMockDeps({
+                    fileReaderReadFile: async (_path: string) => "",
+                });
+                const script: IssueStateStore = new CurrentIssueScript(deps);
+                const result = await script.readState();
+                expect(result).toBeNull();
+            });
+
+            test("fileReader returns whitespace-only — returns null", async () => {
+                const { deps } = makeMockDeps({
+                    fileReaderReadFile: async (_path: string) => "   \n  ",
+                });
+                const script: IssueStateStore = new CurrentIssueScript(deps);
+                const result = await script.readState();
+                expect(result).toBeNull();
+            });
+
+            test("fileReader returns valid JSON matching IssueStateSchema — returns IssueState object", async () => {
+                const { deps } = makeMockDeps({
+                    fileReaderReadFile: async (_path: string) => validStateJson,
+                });
+                const script: IssueStateStore = new CurrentIssueScript(deps);
+                const result = await script.readState();
+                expect(result).not.toBeNull();
+                expect(result?.id).toBe("42");
+                expect(result?.title).toBe("A test issue");
+                expect(result?.type).toBe("feature");
+                expect(result?.phase).toBe("phase:implement");
+                expect(result?.state).toBe("OPEN");
+                expect(result?.pr).toBe("99");
+            });
+
+            test("fileReader returns invalid JSON — throws ScriptError with 'state file is corrupt'", async () => {
+                const { deps } = makeMockDeps({
+                    fileReaderReadFile: async (_path: string) => "not valid json {{{",
+                });
+                const script: IssueStateStore = new CurrentIssueScript(deps);
+                await expect(script.readState()).rejects.toMatchObject({
+                    message: expect.stringContaining("state file is corrupt"),
+                });
+            });
+
+            test("fileReader returns valid JSON but wrong schema — throws ScriptError with 'state file is corrupt'", async () => {
+                const { deps } = makeMockDeps({
+                    fileReaderReadFile: async (_path: string) => JSON.stringify({ foo: "bar" }),
+                });
+                const script: IssueStateStore = new CurrentIssueScript(deps);
+                await expect(script.readState()).rejects.toMatchObject({
+                    message: expect.stringContaining("state file is corrupt"),
+                });
+            });
+        });
+
+        describe("deleteState", () => {
+            test("calls fileSys.deleteFile with STATE_PATH exactly once", async () => {
+                const deleteFileMock = mock(async (_path: string) => {});
+                const { deps } = makeMockDeps({ fileSysDeleteFile: deleteFileMock });
+                const script: IssueStateStore = new CurrentIssueScript(deps);
+                await script.deleteState();
+                expect(deleteFileMock).toHaveBeenCalledTimes(1);
+                expect(deleteFileMock).toHaveBeenCalledWith("/run/.adda-current-issue");
+            });
+
+            test("propagates error thrown by fileSys.deleteFile", async () => {
+                const deleteError = new Error("ENOENT: file not found");
+                const { deps } = makeMockDeps({
+                    fileSysDeleteFile: async (_path: string) => {
+                        throw deleteError;
+                    },
+                });
+                const script: IssueStateStore = new CurrentIssueScript(deps);
+                await expect(script.deleteState()).rejects.toThrow("ENOENT: file not found");
+            });
         });
     });
 });

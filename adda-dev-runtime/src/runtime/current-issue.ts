@@ -40,6 +40,12 @@ type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReade
 
 type CurrentIssueArgs = { subcommand: "switch"; issueId: string } | { subcommand: "unknown"; name: string };
 
+export interface IssueStateStore {
+    readState(): Promise<IssueState | null>;
+    writeState(state: IssueState): Promise<void>;
+    deleteState(): Promise<void>;
+}
+
 // --- Output envelope ---
 
 interface SuccessEnvelope {
@@ -60,7 +66,7 @@ type Envelope = SuccessEnvelope | ErrorEnvelope;
 
 // --- Script ---
 
-export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssueArgs> {
+export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssueArgs> implements IssueStateStore {
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return { allowPositionals: true, options: {} };
     }
@@ -109,7 +115,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
         }
     }
 
-    private async readState(): Promise<IssueState | null> {
+    async readState(): Promise<IssueState | null> {
         let content: string;
         try {
             content = await this.deps.fileReader.readFile(STATE_PATH);
@@ -136,12 +142,12 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
         return parsed.data;
     }
 
-    private async writeState(state: IssueState): Promise<void> {
+    async writeState(state: IssueState): Promise<void> {
         await this.deps.fileWriter.writeFile(STATE_TMP_PATH, JSON.stringify(state));
         await this.deps.fileSys.renameFile(STATE_TMP_PATH, STATE_PATH);
     }
 
-    private async deleteState(): Promise<void> {
+    async deleteState(): Promise<void> {
         await this.deps.fileSys.deleteFile(STATE_PATH);
     }
 
