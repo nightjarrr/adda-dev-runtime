@@ -10,8 +10,7 @@ import { IssueStateSchema } from "./current-issue/types";
 const STATE_PATH = "/run/.adda-current-issue";
 const STATE_TMP_PATH = "/run/.adda-current-issue.tmp";
 
-export type { IssueStateStore, IssueStateView, ScriptOutput } from "./current-issue/types";
-export { EMPTY_ISSUE_VIEW } from "./current-issue/types";
+export type { IssueStateStore, ScriptOutput } from "./current-issue/types";
 
 // --- Types ---
 
@@ -58,19 +57,18 @@ export class CurrentIssueScript
     }
 
     protected async execute(args: CurrentIssueArgs): Promise<void> {
-        if (args.subcommand === "switch") {
-            await executeSwitch(args.issueId, this.deps, this, this);
-            return;
+        switch (args.subcommand) {
+            case "switch":
+                await executeSwitch(args.issueId, this.deps, this, this);
+                return;
+            case "show":
+                await executeShow(this, this);
+                return;
+            default: {
+                const message = `unknown subcommand: ${args.name}`;
+                this.fail(message);
+            }
         }
-
-        if (args.subcommand === "show") {
-            await executeShow(this, this);
-            return;
-        }
-
-        const message = `unknown subcommand: ${args.name}`;
-        this.emit({ status: "error", issue: null, details: {}, error: message });
-        throw new ScriptError(message);
     }
 
     // --- ScriptOutput ---
