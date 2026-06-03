@@ -22,10 +22,28 @@ export const GhIssueSchema = z.object({
 
 export type IssueState = z.infer<typeof IssueStateSchema>;
 
+export interface IssueStateView {
+    id: string;
+    title: string;
+    type: string;
+    phase: string;
+    state: string;
+    pr: string;
+}
+
+export const EMPTY_ISSUE_VIEW: IssueStateView = {
+    id: "",
+    title: "",
+    type: "",
+    phase: "",
+    state: "",
+    pr: "",
+};
+
 export interface SuccessEnvelope {
     status: "success";
-    issue: IssueState;
-    details: { branch: string; resolution: string };
+    issue: IssueStateView;
+    details: Record<string, string>;
     error: "";
 }
 

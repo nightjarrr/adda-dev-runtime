@@ -2,6 +2,7 @@ import type { parseArgs } from "node:util";
 import type { EnvDep, FileReaderDep, FileSysDep, FileWriterDep, ShellDep, ShellResult, StdioDep } from "@adda/lib";
 import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
 
+import { executeShow } from "./current-issue/show";
 import { executeSwitch } from "./current-issue/switch";
 import type { Envelope, IssueState, IssueStateStore, ScriptOutput } from "./current-issue/types";
 import { IssueStateSchema } from "./current-issue/types";
@@ -9,13 +10,17 @@ import { IssueStateSchema } from "./current-issue/types";
 const STATE_PATH = "/run/.adda-current-issue";
 const STATE_TMP_PATH = "/run/.adda-current-issue.tmp";
 
-export type { IssueStateStore, ScriptOutput } from "./current-issue/types";
+export type { IssueStateStore, IssueStateView, ScriptOutput } from "./current-issue/types";
+export { EMPTY_ISSUE_VIEW } from "./current-issue/types";
 
 // --- Types ---
 
 type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep;
 
-type CurrentIssueArgs = { subcommand: "switch"; issueId: string } | { subcommand: "unknown"; name: string };
+type CurrentIssueArgs =
+    | { subcommand: "switch"; issueId: string }
+    | { subcommand: "show" }
+    | { subcommand: "unknown"; name: string };
 
 // --- Script ---
 
@@ -45,12 +50,21 @@ export class CurrentIssueScript
             return { subcommand: "switch", issueId };
         }
 
+        if (subcommand === "show") {
+            return { subcommand: "show" };
+        }
+
         return { subcommand: "unknown", name: subcommand };
     }
 
     protected async execute(args: CurrentIssueArgs): Promise<void> {
         if (args.subcommand === "switch") {
             await executeSwitch(args.issueId, this.deps, this, this);
+            return;
+        }
+
+        if (args.subcommand === "show") {
+            await executeShow(this, this);
             return;
         }
 
