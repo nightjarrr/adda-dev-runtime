@@ -48,5 +48,6 @@
       "Bash(gh repo delete *)",
       "Bash(gh run delete *)"
     ]
-  }
+  },
+  "spinnerTipsEnabled": false
 }
