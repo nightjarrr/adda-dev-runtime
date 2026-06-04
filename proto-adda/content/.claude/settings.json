@@ -17,7 +17,6 @@
       "Bash(gh pr checks *)",
       "Bash(gh release list *)",
       "Bash(gh release view *)",
-      "Bash(printenv *)",
       "Bash(/usr/local/libexec/adda-dev-runtime/bin/*)",
       "Bash(bun *)",
       "Bash(tsc *)",
@@ -34,7 +33,6 @@
       "WebFetch(domain:docs.astral.sh)",
       "WebFetch(domain:docs.python.org)",
       "WebSearch",
-      "Write(~/.issue)",
       "Write(/tmp/*)"
     ],
     "deny": [

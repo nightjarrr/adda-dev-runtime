@@ -7,6 +7,8 @@ set -euo pipefail
 # Outputs: node_modules/ installed; /workspace/CLAUDE.local.md written on
 #          mismatch with correction details (happy path: no notes file created)
 
+rm -f /workspace/CLAUDE.local.md
+
 _declared="$(jq -r '.devDependencies["@types/bun"] // empty' /workspace/package.json)"
 
 if [[ "$_declared" != "$BUN_VERSION" ]]; then

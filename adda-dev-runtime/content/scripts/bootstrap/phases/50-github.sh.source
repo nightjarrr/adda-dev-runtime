@@ -3,9 +3,11 @@
 #
 # Sourced by: entrypoint.sh (after 40-proxy.sh)
 # Sourcing context: requires section/die/success helpers defined in
-#   00-helpers.sh; requires GITHUB_TOKEN_, GITHUB_OWNER, GITHUB_REPO,
-#   and ISSUE_ID validated in 10-validate-env.sh; proxy must be up
-#   (40-proxy.sh) for gh and git network calls to succeed.
+#   00-helpers.sh; requires GITHUB_TOKEN_, GITHUB_OWNER, GITHUB_REPO
+#   validated in 10-validate-env.sh; proxy must be up (40-proxy.sh)
+#   for gh and git network calls to succeed. ISSUE_ID is consumed and
+#   unset here after seeding current-issue state; it must not leak into
+#   the interactive session.
 # Exports: GH_REPO, GH_USER_ID, GH_USERNAME
 # ======================================================================
 
@@ -81,4 +83,5 @@ else
         echo "Issue #${ISSUE_ID}: one linked branch (${_switch_branch}); checking out."
         success "Checked out branch ${_switch_branch} for Issue #${ISSUE_ID}."
     fi
+    unset ISSUE_ID
 fi

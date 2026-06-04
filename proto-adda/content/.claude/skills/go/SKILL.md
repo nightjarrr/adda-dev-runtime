@@ -1,8 +1,8 @@
 ---
 name: go
-description: Kick off work on an issue. Resolves issue ID from: explicit argument → ISSUE_ID env var → prompt PO. Use at the start of a session to begin working on a tracked issue.
+description: Kick off work on an issue. Resolves issue ID from: explicit argument → current-issue get id → prompt PO. Use when starting work on an issue or switching to a different issue mid-session.
 disable-model-invocation: true
-allowed-tools: Bash(printenv ISSUE_ID), Bash(gh issue view *), Write(~/.issue)
+allowed-tools: Bash(/usr/local/libexec/adda-dev-runtime/bin/current-issue *), Bash(git status --porcelain), Bash(gh issue view *), Read(/workspace/CLAUDE.local.md)
 ---
 
 # go
@@ -11,8 +11,8 @@ Kick off work on a GitHub issue.
 
 ## Issue ID resolution
 
-1. If the user passed a numeric argument to `/go`), use it as the issue ID.
-2. Otherwise, run `printenv ISSUE_ID`. If the output is set and non-empty, use that value.
+1. If the user passed a numeric argument to `/go`, use it as the issue ID.
+2. Otherwise, run `/usr/local/libexec/adda-dev-runtime/bin/current-issue get id`. If the output is non-empty, use it as the issue ID.
 3. Otherwise, ask user directly: "Which issue should we work on?" — expect the user to provide a free-text input for the issue number or request to create a new one.
 
 ## Read the issue and comments
@@ -83,18 +83,35 @@ Body:     PreferenceService should automatically save user's preferences into br
 Comments: 14
 ```
 
-## Write the ~/.issue file 
+## Switch to issue
 
-Before starting the work on the new issue, update the system state to track the current issue at work. To do that, use `Write` tool to write the file `~/.issue` (hidden file in current user's home folder) with the following contents:
+Before starting the work on the new issue, register the current issue state using `current-issue switch`.
 
-```
-ID=<id>
-TITLE=<title>
-TYPE=<type label>
-PHASE=<phase label>
-```
+1. Run `git status --porcelain`. If the output is non-empty (dirty working tree), surface the dirty-tree state to PO via `AskUserQuestion` and do not proceed until PO confirms or resolves the dirty tree.
+2. Run `/usr/local/libexec/adda-dev-runtime/bin/current-issue switch <id>`. The command emits a JSON envelope to stdout. Two representative shapes:
 
-Fill the field values exactly the same as in the preview. If the file does not exist yet, create it.
+   Success — feature branch resolved:
+   ```json
+   {
+     "status": "success",
+     "issue": { "id": "42", "title": "Add AVIF support", "type": "feature", "phase": "phase: impl-plan", "state": "OPEN", "pr": "37" },
+     "details": { "branch": "feature/42-avif-support", "resolution": "feature_branch", "hook": { "status": "ok", "output": "..." } },
+     "error": ""
+   }
+   ```
+
+   Error — hook failure (details carries context):
+   ```json
+   {
+     "status": "error",
+     "issue": null,
+     "details": { "hook": { "status": "failed", "output": "bun install failed: ..." } },
+     "error": "repo init hook failed"
+   }
+   ```
+
+3. If the exit code is non-zero or `status` is `"error"`, surface the `error` field and any `details` to PO and stop.
+4. After a successful switch, check whether `/workspace/CLAUDE.local.md` exists. If it does, read it and follow the instructions in it before proceeding to the workflow. (`CLAUDE.local.md` is gitignored and always deleted at the start of each hook run — presence means it was freshly written for this context, relevant to the current branch.)
 
 ## Start work
 
