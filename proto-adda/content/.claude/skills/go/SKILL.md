@@ -1,8 +1,8 @@
 ---
 name: go
-description: Kick off work on an issue. Resolves issue ID from: explicit argument → current-issue show → prompt PO. Use at the start of a session to begin working on a tracked issue.
+description: Kick off work on an issue. Resolves issue ID from: explicit argument → current-issue get id → prompt PO. Use at the start of a session to begin working on a tracked issue.
 disable-model-invocation: true
-allowed-tools: Bash(/usr/local/libexec/adda-dev-runtime/bin/current-issue *), Bash(git status --porcelain), Bash(gh issue view *)
+allowed-tools: Bash(/usr/local/libexec/adda-dev-runtime/bin/current-issue *), Bash(git status --porcelain), Bash(gh issue view *), Read(/workspace/CLAUDE.local.md)
 ---
 
 # go
@@ -11,8 +11,8 @@ Kick off work on a GitHub issue.
 
 ## Issue ID resolution
 
-1. If the user passed a numeric argument to `/go`), use it as the issue ID.
-2. Otherwise, run `current-issue show`. If `status` is `"success"` and `issue.id` is non-empty, use that value as the issue ID.
+1. If the user passed a numeric argument to `/go`, use it as the issue ID.
+2. Otherwise, run `/usr/local/libexec/adda-dev-runtime/bin/current-issue get id`. If the output is non-empty, use it as the issue ID.
 3. Otherwise, ask user directly: "Which issue should we work on?" — expect the user to provide a free-text input for the issue number or request to create a new one.
 
 ## Read the issue and comments
