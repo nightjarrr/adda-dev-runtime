@@ -170,6 +170,26 @@ describe("CurrentIssueScript", () => {
             expect(out.issue).toBeNull();
             expect(String(out.error)).toContain("foobar");
         });
+
+        test("show --skip-repo-init — exits 2, error envelope, error contains '--skip-repo-init is not valid for'", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show", "--skip-repo-init"]);
+            expect(code).toBe(2);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(out.issue).toBeNull();
+            expect(String(out.error)).toContain("--skip-repo-init is not valid for 'show'");
+        });
+
+        test("get id --skip-repo-init — exits 2, error envelope, error contains '--skip-repo-init is not valid for'", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "id", "--skip-repo-init"]);
+            expect(code).toBe(2);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(out.issue).toBeNull();
+            expect(String(out.error)).toContain("--skip-repo-init is not valid for 'get'");
+        });
     });
 
     describe("switch — environment validation", () => {
@@ -539,7 +559,6 @@ describe("CurrentIssueScript", () => {
             const details = out.details as Record<string, unknown>;
             const hook = details.hook as Record<string, string>;
             expect(hook.status).toBe("skipped");
-            expect(hook.output).toBe("");
             expect(hookRunMock).not.toHaveBeenCalled();
         });
 
@@ -556,7 +575,6 @@ describe("CurrentIssueScript", () => {
             const details = out.details as Record<string, unknown>;
             const hook = details.hook as Record<string, string>;
             expect(hook.status).toBe("absent");
-            expect(hook.output).toBe("");
         });
 
         test("hook present and succeeds — exits 0, details.hook.status is 'ok', output captured", async () => {
@@ -828,7 +846,7 @@ describe("CurrentIssueScript", () => {
                     }
                     return makeShellResult();
                 },
-                fileSysFileExists: async (_path: string) => true,
+                fileSysFileExists: async (path: string) => (path === "/run/.adda-current-issue" ? true : false),
                 fileSysDeleteFile: deleteFileMock,
             });
 
@@ -843,12 +861,89 @@ describe("CurrentIssueScript", () => {
             expect(issue.id).toBe("");
             expect(issue.title).toBe("");
 
-            const details = out.details as Record<string, string>;
+            const details = out.details as Record<string, unknown>;
             expect(details.branch).toBe("main");
             expect(details.resolution).toBe("main");
+            expect(details.hook).toMatchObject({ status: "absent" });
 
             expect(deleteFileMock).toHaveBeenCalledTimes(1);
             expect(deleteFileMock).toHaveBeenCalledWith("/run/.adda-current-issue");
+        });
+    });
+
+    describe("clear — hook statuses", () => {
+        const STATE_PATH = "/run/.adda-current-issue";
+        const ADDA_INIT_HOOK_PATH = "/workspace/.adda-init.sh";
+
+        const defaultShellForClear = async (command: string[]): Promise<ShellResult> => {
+            if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+            if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
+            return makeShellResult();
+        };
+
+        test("hook absent — exits 0, success envelope, details.hook.status is 'absent'", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: defaultShellForClear,
+                fileSysFileExists: async (path: string) => path === STATE_PATH,
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "clear"]);
+            expect(code).toBe(0);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("success");
+            const details = out.details as Record<string, unknown>;
+            expect(details.hook).toMatchObject({ status: "absent" });
+        });
+
+        test("hook present and succeeds — exits 0, success envelope, details.hook.status is 'ok', output captured", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
+                    if (command[0] === "bash" && command[1] === ADDA_INIT_HOOK_PATH) {
+                        return makeShellResult({ stdout: "installed deps\n", stderr: "", exitCode: 0 });
+                    }
+                    return makeShellResult();
+                },
+                fileSysFileExists: async (path: string) => path === STATE_PATH || path === ADDA_INIT_HOOK_PATH,
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "clear"]);
+            expect(code).toBe(0);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("success");
+            const details = out.details as Record<string, unknown>;
+            const hook = details.hook as Record<string, string>;
+            expect(hook.status).toBe("ok");
+            expect(hook.output).toContain("installed deps");
+        });
+
+        test("hook present but fails — exits 1, error envelope, details.hook.status is 'failed', output retained", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
+                    if (command[0] === "bash" && command[1] === ADDA_INIT_HOOK_PATH) {
+                        return makeShellResult({ stdout: "partial output\n", stderr: "hook error\n", exitCode: 1 });
+                    }
+                    return makeShellResult();
+                },
+                fileSysFileExists: async (path: string) => path === STATE_PATH || path === ADDA_INIT_HOOK_PATH,
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "clear"]);
+            expect(code).toBe(1);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(String(out.error)).toContain("repo init hook failed");
+            const details = out.details as Record<string, unknown>;
+            const hook = details.hook as Record<string, string>;
+            expect(hook.status).toBe("failed");
+            expect(hook.output).toContain("partial output");
+            expect(hook.output).toContain("hook error");
         });
     });
 

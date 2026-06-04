@@ -1,9 +1,10 @@
 import type { EnvDep, FileSysDep, ShellDep } from "@adda/lib";
-import { parseJson, ScriptError, ScriptZodValidationError } from "@adda/lib";
+import { parseJson, ScriptZodValidationError } from "@adda/lib";
 import { z } from "zod";
 
+import { runRepoInitHook } from "./hook";
 import { GhIssueSchema } from "./types";
-import type { HookResult, IssueState, IssueStateStore, ScriptOutput } from "./types";
+import type { IssueState, IssueStateStore, ScriptOutput } from "./types";
 
 const RESOLVE_ISSUE_BRANCH_BIN = "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch";
 
@@ -19,8 +20,6 @@ function requireEnvVar(deps: EnvDep, name: string, output: ScriptOutput): string
     if (!value) output.fail(`required environment variable '${name}' is not set`);
     return value;
 }
-
-const ADDA_INIT_HOOK_PATH = "/workspace/.adda-init.sh";
 
 export async function executeSwitch(
     issueId: string,
@@ -116,24 +115,8 @@ export async function executeSwitch(
     await store.writeState(issueState);
 
     // Step 8: Run repo-level init hook
-    let hook: HookResult;
-    if (skipRepoInit) {
-        hook = { status: "skipped", output: "" };
-    } else {
-        const hookExists = await deps.fileSys.fileExists(ADDA_INIT_HOOK_PATH);
-        if (!hookExists) {
-            hook = { status: "absent", output: "" };
-        } else {
-            const hookResult = await deps.shell.run(["bash", ADDA_INIT_HOOK_PATH], { strict: false });
-            const hookOutput = hookResult.stdout + hookResult.stderr;
-            if (hookResult.exitCode !== 0) {
-                hook = { status: "failed", output: hookOutput };
-                output.emit({ status: "error", issue: null, details: { hook }, error: "repo init hook failed" });
-                throw new ScriptError("repo init hook failed");
-            }
-            hook = { status: "ok", output: hookOutput };
-        }
-    }
+    const hook = await runRepoInitHook(deps, skipRepoInit);
+    if (hook.status === "failed") output.fail("repo init hook failed", { hook });
 
     output.emit({
         status: "success",

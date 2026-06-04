@@ -21,6 +21,8 @@ Commit them:
 
     git add package.json bun.lock
     git commit -m "chore: sync @types/bun to BUN_VERSION ${BUN_VERSION}"
+
+If the current branch is \`main\`, commit these only as part of a chore issue through the normal SDLC flow — do not commit directly to \`main\`.
 EOF
 else
     bun install --frozen-lockfile

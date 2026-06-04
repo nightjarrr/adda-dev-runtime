@@ -4,6 +4,7 @@ import { executeSwitch } from "./switch";
 import type { IssueStateStore, ScriptOutput } from "./types";
 
 export async function executeSync(
+    skipRepoInit: boolean,
     deps: ShellDep & EnvDep & FileSysDep,
     store: IssueStateStore,
     output: ScriptOutput,
@@ -12,5 +13,5 @@ export async function executeSync(
     if (!state || !state.id) {
         output.fail("no active issue to sync");
     }
-    await executeSwitch(state.id, false, deps, store, output);
+    await executeSwitch(state.id, skipRepoInit, deps, store, output);
 }
