@@ -26,8 +26,7 @@ export async function executeClear(
     }
 
     await store.deleteState();
-    const hook = await runRepoInitHook(deps, skipRepoInit);
-    if (hook.status === "failed") output.fail("repo init hook failed", { hook });
+    const hook = await runRepoInitHook(deps, skipRepoInit, output);
     output.emit({
         status: "success",
         issue: EMPTY_ISSUE_VIEW,

@@ -115,8 +115,7 @@ export async function executeSwitch(
     await store.writeState(issueState);
 
     // Step 8: Run repo-level init hook
-    const hook = await runRepoInitHook(deps, skipRepoInit);
-    if (hook.status === "failed") output.fail("repo init hook failed", { hook });
+    const hook = await runRepoInitHook(deps, skipRepoInit, output);
 
     output.emit({
         status: "success",
