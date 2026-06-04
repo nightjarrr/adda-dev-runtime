@@ -34,7 +34,7 @@ _adda_prompt_issue() {
     [[ -n "\$id" ]] && printf ' #%s' "\$id"
 }
 
-export PS1='\\[\\033[1;36m\\][adda-dev ${GITHUB_REPO}\$(_adda_prompt_issue)\\]\\[\\033[0m\\] \\w\\$ '
+export PS1='\\[\\033[1;36m\\][adda-dev ${GITHUB_REPO}\$(_adda_prompt_issue)]\\[\\033[0m\\] \\w\\$ '
 
 export HTTP_PROXY='${HTTP_PROXY}'
 export HTTPS_PROXY='${HTTPS_PROXY}'
