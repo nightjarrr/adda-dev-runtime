@@ -16,17 +16,17 @@ command = "for d in runtime bootstrap; do if [ -d \"proto-adda/src/$d\" ] && ls 
 [[gate]]
 name = "typecheck"
 description = "TypeScript type checking"
-command = "tsc --noEmit"
+command = "bun run tsc --noEmit"
 
 [[gate]]
 name = "lint"
 description = "Lint TypeScript sources"
-command = "oxlint adda-dev-runtime/src/ proto-adda/src/"
+command = "bun run oxlint adda-dev-runtime/src/ proto-adda/src/"
 
 [[gate]]
 name = "format"
 description = "Check TypeScript formatting"
-command = "oxfmt --check adda-dev-runtime/src/ proto-adda/src/"
+command = "bun run oxfmt --check adda-dev-runtime/src/ proto-adda/src/"
 
 [[gate]]
 name = "bun-version"

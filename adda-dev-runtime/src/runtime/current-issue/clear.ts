@@ -1,9 +1,15 @@
-import type { ShellDep } from "@adda/lib";
+import type { FileSysDep, ShellDep } from "@adda/lib";
 
+import { runRepoInitHook } from "./hook";
 import type { IssueStateStore, ScriptOutput } from "./types";
 import { EMPTY_ISSUE_VIEW } from "./types";
 
-export async function executeClear(deps: ShellDep, store: IssueStateStore, output: ScriptOutput): Promise<void> {
+export async function executeClear(
+    skipRepoInit: boolean,
+    deps: ShellDep & FileSysDep,
+    store: IssueStateStore,
+    output: ScriptOutput,
+): Promise<void> {
     if (!(await store.stateExists())) {
         output.emit({ status: "success", issue: EMPTY_ISSUE_VIEW, details: { resolution: "no-op" }, error: "" });
         return;
@@ -20,5 +26,11 @@ export async function executeClear(deps: ShellDep, store: IssueStateStore, outpu
     }
 
     await store.deleteState();
-    output.emit({ status: "success", issue: EMPTY_ISSUE_VIEW, details: { branch: "main", resolution: "main" }, error: "" });
+    const hook = await runRepoInitHook(deps, skipRepoInit, output);
+    output.emit({
+        status: "success",
+        issue: EMPTY_ISSUE_VIEW,
+        details: { branch: "main", resolution: "main", hook },
+        error: "",
+    });
 }

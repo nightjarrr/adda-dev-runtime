@@ -19,10 +19,10 @@ export type { IssueStateStore, ScriptOutput } from "./current-issue/types";
 type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep;
 
 type CurrentIssueArgs =
-    | { subcommand: "switch"; issueId: string }
+    | { subcommand: "switch"; issueId: string; skipRepoInit: boolean }
     | { subcommand: "show" }
-    | { subcommand: "sync" }
-    | { subcommand: "clear" }
+    | { subcommand: "sync"; skipRepoInit: boolean }
+    | { subcommand: "clear"; skipRepoInit: boolean }
     | { subcommand: "get"; field: string }
     | { subcommand: "unknown"; name: string };
 
@@ -85,7 +85,12 @@ export class CurrentIssueScript
     implements IssueStateStore, ScriptOutput
 {
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
-        return { allowPositionals: true, options: {} };
+        return {
+            allowPositionals: true,
+            options: {
+                "skip-repo-init": { type: "boolean", default: false },
+            },
+        };
     }
 
     protected validateArgs(parsed: ReturnType<typeof parseArgs>): CurrentIssueArgs {
@@ -97,13 +102,20 @@ export class CurrentIssueScript
             throw new ScriptArgsError("usage: current-issue <subcommand> [args]");
         }
 
+        const skipRepoInit = (parsed.values["skip-repo-init"] as boolean | undefined) ?? false;
+        if (skipRepoInit && (subcommand === "show" || subcommand === "get")) {
+            const error = `--skip-repo-init is not valid for '${subcommand}'`;
+            this.emit({ status: "error", issue: null, details: {}, error });
+            throw new ScriptArgsError(error);
+        }
+
         if (subcommand === "switch") {
             const issueId = positionals[1];
             if (!issueId) {
                 this.emit({ status: "error", issue: null, details: {}, error: "usage: current-issue switch <id>" });
                 throw new ScriptArgsError("usage: current-issue switch <id>");
             }
-            return { subcommand: "switch", issueId };
+            return { subcommand: "switch", issueId, skipRepoInit };
         }
 
         if (subcommand === "show") {
@@ -115,11 +127,11 @@ export class CurrentIssueScript
         }
 
         if (subcommand === "sync") {
-            return { subcommand: "sync" };
+            return { subcommand: "sync", skipRepoInit };
         }
 
         if (subcommand === "clear") {
-            return { subcommand: "clear" };
+            return { subcommand: "clear", skipRepoInit };
         }
 
         if (subcommand === "get") {
@@ -137,16 +149,16 @@ export class CurrentIssueScript
     protected async execute(args: CurrentIssueArgs): Promise<void> {
         switch (args.subcommand) {
             case "switch":
-                await executeSwitch(args.issueId, this.deps, this, this);
+                await executeSwitch(args.issueId, args.skipRepoInit, this.deps, this, this);
                 return;
             case "show":
                 await executeShow(this, this);
                 return;
             case "sync":
-                await executeSync(this.deps, this, this);
+                await executeSync(args.skipRepoInit, this.deps, this, this);
                 return;
             case "clear":
-                await executeClear(this.deps, this, this);
+                await executeClear(args.skipRepoInit, this.deps, this, this);
                 return;
             case "get":
                 try {
@@ -172,8 +184,8 @@ export class CurrentIssueScript
         }
     }
 
-    fail(message: string): never {
-        this.emit({ status: "error", issue: null, details: {}, error: message });
+    fail(message: string, details?: Record<string, unknown>): never {
+        this.emit({ status: "error", issue: null, details: details ?? {}, error: message });
         throw new ScriptError(message);
     }
 

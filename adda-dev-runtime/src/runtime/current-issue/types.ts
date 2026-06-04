@@ -40,17 +40,23 @@ export const EMPTY_ISSUE_VIEW: IssueStateView = {
     pr: "",
 };
 
+export type HookResult =
+    | { status: "ok"; output: string }
+    | { status: "failed"; output: string }
+    | { status: "skipped" }
+    | { status: "absent" };
+
 export interface SuccessEnvelope {
     status: "success";
     issue: IssueStateView;
-    details: Record<string, string>;
+    details: Record<string, unknown>;
     error: "";
 }
 
 export interface ErrorEnvelope {
     status: "error";
     issue: null;
-    details: Record<string, never>;
+    details: Record<string, unknown>;
     error: string;
 }
 
@@ -67,6 +73,6 @@ export interface IssueStateStore {
 
 export interface ScriptOutput {
     emit(envelope: Envelope): void;
-    fail(message: string): never;
+    fail(message: string, details?: Record<string, unknown>): never;
     forwardStderr(result: ShellResult): void;
 }

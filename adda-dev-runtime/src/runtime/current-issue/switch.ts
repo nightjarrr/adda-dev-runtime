@@ -1,7 +1,8 @@
-import type { EnvDep, ShellDep } from "@adda/lib";
+import type { EnvDep, FileSysDep, ShellDep } from "@adda/lib";
 import { parseJson, ScriptZodValidationError } from "@adda/lib";
 import { z } from "zod";
 
+import { runRepoInitHook } from "./hook";
 import { GhIssueSchema } from "./types";
 import type { IssueState, IssueStateStore, ScriptOutput } from "./types";
 
@@ -22,7 +23,8 @@ function requireEnvVar(deps: EnvDep, name: string, output: ScriptOutput): string
 
 export async function executeSwitch(
     issueId: string,
-    deps: ShellDep & EnvDep,
+    skipRepoInit: boolean,
+    deps: ShellDep & EnvDep & FileSysDep,
     store: IssueStateStore,
     output: ScriptOutput,
 ): Promise<void> {
@@ -112,10 +114,13 @@ export async function executeSwitch(
 
     await store.writeState(issueState);
 
+    // Step 8: Run repo-level init hook
+    const hook = await runRepoInitHook(deps, skipRepoInit, output);
+
     output.emit({
         status: "success",
         issue: issueState,
-        details: { branch, resolution: resolveData.status },
+        details: { branch, resolution: resolveData.status, hook },
         error: "",
     });
 }

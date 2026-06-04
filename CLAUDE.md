@@ -29,16 +29,15 @@ tools (git, gh, socat, rg, fdfind, etc.), and Bun — making TypeScript a
 first-class scripting language for Tier 1 scripts; see
 `docs/bun-scripting-for-adda.md`. Note: `@types/bun`, `oxlint`, `oxfmt`, and
 `typescript` are **not** image globals — they are repo `devDependencies` in
-`package.json`, installed at bootstrap time via `.adda-init.sh` and available on
-`PATH` in `/workspace/node_modules/.bin`.
+`package.json`, installed by `.adda-init.sh`; invoke them via `bun run <tool>`.
 
 **Tier 2** (`proto-adda/`) — AI harness. Builds `FROM` Tier 1. Ships Claude
 Code, the Claude config, and the `10-claude-config.sh` bootstrap hook.
 
 ## Repo-level init hook
 
-`.adda-init.sh` in the repo root is sourced by the entrypoint at bootstrap time,
-after all image-defined `entrypoint.d` hooks and before CMD handoff.
+`.adda-init.sh` in the repo root is invoked as a subprocess by the entrypoint at
+bootstrap and by `current-issue switch` mid-session after a branch checkout.
 
 **What it does in this repo:**
 
@@ -52,9 +51,10 @@ after all image-defined `entrypoint.d` hooks and before CMD handoff.
 **Lockfile:** `bun.lock` (text format, Bun 1.3.14 default) is committed to the
 repo. The `--frozen-lockfile` flag keeps it authoritative on the happy path.
 
-**Session start signal:** if `package.json` and/or `bun.lock` are dirty at the
-start of a session with an `@types/bun` version change, the init hook auto-corrected
-a version mismatch. Check `CLAUDE.local.md` for details and the commit command.
+**Branch init signal:** if `package.json` and/or `bun.lock` are dirty after a
+branch switch or at bootstrap with an `@types/bun` version change, the init hook
+auto-corrected a version mismatch. Check `CLAUDE.local.md` for details and the
+commit command.
 
 ## Script placement decision model
 
@@ -82,16 +82,15 @@ When adding a new script, use these four axes to determine where it goes:
 ## Toolchain
 
 Bun is a pre-installed global. `oxlint`, `oxfmt`, and `tsc` are repo
-`devDependencies` installed by `.adda-init.sh` at bootstrap time; they are
-available on `PATH` via `/workspace/node_modules/.bin`.
+`devDependencies` installed by `.adda-init.sh`; invoke them via `bun run <tool>`.
 
 Correct invocations:
 
 - `bun test --coverage --coverage-reporter=lcov --coverage-reporter=text --coverage-dir=<output dir>`
 - `bun build <source dir> --outdir <output dir> --target bun --banner '#!/usr/bin/env bun'`
-- `oxlint <src>`
-- `oxfmt --check <src>` (check only) / `oxfmt <src>` (format in place)
-- `tsc --noEmit`
+- `bun run oxlint <src>`
+- `bun run oxfmt --check <src>` (check only) / `bun run oxfmt <src>` (format in place)
+- `bun run tsc --noEmit`
 
 ## Artifact routing
 
