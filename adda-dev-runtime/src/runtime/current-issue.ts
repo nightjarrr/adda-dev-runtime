@@ -28,7 +28,7 @@ type CurrentIssueArgs =
 
 // --- Local helpers for get ---
 
-class SilentStore implements IssueStateStore {
+export class SilentStore implements IssueStateStore {
     constructor(private deps: FileReaderDep) {}
 
     async readState(): Promise<IssueState | null> {
@@ -48,13 +48,13 @@ class SilentStore implements IssueStateStore {
         }
     }
 
-    writeState(_: IssueState): Promise<void> {
+    async writeState(_: IssueState): Promise<void> {
         throw new Error("not supported");
     }
-    deleteState(): Promise<void> {
+    async deleteState(): Promise<void> {
         throw new Error("not supported");
     }
-    stateExists(): Promise<boolean> {
+    async stateExists(): Promise<boolean> {
         throw new Error("not supported");
     }
 }

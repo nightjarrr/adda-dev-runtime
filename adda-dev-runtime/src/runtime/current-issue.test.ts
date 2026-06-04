@@ -13,7 +13,7 @@ import type {
     ShellResult,
     StdioDep,
 } from "../lib/index";
-import { CurrentIssueScript, type IssueStateStore } from "./current-issue";
+import { CurrentIssueScript, SilentStore, type IssueStateStore } from "./current-issue";
 
 type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep;
 
@@ -970,6 +970,28 @@ describe("CurrentIssueScript", () => {
                 const out = parseStdoutJson(outLines);
                 expect(out.status).toBe("error");
                 expect(String(out.error)).toContain("state file is corrupt");
+            });
+        });
+
+        describe("SilentStore — guard methods", () => {
+            test("writeState — throws 'not supported'", async () => {
+                const { deps } = makeMockDeps();
+                const store = new SilentStore(deps);
+                await expect(
+                    store.writeState({ id: "1", title: "t", type: "feature", phase: "p", state: "OPEN", pr: "" }),
+                ).rejects.toThrow("not supported");
+            });
+
+            test("deleteState — throws 'not supported'", async () => {
+                const { deps } = makeMockDeps();
+                const store = new SilentStore(deps);
+                await expect(store.deleteState()).rejects.toThrow("not supported");
+            });
+
+            test("stateExists — throws 'not supported'", async () => {
+                const { deps } = makeMockDeps();
+                const store = new SilentStore(deps);
+                await expect(store.stateExists()).rejects.toThrow("not supported");
             });
         });
 
