@@ -146,10 +146,7 @@ fi
 section "Running repo-level init hook (.adda-init.sh)"
 
 if [[ -f /workspace/.adda-init.sh ]]; then
-    # shellcheck disable=SC1091
-    # Why: /workspace/.adda-init.sh is a repo-supplied hook sourced at
-    # runtime after clone; its path and contents are not statically known.
-    source /workspace/.adda-init.sh
+    bash /workspace/.adda-init.sh
     success "Repo-level init hook complete."
 else
     echo "No .adda-init.sh found in /workspace; skipping."
@@ -173,7 +170,7 @@ touch /run/.adda_bootstrap_complete
 section "Bootstrap complete ($(( SECONDS - _bootstrap_start ))s)"
 
 if [[ -n "${ISSUE_ID:-}" ]]; then
-    ISSUE_TITLE="$(gh issue view "${ISSUE_ID}" --json title --jq .title 2>/dev/null || echo '(unable to fetch)')"
+    ISSUE_TITLE="$(/usr/local/libexec/adda-dev-runtime/bin/current-issue get title 2>/dev/null || echo '(unable to fetch)')"
     echo "Issue: #${ISSUE_ID} — ${ISSUE_TITLE}."
 fi
 echo "Branch: $(git rev-parse --abbrev-ref HEAD)"
