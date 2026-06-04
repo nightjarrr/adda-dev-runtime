@@ -159,9 +159,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
             runIds = await this.fetchPushRunIds(sha);
         }
 
-        await Promise.all(runIds.map((id) => this.deps.shell.run(["gh", "run", "watch", id], { strict: false })));
-
-        const conclusions = await Promise.all(runIds.map((id) => this.fetchRunConclusion(id)));
+        const conclusions = await this.watchAndFetchConclusions(runIds);
         const failingRuns = conclusions.filter((c) => c.conclusion !== "success");
 
         const getElapsed = () => Math.round((Date.now() - startMs) / 1000);
@@ -193,33 +191,14 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         const terminalChecks = checks.filter((c) => TERMINAL_STATES.has(c.state.toLowerCase()));
 
         // Phase 2 — wait for non-terminal runs to finish
-        const nonTerminalRunIdSet = new Set<string>();
-        for (const check of nonTerminalChecks) {
-            const match = /\/runs\/(\d+)/.exec(check.link);
-            if (!match) {
-                this.deps.stdio.stderr.write(`Warning: could not extract run ID from link: ${check.link}\n`);
-                continue;
-            }
-            nonTerminalRunIdSet.add(match[1]);
-        }
-        const nonTerminalRunIds = Array.from(nonTerminalRunIdSet);
-        await Promise.all(nonTerminalRunIds.map((id) => this.deps.shell.run(["gh", "run", "watch", id], { strict: false })));
-        const nonTerminalConclusions = await Promise.all(nonTerminalRunIds.map((id) => this.fetchRunConclusion(id)));
+        const { runIds: nonTerminalRunIds } = this.extractRunIds(nonTerminalChecks);
+        const nonTerminalConclusions = await this.watchAndFetchConclusions(nonTerminalRunIds);
 
         // Phase 3 — build combined set of failing run IDs
-        const failingRunIdSet = new Set<string>();
-        let hasUnresolvableFailure = false;
-
-        for (const check of terminalChecks) {
-            if (check.state.toLowerCase() === "success") continue;
-            const match = /\/runs\/(\d+)/.exec(check.link);
-            if (!match) {
-                this.deps.stdio.stderr.write(`Warning: could not extract run ID from link: ${check.link}\n`);
-                hasUnresolvableFailure = true;
-                continue;
-            }
-            failingRunIdSet.add(match[1]);
-        }
+        const terminalFailingChecks = terminalChecks.filter((c) => c.state.toLowerCase() !== "success");
+        const { runIds: terminalFailingRunIds, hasUnresolvable: hasUnresolvableFailure } =
+            this.extractRunIds(terminalFailingChecks);
+        const failingRunIdSet = new Set(terminalFailingRunIds);
 
         for (const { runId, conclusion } of nonTerminalConclusions) {
             if (conclusion !== "success") {
@@ -274,6 +253,26 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
                 return { runId, conclusion, url: urlResult.stdout.trim(), event: eventResult.stdout.trim(), logFile };
             }),
         );
+    }
+
+    private extractRunIds(checks: Array<{ link: string }>): { runIds: string[]; hasUnresolvable: boolean } {
+        let hasUnresolvable = false;
+        const runIdSet = new Set<string>();
+        for (const check of checks) {
+            const match = /\/runs\/(\d+)/.exec(check.link);
+            if (!match) {
+                this.deps.stdio.stderr.write(`Warning: could not extract run ID from link: ${check.link}\n`);
+                hasUnresolvable = true;
+                continue;
+            }
+            runIdSet.add(match[1]);
+        }
+        return { runIds: Array.from(runIdSet), hasUnresolvable };
+    }
+
+    private async watchAndFetchConclusions(runIds: string[]): Promise<Array<{ runId: string; conclusion: string }>> {
+        await Promise.all(runIds.map((id) => this.deps.shell.run(["gh", "run", "watch", id], { strict: false })));
+        return Promise.all(runIds.map((id) => this.fetchRunConclusion(id)));
     }
 
     private parseRunIds(json: string): string[] {
