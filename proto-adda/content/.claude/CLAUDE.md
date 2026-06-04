@@ -56,7 +56,7 @@ Every implementation task — regardless of size — follows this workflow from 
 
 ### 1. Issue identification
 
-Run `current-issue show` to read the current issue state, then confirm with PO. PO can provide a different number. If no issue exists yet, use the `/new-issue` skill to create one.
+Run `/usr/local/libexec/adda-dev-runtime/bin/current-issue show` to read the current issue state, then confirm with PO. PO can provide a different number. If no issue exists yet, use the `/new-issue` skill to create one.
 
 Read the issue title, body, labels, and comments:
 

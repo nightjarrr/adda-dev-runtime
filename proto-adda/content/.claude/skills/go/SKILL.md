@@ -88,9 +88,41 @@ Comments: 14
 Before starting the work on the new issue, register the current issue state using `current-issue switch`.
 
 1. Run `git status --porcelain`. If the output is non-empty (dirty working tree), surface the dirty-tree state to PO via `AskUserQuestion` and do not proceed until PO confirms or resolves the dirty tree.
-2. Run `current-issue switch <id>`. Capture the stdout JSON.
-3. If the exit code is non-zero or the JSON `status` field is `"error"`, surface the `error` field to PO and stop.
+2. Run `/usr/local/libexec/adda-dev-runtime/bin/current-issue switch <id>`. Capture the stdout JSON.
+3. If the exit code is non-zero or the JSON `status` field is `"error"`, surface the `error` field and any `details` to PO and stop.
 4. After a successful switch, check whether `/workspace/CLAUDE.local.md` exists. If it does, read it and follow the instructions in it before proceeding to the workflow. (`CLAUDE.local.md` is gitignored and always deleted at the start of each hook run — presence means it was freshly written for this context, relevant to the current branch.)
+
+### Envelope examples
+
+Success — feature branch resolved:
+```json
+{
+  "status": "success",
+  "issue": { "id": "42", "title": "Add AVIF support", "type": "feature", "phase": "phase: impl-plan", "state": "OPEN", "pr": "37" },
+  "details": { "branch": "feature/42-avif-support", "resolution": "feature_branch", "hook": { "status": "ok", "output": "..." } },
+  "error": ""
+}
+```
+
+Success — no linked branch yet (new issue, staying on main):
+```json
+{
+  "status": "success",
+  "issue": { "id": "50", "title": "Consider adding shellcheck", "type": "chore", "phase": "phase: triage", "state": "OPEN", "pr": "" },
+  "details": { "branch": "main", "resolution": "main", "hook": { "status": "ok", "output": "..." } },
+  "error": ""
+}
+```
+
+Error — with details:
+```json
+{
+  "status": "error",
+  "issue": null,
+  "details": { "hook": { "status": "failed", "output": "bun install failed: ..." } },
+  "error": "repo init hook failed"
+}
+```
 
 ## Start work
 
