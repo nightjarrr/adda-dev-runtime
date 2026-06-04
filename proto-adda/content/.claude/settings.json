@@ -47,5 +47,10 @@
       "Bash(gh run delete *)"
     ]
   },
-  "spinnerTipsEnabled": false
+  "spinnerTipsEnabled": false,
+  "statusLine": {
+    "type": "command",
+    "command": "bash ~/.claude/statusline-command.sh",
+    "refreshInterval": 5
+  }
 }
