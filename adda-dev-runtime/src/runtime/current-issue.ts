@@ -19,7 +19,7 @@ export type { IssueStateStore, ScriptOutput } from "./current-issue/types";
 type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep;
 
 type CurrentIssueArgs =
-    | { subcommand: "switch"; issueId: string }
+    | { subcommand: "switch"; issueId: string; skipRepoInit: boolean }
     | { subcommand: "show" }
     | { subcommand: "sync" }
     | { subcommand: "clear" }
@@ -85,7 +85,12 @@ export class CurrentIssueScript
     implements IssueStateStore, ScriptOutput
 {
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
-        return { allowPositionals: true, options: {} };
+        return {
+            allowPositionals: true,
+            options: {
+                "skip-repo-init": { type: "boolean", default: false },
+            },
+        };
     }
 
     protected validateArgs(parsed: ReturnType<typeof parseArgs>): CurrentIssueArgs {
@@ -103,7 +108,8 @@ export class CurrentIssueScript
                 this.emit({ status: "error", issue: null, details: {}, error: "usage: current-issue switch <id>" });
                 throw new ScriptArgsError("usage: current-issue switch <id>");
             }
-            return { subcommand: "switch", issueId };
+            const skipRepoInit = (parsed.values["skip-repo-init"] as boolean | undefined) ?? false;
+            return { subcommand: "switch", issueId, skipRepoInit };
         }
 
         if (subcommand === "show") {
@@ -137,7 +143,7 @@ export class CurrentIssueScript
     protected async execute(args: CurrentIssueArgs): Promise<void> {
         switch (args.subcommand) {
             case "switch":
-                await executeSwitch(args.issueId, this.deps, this, this);
+                await executeSwitch(args.issueId, args.skipRepoInit, this.deps, this, this);
                 return;
             case "show":
                 await executeShow(this, this);

@@ -508,6 +508,116 @@ describe("CurrentIssueScript", () => {
         });
     });
 
+    describe("switch — hook statuses", () => {
+        test("--skip-repo-init — exits 0, details.hook.status is 'skipped', hook not invoked", async () => {
+            const hookRunMock = mock(async (_command: string[]) => makeShellResult());
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
+                        return makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/28-test", "42") });
+                    }
+                    if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
+                    if (command[0] === "bash") return hookRunMock(command);
+                    return makeShellResult();
+                },
+                fileSysFileExists: async (_path: string) => true,
+            });
+
+            const code = await new CurrentIssueScript(deps).run([
+                "bun",
+                "current-issue.ts",
+                "switch",
+                "28",
+                "--skip-repo-init",
+            ]);
+            expect(code).toBe(0);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("success");
+            const details = out.details as Record<string, unknown>;
+            const hook = details.hook as Record<string, string>;
+            expect(hook.status).toBe("skipped");
+            expect(hook.output).toBe("");
+            expect(hookRunMock).not.toHaveBeenCalled();
+        });
+
+        test("hook absent — exits 0, details.hook.status is 'absent'", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileSysFileExists: async (_path: string) => false,
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
+            expect(code).toBe(0);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("success");
+            const details = out.details as Record<string, unknown>;
+            const hook = details.hook as Record<string, string>;
+            expect(hook.status).toBe("absent");
+            expect(hook.output).toBe("");
+        });
+
+        test("hook present and succeeds — exits 0, details.hook.status is 'ok', output captured", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
+                        return makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/28-test", "42") });
+                    }
+                    if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
+                    if (command[0] === "bash" && command[1] === "/workspace/.adda-init.sh") {
+                        return makeShellResult({ stdout: "installed deps\n", stderr: "", exitCode: 0 });
+                    }
+                    return makeShellResult();
+                },
+                fileSysFileExists: async (_path: string) => true,
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
+            expect(code).toBe(0);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("success");
+            const details = out.details as Record<string, unknown>;
+            const hook = details.hook as Record<string, string>;
+            expect(hook.status).toBe("ok");
+            expect(hook.output).toContain("installed deps");
+        });
+
+        test("hook present but fails — exits 1, error envelope with details.hook.status 'failed', output retained", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
+                        return makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/28-test", "42") });
+                    }
+                    if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
+                    if (command[0] === "bash" && command[1] === "/workspace/.adda-init.sh") {
+                        return makeShellResult({ stdout: "partial output\n", stderr: "hook error\n", exitCode: 1 });
+                    }
+                    return makeShellResult();
+                },
+                fileSysFileExists: async (_path: string) => true,
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
+            expect(code).toBe(1);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(String(out.error)).toContain("repo init hook failed");
+            const details = out.details as Record<string, unknown>;
+            const hook = details.hook as Record<string, string>;
+            expect(hook.status).toBe("failed");
+            expect(hook.output).toContain("partial output");
+            expect(hook.output).toContain("hook error");
+        });
+    });
+
     describe("show", () => {
         const validStateJson = JSON.stringify({
             id: "42",

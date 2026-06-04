@@ -40,17 +40,22 @@ export const EMPTY_ISSUE_VIEW: IssueStateView = {
     pr: "",
 };
 
+export interface HookResult {
+    status: "ok" | "skipped" | "absent" | "failed";
+    output: string;
+}
+
 export interface SuccessEnvelope {
     status: "success";
     issue: IssueStateView;
-    details: Record<string, string>;
+    details: Record<string, unknown>;
     error: "";
 }
 
 export interface ErrorEnvelope {
     status: "error";
     issue: null;
-    details: Record<string, never>;
+    details: Record<string, unknown>;
     error: string;
 }
 

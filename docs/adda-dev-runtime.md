@@ -826,17 +826,7 @@ The branch naming convention remains documentation. The entrypoint stays convent
 
 ### Repo-level init hook
 
-`/workspace/.adda-init.sh`, if present in the repository root, is sourced by the entrypoint after all image-defined `entrypoint.d` hooks and before CMD handoff.
-
-**When it runs:** after the `entrypoint.d` loop; the full bootstrapped environment is available.
-
-**What it has access to:** GitHub auth, proxy environment variables, git config, and any exports set by `entrypoint.d` hooks.
-
-**Failure semantics:** `.adda-init.sh` inherits `set -euo pipefail` from the entrypoint. Any non-zero exit fails bootstrap.
-
-**Non-existence:** not an error. A section header is always printed; if the file is absent, an informational message is printed and bootstrap continues.
-
-**Intended use cases:** `bun install --frozen-lockfile`, `uv sync --frozen`, or other repo-level setup that depends on the cloned repository and the fully initialised environment.
+See *Repo-level init hook* section for the full hook contract.
 
 ### Base/project split
 
@@ -846,6 +836,51 @@ Long-term structure should separate:
 * project-specific bootstrap steps.
 
 The base image should own validation, hardening diagnostics, proxy bridge, GitHub auth, clone, branch resolution, Claude config, and handoff. The project layer should own dependency installation and project-specific checks.
+
+---
+
+## Repo-level init hook
+
+`/workspace/.adda-init.sh`, if present in the repository root, is a repo-level lifecycle hook invoked as a subprocess by the runtime.
+
+### Discovery
+
+The runtime discovers exactly `/workspace/.adda-init.sh`. No other hook file paths are recognized.
+
+### Invocation contexts
+
+1. **Entrypoint at bootstrap** — run as a subprocess after all `entrypoint.d` hooks and before CMD handoff; output is streamed to the terminal.
+2. **`current-issue switch` mid-session** — run as a subprocess after the branch checkout and state write; output is captured in the success envelope under `details.hook`.
+
+### Environment
+
+The hook inherits environment variables from the caller — GitHub auth, proxy settings, `BUN_VERSION`, and any variables set by `entrypoint.d` hooks. Shell functions and sourced helpers from the caller are **not** available across the subprocess boundary.
+
+### Permitted use
+
+- Install or update project dependencies (`bun install`, `uv sync`, etc.).
+- Write files in `/workspace`.
+- Exit non-zero to fail the calling operation.
+
+### Prohibited — modifying the runtime shell environment
+
+`export` statements, PATH modifications, and shell option changes (`set -o` / `set +o`) are structurally ineffective across a subprocess boundary and are explicitly out of scope. Examples: `export PATH=...`, `export MY_VAR=...`. Such statements execute inside the hook's subprocess and have no effect on the caller's environment.
+
+### Standalone safety
+
+The hook must:
+
+- Declare its own `set -euo pipefail` — it does not inherit the caller's shell options.
+- Use absolute paths — the working directory is not guaranteed.
+- Not rely on shell helper functions from the caller.
+
+### Tier 3 guidance
+
+Install project tools as dependencies and invoke them via their ecosystem runner — for example, `bun run <tool>` for Node/Bun projects, `uv run <tool>` for Python/uv projects. Do not rely on the session PATH for tool invocation.
+
+### Failure semantics
+
+A non-zero exit from the hook fails the calling operation. An absent hook is not an error.
 
 ---
 

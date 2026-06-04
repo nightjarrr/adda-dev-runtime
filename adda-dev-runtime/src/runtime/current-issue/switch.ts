@@ -1,9 +1,9 @@
-import type { EnvDep, ShellDep } from "@adda/lib";
-import { parseJson, ScriptZodValidationError } from "@adda/lib";
+import type { EnvDep, FileSysDep, ShellDep } from "@adda/lib";
+import { parseJson, ScriptError, ScriptZodValidationError } from "@adda/lib";
 import { z } from "zod";
 
 import { GhIssueSchema } from "./types";
-import type { IssueState, IssueStateStore, ScriptOutput } from "./types";
+import type { HookResult, IssueState, IssueStateStore, ScriptOutput } from "./types";
 
 const RESOLVE_ISSUE_BRANCH_BIN = "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch";
 
@@ -20,9 +20,12 @@ function requireEnvVar(deps: EnvDep, name: string, output: ScriptOutput): string
     return value;
 }
 
+const ADDA_INIT_HOOK_PATH = "/workspace/.adda-init.sh";
+
 export async function executeSwitch(
     issueId: string,
-    deps: ShellDep & EnvDep,
+    skipRepoInit: boolean,
+    deps: ShellDep & EnvDep & FileSysDep,
     store: IssueStateStore,
     output: ScriptOutput,
 ): Promise<void> {
@@ -112,10 +115,30 @@ export async function executeSwitch(
 
     await store.writeState(issueState);
 
+    // Step 8: Run repo-level init hook
+    let hook: HookResult;
+    if (skipRepoInit) {
+        hook = { status: "skipped", output: "" };
+    } else {
+        const hookExists = await deps.fileSys.fileExists(ADDA_INIT_HOOK_PATH);
+        if (!hookExists) {
+            hook = { status: "absent", output: "" };
+        } else {
+            const hookResult = await deps.shell.run(["bash", ADDA_INIT_HOOK_PATH], { strict: false });
+            const hookOutput = hookResult.stdout + hookResult.stderr;
+            if (hookResult.exitCode !== 0) {
+                hook = { status: "failed", output: hookOutput };
+                output.emit({ status: "error", issue: null, details: { hook }, error: "repo init hook failed" });
+                throw new ScriptError("repo init hook failed");
+            }
+            hook = { status: "ok", output: hookOutput };
+        }
+    }
+
     output.emit({
         status: "success",
         issue: issueState,
-        details: { branch, resolution: resolveData.status },
+        details: { branch, resolution: resolveData.status, hook },
         error: "",
     });
 }
