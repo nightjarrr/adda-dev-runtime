@@ -75,6 +75,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 #   - socat: socket relay used to create a proxy bridge from
 #     container-internal HTTP proxy (e.g., 127.0.0.1:8080) to
 #     the sidecar proxy listening socket (mounted as Unix socket)
+#
+# Note: unzip is NOT listed here — it is installed, used, and purged in the
+# Bun download RUN below to avoid committing it to a layer.
 # ----------------------------------------------------------------------
 # Why: apt package versions are intentionally not pinned. Debian stable's release policy
 # (security/bug-fix updates only within a minor release) is the structural version anchor;
@@ -91,7 +94,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         socat \
         ripgrep \
         fd-find \
-        unzip \
     && sed -i '/^#.* en_US.UTF-8 /s/^#//' /etc/locale.gen \
     && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
@@ -144,10 +146,14 @@ RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com
 # ----------------------------------------------------------------------
 # Bun — JS runtime and package manager, from official GitHub release.
 # Static binary; no runtime dependencies.
+# unzip is installed, used, and purged in the same layer (same-layer delete).
 # ----------------------------------------------------------------------
 ARG BUN_VERSION
 ENV BUN_VERSION=${BUN_VERSION}
-RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64-baseline.zip" \
+# Why: unzip is not version-pinned for the same reason as the main apt block above.
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends unzip \
+    && curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64-baseline.zip" \
         -o /tmp/bun.zip \
     && unzip -j /tmp/bun.zip 'bun-linux-x64-baseline/bun' -d /usr/local/bin/ \
     && rm /tmp/bun.zip \
