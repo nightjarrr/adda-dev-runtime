@@ -43,7 +43,9 @@ USER root
 # lands at /usr/local/bin/claude, which is already on PATH.
 # ----------------------------------------------------------------------
 ENV CLAUDE_CODE_VERSION=2.1.112
-RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
+RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
+    && rm -rf /usr/local/lib/bun/install/global/node_modules/@img/sharp-libvips-linuxmusl-x64 \
+              /usr/local/lib/bun/install/global/node_modules/@img/sharp-linuxmusl-x64
 
 # ----------------------------------------------------------------------
 # Bootstrap hook — sourced by Tier 1 entrypoint after BASE init
