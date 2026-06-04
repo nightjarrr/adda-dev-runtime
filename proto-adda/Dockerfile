@@ -44,10 +44,7 @@ USER root
 # ----------------------------------------------------------------------
 ENV CLAUDE_CODE_VERSION=2.1.112
 RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
-    && rm -rf /usr/local/install/global/node_modules/@img/sharp-libvips-linuxmusl-x64 \
-              /usr/local/install/global/node_modules/@img/sharp-linuxmusl-x64 \
-              /usr/local/install/cache/@img/sharp-libvips-linuxmusl-x64 \
-              /usr/local/install/cache/@img/sharp-linuxmusl-x64
+    && rm -rf /usr/local/install/cache
 
 # ----------------------------------------------------------------------
 # Bootstrap hook — sourced by Tier 1 entrypoint after BASE init
