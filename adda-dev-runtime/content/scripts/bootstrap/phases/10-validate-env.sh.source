@@ -21,6 +21,7 @@ require_env ADDA_DEV_PROXY_PORT
 require_tool socat
 require_tool gh
 require_tool git
+require_tool curl
 require_tool jq
 require_tool rg
 require_tool fdfind
@@ -35,6 +36,7 @@ require_tool bun
 announce_shell_tool "rg"     "rg <pattern> [path]"                     "ripgrep — fast text search, prefer over grep"
 announce_shell_tool "fdfind" "fdfind <pattern> [path]"                 "Fast file finder — prefer over find"
 announce_shell_tool "jq"     "jq '<filter>' [file]"                    "JSON processor"
+announce_shell_tool "curl"   "curl <url>"                              "HTTP client — downloads, API calls"
 announce_shell_tool "bun"    "bun run <script.ts> / bun -e '<inline>'" "TypeScript/JavaScript scripting runtime"
 announce_shell_tool "gh"     "gh <command>"                            "GitHub CLI"
 announce_shell_tool "git"    "git <command>"                           "Git version control"

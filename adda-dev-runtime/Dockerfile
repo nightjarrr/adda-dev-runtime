@@ -61,9 +61,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
 # General:
 #   - locales: for the en_US.UTF-8 locale
 #   - tzdata: zoneinfo files; required for run-time TZ env var resolution
-#   - ca-certificates, curl: TLS + bootstrap downloads
+#   - ca-certificates: TLS certificate verification
+#   - curl: HTTP client (bootstrap downloads and general-purpose runtime tool)
 #   - git: source control (used by the entrypoint and AI tooling)
-#   - tmux: in-container session survivability
 #   - jq: JSON parsing (entrypoint and helpers)
 #
 # Operational tooling:
@@ -151,7 +151,10 @@ RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com
         -o /tmp/bun.zip \
     && unzip -j /tmp/bun.zip 'bun-linux-x64-baseline/bun' -d /usr/local/bin/ \
     && rm /tmp/bun.zip \
-    && ln -s /usr/local/bin/bun /usr/local/bin/node
+    && ln -s /usr/local/bin/bun /usr/local/bin/node \
+    && apt-get remove --purge -y unzip \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create the runtime user explicitly. UID/GID align with the launcher's
 # ADDA_DEV_USER/UID/GID defaults. Higher-tier images FROM this image
