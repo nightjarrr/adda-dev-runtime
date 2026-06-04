@@ -75,9 +75,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
 #   - socat: socket relay used to create a proxy bridge from
 #     container-internal HTTP proxy (e.g., 127.0.0.1:8080) to
 #     the sidecar proxy listening socket (mounted as Unix socket)
-#
-# Note: unzip is NOT listed here — it is installed, used, and purged in the
-# Bun download RUN below to avoid committing it to a layer.
 # ----------------------------------------------------------------------
 # Why: apt package versions are intentionally not pinned. Debian stable's release policy
 # (security/bug-fix updates only within a minor release) is the structural version anchor;
