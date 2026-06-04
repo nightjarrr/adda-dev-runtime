@@ -23,7 +23,60 @@ type CurrentIssueArgs =
     | { subcommand: "show" }
     | { subcommand: "sync" }
     | { subcommand: "clear" }
+    | { subcommand: "get"; field: string }
     | { subcommand: "unknown"; name: string };
+
+// --- Local helpers for get ---
+
+export class SilentStore implements IssueStateStore {
+    constructor(private deps: FileReaderDep) {}
+
+    async readState(): Promise<IssueState | null> {
+        try {
+            const content = await this.deps.fileReader.readFile(STATE_PATH);
+            if (!content.trim()) return null;
+            let raw: unknown;
+            try {
+                raw = parseJson(content);
+            } catch {
+                return null;
+            }
+            const parsed = IssueStateSchema.safeParse(raw);
+            return parsed.success ? parsed.data : null;
+        } catch {
+            return null;
+        }
+    }
+
+    async writeState(_: IssueState): Promise<void> {
+        throw new Error("not supported");
+    }
+    async deleteState(): Promise<void> {
+        throw new Error("not supported");
+    }
+    async stateExists(): Promise<boolean> {
+        throw new Error("not supported");
+    }
+}
+
+class GetScriptOutput implements ScriptOutput {
+    constructor(
+        private field: string,
+        private stdout: { write(text: string): void },
+    ) {}
+
+    emit(envelope: Envelope): void {
+        if (envelope.status === "success" && envelope.issue) {
+            const value = (envelope.issue as unknown as Record<string, string>)[this.field] ?? "";
+            if (value) this.stdout.write(value + "\n");
+        }
+    }
+
+    fail(_message: string): never {
+        throw new Error("unreachable");
+    }
+    forwardStderr(_result: ShellResult): void {}
+}
 
 // --- Script ---
 
@@ -54,6 +107,10 @@ export class CurrentIssueScript
         }
 
         if (subcommand === "show") {
+            if (positionals.length > 1) {
+                this.emit({ status: "error", issue: null, details: {}, error: "usage: current-issue show" });
+                throw new ScriptArgsError("usage: current-issue show");
+            }
             return { subcommand: "show" };
         }
 
@@ -63,6 +120,15 @@ export class CurrentIssueScript
 
         if (subcommand === "clear") {
             return { subcommand: "clear" };
+        }
+
+        if (subcommand === "get") {
+            const field = positionals[1];
+            if (!field) {
+                this.emit({ status: "error", issue: null, details: {}, error: "usage: current-issue get <field>" });
+                throw new ScriptArgsError("usage: current-issue get <field>");
+            }
+            return { subcommand: "get", field };
         }
 
         return { subcommand: "unknown", name: subcommand };
@@ -81,6 +147,11 @@ export class CurrentIssueScript
                 return;
             case "clear":
                 await executeClear(this.deps, this, this);
+                return;
+            case "get":
+                try {
+                    await executeShow(new SilentStore(this.deps), new GetScriptOutput(args.field, this.deps.stdio.stdout));
+                } catch {}
                 return;
             default: {
                 const message = `unknown subcommand: ${args.name}`;

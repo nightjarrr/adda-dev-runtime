@@ -13,7 +13,7 @@ import type {
     ShellResult,
     StdioDep,
 } from "../lib/index";
-import { CurrentIssueScript, type IssueStateStore } from "./current-issue";
+import { CurrentIssueScript, SilentStore, type IssueStateStore } from "./current-issue";
 
 type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep;
 
@@ -575,6 +575,15 @@ describe("CurrentIssueScript", () => {
             expect(out.status).toBe("error");
             expect(String(out.error)).toContain("state file is corrupt");
         });
+
+        test("extra positional arg — exits 2, error envelope with 'usage: current-issue show'", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show", "42"]);
+            expect(code).toBe(2);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(String(out.error)).toContain("usage: current-issue show");
+        });
     });
 
     describe("sync", () => {
@@ -733,6 +742,142 @@ describe("CurrentIssueScript", () => {
         });
     });
 
+    describe("get", () => {
+        const validStateJson = JSON.stringify({
+            id: "42",
+            title: "A test issue",
+            type: "feature",
+            phase: "phase: triage",
+            state: "OPEN",
+            pr: "99",
+        });
+
+        test("no state file (ENOENT) — empty output, exit 0", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "id"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("");
+        });
+
+        test("corrupt state (invalid JSON) — empty output, exit 0", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => "not json",
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "id"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("");
+        });
+
+        test("corrupt state (schema mismatch) — empty output, exit 0", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => JSON.stringify({ foo: "bar" }),
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "id"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("");
+        });
+
+        test("fileReader throws non-ENOENT (EACCES) — empty output, exit 0", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => {
+                    throw Object.assign(new Error("EACCES: permission denied"), { code: "EACCES" });
+                },
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "id"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("");
+        });
+
+        test("no field arg — exits 2, error envelope", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get"]);
+            expect(code).toBe(2);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("error");
+            expect(String(out.error)).toContain("usage: current-issue get <field>");
+        });
+
+        test("unknown field — empty output, exit 0", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => validStateJson,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "unknownfield"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("");
+        });
+
+        test("field 'id' — output '42', exit 0", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => validStateJson,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "id"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("42");
+        });
+
+        test("field 'title' — output 'A test issue', exit 0", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => validStateJson,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "title"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("A test issue");
+        });
+
+        test("field 'type' — output 'feature', exit 0", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => validStateJson,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "type"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("feature");
+        });
+
+        test("field 'phase' — output 'phase: triage', exit 0", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => validStateJson,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "phase"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("phase: triage");
+        });
+
+        test("field 'state' — output 'OPEN', exit 0", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => validStateJson,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "state"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("OPEN");
+        });
+
+        test("field 'pr' — output '99', exit 0", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => validStateJson,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "pr"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("99");
+        });
+
+        test("field with empty value in state — empty output, exit 0", async () => {
+            const stateWithEmptyPr = JSON.stringify({
+                id: "42",
+                title: "A test issue",
+                type: "feature",
+                phase: "phase: triage",
+                state: "OPEN",
+                pr: "",
+            });
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => stateWithEmptyPr,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "pr"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("");
+        });
+    });
+
     describe("IssueStateStore", () => {
         const validStateJson = JSON.stringify({
             id: "42",
@@ -825,6 +970,28 @@ describe("CurrentIssueScript", () => {
                 const out = parseStdoutJson(outLines);
                 expect(out.status).toBe("error");
                 expect(String(out.error)).toContain("state file is corrupt");
+            });
+        });
+
+        describe("SilentStore — guard methods", () => {
+            test("writeState — throws 'not supported'", async () => {
+                const { deps } = makeMockDeps();
+                const store = new SilentStore(deps);
+                await expect(
+                    store.writeState({ id: "1", title: "t", type: "feature", phase: "p", state: "OPEN", pr: "" }),
+                ).rejects.toThrow("not supported");
+            });
+
+            test("deleteState — throws 'not supported'", async () => {
+                const { deps } = makeMockDeps();
+                const store = new SilentStore(deps);
+                await expect(store.deleteState()).rejects.toThrow("not supported");
+            });
+
+            test("stateExists — throws 'not supported'", async () => {
+                const { deps } = makeMockDeps();
+                const store = new SilentStore(deps);
+                await expect(store.stateExists()).rejects.toThrow("not supported");
             });
         });
 
