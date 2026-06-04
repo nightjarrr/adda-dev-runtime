@@ -91,7 +91,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         socat \
         ripgrep \
         fd-find \
-        unzip \
     && sed -i '/^#.* en_US.UTF-8 /s/^#//' /etc/locale.gen \
     && locale-gen en_US.UTF-8 \
     && rm -rf /var/lib/apt/lists/*
@@ -144,10 +143,14 @@ RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com
 # ----------------------------------------------------------------------
 # Bun — JS runtime and package manager, from official GitHub release.
 # Static binary; no runtime dependencies.
+# unzip is installed, used, and purged in the same layer (same-layer delete).
 # ----------------------------------------------------------------------
 ARG BUN_VERSION
 ENV BUN_VERSION=${BUN_VERSION}
-RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64-baseline.zip" \
+# Why: unzip is not version-pinned for the same reason as the main apt block above.
+# hadolint ignore=DL3008
+RUN apt-get update && apt-get install -y --no-install-recommends unzip \
+    && curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64-baseline.zip" \
         -o /tmp/bun.zip \
     && unzip -j /tmp/bun.zip 'bun-linux-x64-baseline/bun' -d /usr/local/bin/ \
     && rm /tmp/bun.zip \
