@@ -1,6 +1,6 @@
 ---
 name: go
-description: Kick off work on an issue. Resolves issue ID from: explicit argument → current-issue get id → prompt PO. Use at the start of a session to begin working on a tracked issue.
+description: Kick off work on an issue. Resolves issue ID from: explicit argument → current-issue get id → prompt PO. Use when starting work on an issue or switching to a different issue mid-session.
 disable-model-invocation: true
 allowed-tools: Bash(/usr/local/libexec/adda-dev-runtime/bin/current-issue *), Bash(git status --porcelain), Bash(gh issue view *), Read(/workspace/CLAUDE.local.md)
 ---
