@@ -54,41 +54,31 @@ cd /workspace
 success "Repository cloned."
 
 # ----------------------------------------------------------------------
-# Resolve and check out the working branch
+# Switch to the issue branch
+# current-issue switch resolves the branch, checks it out, and writes
+# the issue state to /run/.adda-current-issue. --skip-repo-init defers
+# the repo-level init hook to the entrypoint's dedicated REPO INIT step.
 # ----------------------------------------------------------------------
-section "Resolving working branch"
+section "Switching to issue branch"
 
 if [[ -z "${ISSUE_ID:-}" ]]; then
     success "No ISSUE_ID; staying on main."
 else
-    resolve_result="$(/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch "${ISSUE_ID}" || true)"
-    resolve_status="$(echo "${resolve_result}" | jq -r '.status')"
-    resolve_branch="$(echo "${resolve_result}" | jq -r '.branch')"
-    resolve_pr="$(echo "${resolve_result}"    | jq -r '.pr')"
-    resolve_details="$(echo "${resolve_result}" | jq -r '.details')"
-
-    case "${resolve_status}" in
-        feature_branch)
-            if [[ -n "${resolve_pr}" ]]; then
-                echo "Issue #${ISSUE_ID}: resolved via open PR #${resolve_pr} (branch: ${resolve_branch})."
-            else
-                echo "Issue #${ISSUE_ID}: one linked branch (${resolve_branch}); checking out."
-            fi
-            git checkout "${resolve_branch}"
-            success "Checked out branch ${resolve_branch} for Issue #${ISSUE_ID}."
-            ;;
-        main)
-            success "Issue #${ISSUE_ID}: no linked branch yet; staying on main."
-            echo "Branch creation is the SDLC's spec phase responsibility."
-            ;;
-        ambiguous)
-            die "Issue #${ISSUE_ID}: ${resolve_details}. Resolve in GitHub (Issue page → Development sidebar) and retry."
-            ;;
-        error)
-            die "Issue #${ISSUE_ID}: branch resolution failed. ${resolve_details}"
-            ;;
-        *)
-            die "Issue #${ISSUE_ID}: unexpected resolution status '${resolve_status}'."
-            ;;
-    esac
+    if ! _switch_out="$(/usr/local/libexec/adda-dev-runtime/bin/current-issue switch "${ISSUE_ID}" --skip-repo-init)"; then
+        _switch_error="$(printf '%s' "${_switch_out}" | jq -r '.error // empty' 2>/dev/null || true)"
+        die "Issue #${ISSUE_ID}: switch failed${_switch_error:+: ${_switch_error}}"
+    fi
+    _switch_branch="$(printf '%s' "${_switch_out}" | jq -r '.details.branch')"
+    _switch_resolution="$(printf '%s' "${_switch_out}" | jq -r '.details.resolution')"
+    _switch_pr="$(printf '%s' "${_switch_out}" | jq -r '.issue.pr')"
+    if [[ "${_switch_resolution}" == "main" ]]; then
+        success "Issue #${ISSUE_ID}: no linked branch yet; staying on main."
+        echo "Branch creation is the SDLC's spec phase responsibility."
+    elif [[ -n "${_switch_pr}" ]]; then
+        echo "Issue #${ISSUE_ID}: resolved via open PR #${_switch_pr} (branch: ${_switch_branch})."
+        success "Checked out branch ${_switch_branch} for Issue #${ISSUE_ID}."
+    else
+        echo "Issue #${ISSUE_ID}: one linked branch (${_switch_branch}); checking out."
+        success "Checked out branch ${_switch_branch} for Issue #${ISSUE_ID}."
+    fi
 fi
