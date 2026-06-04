@@ -604,6 +604,71 @@ describe("CiWatchScript", () => {
     });
 
     // ---------------------------------------------------------------
+    // watchPr — non-terminal check (TOCTOU gap fix)
+    // ---------------------------------------------------------------
+    describe("watchPr — non-terminal check", () => {
+        test("in_progress check that resolves to success → gh run watch called, outputs success JSON, exits 0", async () => {
+            const checksJson = JSON.stringify([
+                { name: "build", state: "SUCCESS", link: "https://github.com/repo/actions/runs/800/jobs/1" },
+                { name: "test", state: "in_progress", link: "https://github.com/repo/actions/runs/801/jobs/2" },
+            ]);
+            const { deps, outLines, runCalls } = makeMockDeps({
+                runQueue: [
+                    makeShellResult(""), // gh pr checks --watch
+                    makeShellResult(checksJson), // gh pr checks --json
+                    makeShellResult(""), // gh run watch 801 (non-terminal)
+                    makeShellResult("success\n"), // fetchRunConclusion for run 801
+                ],
+            });
+            const script = new CiWatchScript(deps);
+            const code = await script.run(["bun", "ci-watch.ts", "pr", "42"]);
+            expect(code).toBe(0);
+
+            const watchCalls = runCalls.filter((c) => c[0] === "gh" && c[1] === "run" && c[2] === "watch");
+            expect(watchCalls).toHaveLength(1);
+            expect(watchCalls[0]).toContain("801");
+
+            const out = getStdoutJson(outLines);
+            expect(out.conclusion).toBe("success");
+            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
+        });
+
+        test("in_progress check that resolves to failure → gh run watch called, outputs failure JSON, exits 1", async () => {
+            const checksJson = JSON.stringify([
+                { name: "build", state: "SUCCESS", link: "https://github.com/repo/actions/runs/802/jobs/1" },
+                { name: "test", state: "in_progress", link: "https://github.com/repo/actions/runs/803/jobs/2" },
+            ]);
+            const { deps, outLines, runCalls } = makeMockDeps({
+                runQueue: [
+                    makeShellResult(""), // gh pr checks --watch
+                    makeShellResult(checksJson), // gh pr checks --json
+                    makeShellResult(""), // gh run watch 803 (non-terminal)
+                    makeShellResult("failure\n"), // fetchRunConclusion for run 803
+                    makeShellResult("failure\n"), // fetchRunConclusion again in Phase 4 (collectFailingRuns)
+                    makeShellResult("https://github.com/repo/actions/runs/803\n"), // url
+                    makeShellResult("pull_request\n"), // event
+                ],
+                runShQueue: [makeShellResult("")], // gh run view --log-failed
+            });
+            const script = new CiWatchScript(deps);
+            const code = await script.run(["bun", "ci-watch.ts", "pr", "42"]);
+            expect(code).toBe(1);
+
+            const watchCalls = runCalls.filter((c) => c[0] === "gh" && c[1] === "run" && c[2] === "watch");
+            expect(watchCalls).toHaveLength(1);
+            expect(watchCalls[0]).toContain("803");
+
+            const out = getStdoutJson(outLines);
+            expect(out.conclusion).toBe("failure");
+            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
+            if (out.conclusion !== "failure") throw new Error("expected failure");
+            expect(out.runs).toHaveLength(1);
+            expect(out.runs[0].runId).toBe("803");
+            expect(out.runs[0].conclusion).toBe("failure");
+        });
+    });
+
+    // ---------------------------------------------------------------
     // parseRunIds — error cases (via fetchPushRunIds)
     // ---------------------------------------------------------------
     describe("parseRunIds — error cases", () => {

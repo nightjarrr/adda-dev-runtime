@@ -35,6 +35,18 @@ type CiWatchOutput = SuccessWatchResult | FailedWatchResult;
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 10000;
 
+const TERMINAL_STATES = new Set([
+    "success",
+    "failure",
+    "cancelled",
+    "timed_out",
+    "action_required",
+    "neutral",
+    "skipped",
+    "stale",
+    "startup_failure",
+]);
+
 export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return {
@@ -175,27 +187,56 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         if (!checksParsed.success)
             throw new ScriptZodValidationError("unexpected gh pr checks output", checksParsed.error, checksRaw);
         const checks = checksParsed.data;
-        const failingChecks = checks.filter((c) => c.state.toLowerCase() !== "success");
 
-        const getElapsed = () => Math.round((Date.now() - startMs) / 1000);
+        // Phase 1 — partition checks into terminal and non-terminal
+        const nonTerminalChecks = checks.filter((c) => !TERMINAL_STATES.has(c.state.toLowerCase()));
+        const terminalChecks = checks.filter((c) => TERMINAL_STATES.has(c.state.toLowerCase()));
 
-        if (failingChecks.length === 0) {
-            this.emit({ conclusion: "success", elapsed_seconds: getElapsed() });
-            return;
-        }
-
-        const runIdSet = new Set<string>();
-        for (const check of failingChecks) {
+        // Phase 2 — wait for non-terminal runs to finish
+        const nonTerminalRunIdSet = new Set<string>();
+        for (const check of nonTerminalChecks) {
             const match = /\/runs\/(\d+)/.exec(check.link);
             if (!match) {
                 this.deps.stdio.stderr.write(`Warning: could not extract run ID from link: ${check.link}\n`);
                 continue;
             }
-            runIdSet.add(match[1]);
+            nonTerminalRunIdSet.add(match[1]);
+        }
+        const nonTerminalRunIds = Array.from(nonTerminalRunIdSet);
+        await Promise.all(nonTerminalRunIds.map((id) => this.deps.shell.run(["gh", "run", "watch", id], { strict: false })));
+        const nonTerminalConclusions = await Promise.all(nonTerminalRunIds.map((id) => this.fetchRunConclusion(id)));
+
+        // Phase 3 — build combined set of failing run IDs
+        const failingRunIdSet = new Set<string>();
+        let hasUnresolvableFailure = false;
+
+        for (const check of terminalChecks) {
+            if (check.state.toLowerCase() === "success") continue;
+            const match = /\/runs\/(\d+)/.exec(check.link);
+            if (!match) {
+                this.deps.stdio.stderr.write(`Warning: could not extract run ID from link: ${check.link}\n`);
+                hasUnresolvableFailure = true;
+                continue;
+            }
+            failingRunIdSet.add(match[1]);
         }
 
-        const runIds = Array.from(runIdSet);
-        const runsWithConclusion = await Promise.all(runIds.map((id) => this.fetchRunConclusion(id)));
+        for (const { runId, conclusion } of nonTerminalConclusions) {
+            if (conclusion !== "success") {
+                failingRunIdSet.add(runId);
+            }
+        }
+
+        const getElapsed = () => Math.round((Date.now() - startMs) / 1000);
+
+        // Phase 4 — emit result
+        if (failingRunIdSet.size === 0 && !hasUnresolvableFailure) {
+            this.emit({ conclusion: "success", elapsed_seconds: getElapsed() });
+            return;
+        }
+
+        const failingRunIds = Array.from(failingRunIdSet);
+        const runsWithConclusion = await Promise.all(failingRunIds.map((id) => this.fetchRunConclusion(id)));
         const runs = await this.collectFailingRuns(runsWithConclusion);
         this.emit({ conclusion: "failure", elapsed_seconds: getElapsed(), runs });
         throw new ScriptError("CI runs failed", 1);
