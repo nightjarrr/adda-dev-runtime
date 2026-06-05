@@ -1,10 +1,12 @@
 ---
 name: ci-gate
 description: >
-  Invoke when CI must pass before the current SDLC step can proceed. Dispatches
-  ci-monitor, interprets the result, iterates on code_fix failures with a
-  loop-break rule, and applies context-aware triage. The current step is not
-  complete until this skill resolves green.
+  Invoke when CI must pass before the current SDLC step can proceed — e.g. to
+  monitor CI on a feature branch push, watch PR checks, track CI after a merge
+  to main, or verify a release tag workflow. Dispatches ci-monitor, interprets
+  the result, iterates on code_fix failures with a loop-break rule in the coding
+  phase, and applies context-aware triage. The current step is not complete
+  until CI is green.
 user-invocable: false
 ---
 
@@ -12,17 +14,17 @@ user-invocable: false
 
 ## Invariant
 
-The current SDLC step is not complete until ci-gate resolves green. Do not proceed, report partial success, or surface CI status to PO while this skill is active.
+The current SDLC step is not complete until CI is green. Do not proceed, report partial success, or surface CI status to PO while this skill is active.
 
 ## Dispatch ci-monitor
 
-Determine the mode and ref from the instruction you received. The dispatch consists of exactly two inputs — mode and ref. Include nothing else.
+Determine the `mode` and `ref` from the current context. The dispatch consists of exactly two inputs — `mode` and `ref`. Include nothing else.
 
 | Context | mode | ref |
 |---|---|---|
-| Feature branch push (step 5a) | `branch` | `LOCAL` |
-| PR checks (step 7) | `pr` | `<pr-number>` |
-| Post-merge main (step 10) | `branch` | `main` |
+| Feature branch push | `branch` | `LOCAL` |
+| PR checks | `pr` | `<pr-number>` |
+| Post-merge main | `branch` | `main` |
 | Release tag | `tag` | `<tag-version>` |
 
 **Examples:**
@@ -39,57 +41,86 @@ Ensure CI is green after merge to main:
 Ensure release workflow completes for v0.4.1:
 > mode: tag, ref: v0.4.1
 
-Dispatch the `ci-monitor` agent (subagent name: `ci-monitor`) with the mode and ref. Wait for the structured result.
+Dispatch the `ci-monitor` agent (subagent name: `ci-monitor`) with the `mode` and `ref`. Wait for the structured result.
+
+`ci-monitor` returns one of three result shapes:
+
+**Success:**
+```
+**Result:** success
+**Elapsed:** 53s
+```
+
+**Error** (`ci-watch` itself failed to run):
+```
+**Result:** error
+**Detail:** [error content]
+```
+
+**Failure** (CI ran but did not pass):
+```
+**Result:** failure
+**Elapsed:** 87s
+**Classification:** code_fix
+**Root Cause:** ...
+**Affected Locations:** ...
+**Evidence:** ...
+**Confidence:** high
+```
 
 ## On success result
 
-Report to PO: CI is green (include elapsed time from ci-monitor's result). Then proceed with the SDLC step.
+Report to PO: CI is green (include elapsed time from `ci-monitor`'s result). Then proceed with the SDLC step.
 
 ## On error result
 
-ci-monitor returns `**Result:** error` when ci-watch itself could not run. Act as follows:
+`ci-monitor` returns `**Result:** error` when the `ci-watch` script itself could not run. Act as follows:
 
-- **Timing indicator** (detail contains "no push run found") — return to **Dispatch ci-monitor** and retry once. If the retry also returns `error`, surface the detail to PO and wait for direction.
+- **Timing indicator** (detail contains "no push run found" or similar, indicating the script ran before CI infrastructure had a chance to schedule the runs) — return to **Dispatch ci-monitor** and retry once. If the retry also returns `error`, surface the detail to PO and wait for direction.
 - **Ref resolution error** (detail contains "cannot resolve branch", "cannot resolve tag", "cannot resolve" a PR or commit) — two sub-cases:
   - *Format mismatch*: the ref doesn't match the expected syntax for the mode — a `pr` ref should be a plain integer; a `branch` ref should be a valid branch name (no spaces, not a bare number); a `tag` ref should match a version pattern (e.g. `vX.Y.Z`). If clearly violated, re-dispatch once with a corrected ref.
-  - *Correct format, wrong data*: the ref is syntactically valid but drawn from the wrong identifier — e.g., an issue ID used where a PR number was expected. Check the dispatch context: if PM can identify the correct value from context, re-dispatch once with it.
+  - *Correct format, wrong data*: the ref is syntactically valid but drawn from the wrong identifier — e.g., an issue ID used where a PR number was expected. Check the dispatch context: if you can identify the correct value from context, re-dispatch once with it.
   - In either sub-case, if the re-dispatch also returns `error`, or no correction can be identified, surface the detail to PO and wait for direction.
 - **Any other error** — surface the detail to PO immediately and wait for direction.
 
 ## On failure result
 
-Act on the classification and your current context.
+Act on the `classification` field and the current SDLC context.
 
 ### transient (any context)
 
-Surface ci-monitor's result to PO including the failing run URL. Ask PO to re-run the failed workflow. Wait for PO confirmation, then return to **Dispatch ci-monitor** above and dispatch again.
+Surface `ci-monitor`'s result to PO including the failing run URL. Ask PO to re-run the failed workflow. Wait for PO confirmation, then return to **Dispatch ci-monitor** above and dispatch again.
 
 ### ci_infra (any context)
 
-Surface ci-monitor's full result to PO. Wait for PO direction before proceeding.
+Surface `ci-monitor`'s full result to PO. Wait for PO direction before proceeding.
 
 ### unclear (any context)
 
-Surface ci-monitor's full result to PO. Wait for PO direction before proceeding.
+Surface `ci-monitor`'s full result to PO. Wait for PO direction before proceeding.
 
 ### code_fix
 
-**Feature branch context** (steps 5a and 7):
+Depending on the current SDLC stage, handling differs:
 
-Dispatch Coder (`coder` subagent) with: the current implementation plan, Coder's previous structured response, and ci-monitor's result. Increment the consecutive `code_fix` counter. When Coder finishes, return to **Dispatch ci-monitor** above and dispatch again.
+**Active coding phase** (feature branch or PR checks context):
 
-> If no previous Coder response exists (e.g. a docs issue handled in-session), PM summarizes its own recent changes into an equivalent structured input before dispatching.
+Dispatch Coder (`coder` subagent) with: the current implementation plan, Coder's previous structured response, and `ci-monitor`'s result. Increment the consecutive `code_fix` counter. When Coder finishes, return to **Dispatch ci-monitor** above and dispatch again.
 
-**Post-merge main context** (step 10):
+> If no previous Coder response exists (e.g. a change was made directly in-session rather than via Coder dispatch), summarize your own recent changes into an equivalent structured input before dispatching.
 
-Do not commit or push to main. Surface ci-monitor's result to PO. Propose the following path forward: reopen the issue, recreate the feature branch, and follow the full SDLC process from step 2 to produce a fix via the normal PR gate.
+**Post-merge main context**:
+
+Do not commit or push to main. Surface `ci-monitor`'s result to PO. Propose the following path forward: reopen the issue, recreate the feature branch, and follow the full SDLC process to produce a fix via the normal PR gate.
 
 **Release/tag context**:
 
-Surface ci-monitor's result to PO. Propose a recovery path for PO to consider: create a fix branch, route the fix through the normal PR gate, then cut a new tag once main is green. Wait for PO's direction before taking any action.
+Surface `ci-monitor`'s result to PO. Propose a recovery path for PO to consider: create a fix branch, route the fix through the normal PR gate, then cut a new tag once main is green. Wait for PO's direction before taking any action.
 
 ## Loop-break rule
 
-Track consecutive `code_fix` dispatches in the current loop. The counter resets to zero on any green run; only `code_fix` increments it.
+This rule applies only in the active coding phase, where `code_fix` failures are iterated autonomously.
 
-After **3 consecutive `code_fix` failures**: stop the loop. Compile a per-iteration summary — for each of the 3 failed iterations, note what ci-monitor identified as the root cause and what fix Coder attempted. Surface this summary to PO and wait for direction.
+Track consecutive `code_fix` dispatches. The counter resets to zero on any green run, `transient`, `ci_infra`, or `unclear` failure; only `code_fix` increments it.
+
+After **3 consecutive `code_fix` failures**: stop the loop. Compile a per-iteration summary — for each of the 3 failed iterations, note what `ci-monitor` identified as the root cause and what fix was attempted. Surface this summary to PO and wait for direction.

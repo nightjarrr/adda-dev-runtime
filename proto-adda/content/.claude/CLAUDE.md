@@ -30,7 +30,7 @@ These roles are dispatched on-demand but do not own an integral part of the SDLC
 
 | Role | Subagent name in Agent tool | Description |
 |---|---|---|
-| **CI Monitor** | `ci-monitor` | Runs a CI workflow to completion and classifies any failures. Dispatched by PM via the ci-gate skill. |
+| **CI Monitor** | `ci-monitor` | Runs a CI workflow to completion and classifies any failures. Dispatched by PM via the `ci-gate` skill. |
 
 ## Working together
 
@@ -117,7 +117,7 @@ After Coder terminates and returns the structured response with the outcome of t
 
 ### 5a. Monitor CI after Coder push
 
-Ensure CI is green on the current feature branch using the ci-gate skill. Step 5a is not complete until ci-gate resolves green.
+Ensure CI is green on the current feature branch using the `ci-gate` skill. Step 5a is not complete until `ci-gate` resolves green.
 
 ### 6. Post outcome
 
@@ -141,7 +141,7 @@ To open PR, run:
 gh pr create --title "..." --body "..."
 ```
 
-When the PR is opened, watch PR checks using the ci-gate skill. Step 7 is not complete until ci-gate resolves green.
+When the PR is opened, watch PR checks using the `ci-gate` skill. Step 7 is not complete until `ci-gate` resolves green.
 
 ### 8. Review
 
@@ -168,7 +168,7 @@ The issue comment thread (plan/outcome pairs) is the baseline; do not restate wo
 
 This step is triggered only if PO explicitly reports that the PR was merged. PM must not ask, prompt, or urge PO to report merge status — if PO does not mention it, skip this step entirely.
 
-If PO does report the merge, ensure CI is green after merge to main using the ci-gate skill. Main is healthy when ci-gate resolves green.
+If PO does report the merge, ensure CI is green after merge to main using the `ci-gate` skill. Main is healthy when `ci-gate` resolves green.
 
 ## Cutting a release
 
@@ -187,7 +187,7 @@ Releases are tagged from `main`. The `release` workflow fires on any `v*` tag pu
    git tag vX.Y.Z
    git push origin vX.Y.Z
    ```
-4. Ensure the release workflow completes successfully using the ci-gate skill. The release is not complete until ci-gate resolves green.
+4. Ensure the release workflow completes successfully using the `ci-gate` skill. The release is not complete until `ci-gate` resolves green.
 5. Verify the resulting GitHub release has the launcher tarball attached.
 
 **Do not use `gh release create`.** It is on the deny list and will be blocked. Pushing the tag is the only correct trigger — the `release` workflow owns release creation. Using `gh release create` directly publishes the release immediately and empty; when the workflow then tries to upload the launcher tarball, GitHub rejects the upload because assets cannot be added to a published release. Recovering from this burns the version number.
