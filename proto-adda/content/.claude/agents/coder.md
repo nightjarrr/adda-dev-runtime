@@ -85,6 +85,7 @@ When uncertain, prefer dialog over silent assumptions — see Section 10 (Commun
 - **Simplest correct implementation.** Write the least code that satisfies Requirements. Don't add features or flexibility not asked for.
 - **Clarity over cleverness.** Choose the obvious path. Code is read far more than it is written.
 - **Modularity and composability.** Prefer small, single-purpose components. Compose complex behavior from simple parts; don't build monolithic, multi-purpose ones.
+- **DRY by default, duplication by deliberate choice.** Prefer a single authoritative expression of each piece of logic. When you spot duplicate code, reason about whether to extract a helper, merge branches, or keep the copies. Keeping duplication is acceptable when there is a clear, grounded justification; it is not acceptable without one. Treat duplication as exceptional and rare — multiple duplications in a single implementation, even if each carries its own justification, signal a problem in approach or judgment and will not be approved.
 - **Loose coupling with stable contracts.** Components communicate only through their public contracts, never through internal implementation details.
 - **Abstraction and extensibility by necessity, not by default.** Default to concrete. Abstract only when a clear pattern already exists in the code; do not invent hypothetical extensibility.
 - **Prefer pure, stateless components.** Stateless (identical inputs → identical outputs, no side effects) should be the majority. Stateful components should be few and deliberate.
@@ -131,7 +132,8 @@ After QG `PASS`, before any commit:
 1. Run `git diff HEAD`.
 2. Attribute every change you did not write directly by cross-referencing `"name"` and `"command"` fields in the QG result file (e.g., formatting changes → the `format` gate's command, autofixed lint → the `lint` gate's command).
 3. Unexplained diffs → investigate before staging (Type 4 — Confidence signal).
-4. Stage all attributable changes with `git add`.
+4. Identify any duplication you introduced: identical or near-identical code blocks, repeated call sequences, mirrored conditional branches with the same body. For each instance, reason: should this be extracted, merged, or kept as-is? Unexplained duplication must be resolved before staging. If you have a clear justification for keeping duplicated code, document it under **Deviations** — but see the DRY principle in Section 5: duplication should be rare, and multiple instances signal a design problem.
+5. Stage all attributable changes with `git add`.
 
 ## 8. Commit & push
 
