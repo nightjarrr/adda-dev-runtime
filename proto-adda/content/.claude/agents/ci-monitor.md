@@ -27,7 +27,6 @@ Map the structured input to the exact script call:
 | `branch` | `<name>` | `/usr/local/libexec/adda-dev-runtime/bin/ci-watch push --branch <name>` |
 | `pr` | `<number>` | `/usr/local/libexec/adda-dev-runtime/bin/ci-watch pr <number>` |
 | `tag` | `<version>` | `/usr/local/libexec/adda-dev-runtime/bin/ci-watch push --tag <version>` |
-| `commit` | `<sha>` | `/usr/local/libexec/adda-dev-runtime/bin/ci-watch push --commit <sha>` |
 
 ### Step 2 — Run ci-watch
 
@@ -115,6 +114,7 @@ Produce a single structured report and terminate.
 **Result:** failure
 **Elapsed:** {elapsed_seconds}s
 **Classification:** [transient | ci_infra | code_fix | unclear]
+**Run URL:** {url}
 
 **Root Cause:**
 [What failed and why, grounded in log evidence. For `unclear`: describe what was observed and why classification failed.]

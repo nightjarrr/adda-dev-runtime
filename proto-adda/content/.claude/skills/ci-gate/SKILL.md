@@ -61,11 +61,12 @@ Dispatch the `ci-monitor` agent (subagent name: `ci-monitor`) with the `mode` an
 ```
 **Result:** failure
 **Elapsed:** 87s
-**Classification:** transient | ci_infra | code_fix | unclear
+**Classification:** [transient | ci_infra | code_fix | unclear]
+**Run URL:** https://github.com/...
 **Root Cause:** ...
 **Affected Locations:** ...
 **Evidence:** ...
-**Confidence:** high | medium | low
+**Confidence:** [high | medium | low]
 ```
 
 ## On success result
