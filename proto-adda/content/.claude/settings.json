@@ -27,6 +27,7 @@
       "Bash(gh pr comment *)",
       "Bash(gh api repos/*/pulls/*)",
       "Skill(new-issue)",
+      "Skill(ci-gate)",
       "WebFetch(domain:github.com)",
       "WebFetch(domain:code.claude.com)",
       "WebFetch(domain:docs.anthropic.com)",
