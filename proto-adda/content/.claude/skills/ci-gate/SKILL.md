@@ -45,6 +45,14 @@ Dispatch the `ci-monitor` agent (subagent name: `ci-monitor`) with the mode and 
 
 Report to PO: CI is green (include elapsed time from ci-monitor's result). Then proceed with the SDLC step.
 
+## On error result
+
+ci-monitor returns `**Result:** error` when ci-watch itself could not run. Act as follows:
+
+- **Timing indicator** (detail contains "no push run found") — return to **Dispatch ci-monitor** and retry once. If the retry also returns `error`, surface the detail to PO and wait for direction.
+- **Ref resolution error** (detail contains "cannot resolve branch", "cannot resolve tag", "cannot resolve" a PR or commit) — validate the dispatched inputs: if the ref was clearly wrong (e.g. issue ID sent instead of PR number, wrong format), re-dispatch once with corrected inputs. If the re-dispatch also returns `error`, or no correction can be identified, surface the detail to PO and wait for direction.
+- **Any other error** — surface the detail to PO immediately and wait for direction.
+
 ## On failure result
 
 Act on the classification and your current context.
@@ -65,7 +73,9 @@ Surface ci-monitor's full result to PO. Wait for PO direction before proceeding.
 
 **Feature branch context** (steps 5a and 7):
 
-Dispatch Coder (`coder` subagent) with: the current implementation plan, Coder's previous structured response (if no previous Coder response exists — e.g. a docs issue handled in-session — PM summarizes its own recent changes into an equivalent structured input), and ci-monitor's result. Increment the consecutive `code_fix` counter. When Coder finishes, return to **Dispatch ci-monitor** above and dispatch again.
+Dispatch Coder (`coder` subagent) with: the current implementation plan, Coder's previous structured response, and ci-monitor's result. Increment the consecutive `code_fix` counter. When Coder finishes, return to **Dispatch ci-monitor** above and dispatch again.
+
+> If no previous Coder response exists (e.g. a docs issue handled in-session), PM summarizes its own recent changes into an equivalent structured input before dispatching.
 
 **Post-merge main context** (step 10):
 

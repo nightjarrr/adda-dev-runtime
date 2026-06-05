@@ -56,11 +56,11 @@ Emit the success result (see Output section) and terminate.
    **Detail:** [stderr content]
    ```
 2. Parse the JSON from stdout. Collect all `logFile` paths from the `runs` array.
-2. Read each log file in full.
-3. Identify failing step(s), error message(s), and any file/line references.
-4. Navigate to referenced source files in the repository using Read, Grep, and Glob to understand the code context.
-5. Classify the root cause.
-6. Emit the failure result (see Output section) and terminate.
+3. Read each log file in full.
+4. Identify failing step(s), error message(s), and any file/line references.
+5. Navigate to referenced source files in the repository using Read, Grep, and Glob to understand the code context.
+6. Classify the root cause.
+7. Emit the failure result (see Output section) and terminate.
 
 ## Classifications
 
