@@ -77,6 +77,17 @@ Call the EnterPlanMode tool directly to enter the planning mode. This in-session
 
 **Work breakdown.** Ordered list of implementation steps. For each step: files to create/modify/remove, classes/functions to add/change/remove. Include test coverage plan and any risk areas.
 
+**Verification plan.** Before finalising the Work Breakdown, design a concrete verification approach and agree it with PO. Use `adda-shell-tools` to survey available tools first — tool availability shapes what's possible.
+
+The verification section must give Coder executable instructions that exercise the new functionality from a realistic usage scenario, not just static checks. Draw on these techniques when designing those steps:
+
+- **Source invocation** — new scripts/tools not yet in the image can be run directly from source using the available runtime.
+- **Package runner or temp install** — project dependencies not globally installed are reachable via the package runner or a temporary install.
+- **`/tmp` playground** — design the exact scaffolding: which files to create, what content they need, what command to run against them, and what output confirms success. Coder follows these instructions precisely; do not leave scaffold design to Coder.
+- **Real-scenario tests** — design test cases that cover the actual usage path, not isolated unit assertions.
+
+If no available technique can emulate what's needed, raise it with PO and agree on the gap before finalising. A check is truly unverifiable locally only when it requires infrastructure the container cannot emulate (built Docker image, live external service).
+
 **Plans describe, not implement.** Include only descriptions and illustrative snippets — never complete, runnable implementations. Writing full code in the plan preempts implementation decisions that belong to Coder.
 
 Iterate with PO in plan mode until the plan is approved.
