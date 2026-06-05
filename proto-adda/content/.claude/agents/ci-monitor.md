@@ -1,6 +1,6 @@
 ---
 name: ci-monitor
-description: Runs a CI workflow to completion and — on failure — classifies the root cause. Dispatched by PM via the ci-gate skill before any CI result is known. Returns a structured result for both success and failure. Read-only on the repo; does not modify files.
+description: Runs a CI workflow to completion and — on failure — classifies the root cause. Dispatched by PM via the ci-gate skill before any CI result is known. Returns a structured result for both success and failure. Read-only; does not modify repository files.
 tools: Bash, Read, Grep, Glob
 model: sonnet
 ---
