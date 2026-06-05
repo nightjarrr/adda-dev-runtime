@@ -50,7 +50,10 @@ Report to PO: CI is green (include elapsed time from ci-monitor's result). Then 
 ci-monitor returns `**Result:** error` when ci-watch itself could not run. Act as follows:
 
 - **Timing indicator** (detail contains "no push run found") — return to **Dispatch ci-monitor** and retry once. If the retry also returns `error`, surface the detail to PO and wait for direction.
-- **Ref resolution error** (detail contains "cannot resolve branch", "cannot resolve tag", "cannot resolve" a PR or commit) — validate the dispatched inputs: if the ref was clearly wrong (e.g. issue ID sent instead of PR number, wrong format), re-dispatch once with corrected inputs. If the re-dispatch also returns `error`, or no correction can be identified, surface the detail to PO and wait for direction.
+- **Ref resolution error** (detail contains "cannot resolve branch", "cannot resolve tag", "cannot resolve" a PR or commit) — two sub-cases:
+  - *Format mismatch*: the ref doesn't match the expected syntax for the mode — a `pr` ref should be a plain integer; a `branch` ref should be a valid branch name (no spaces, not a bare number); a `tag` ref should match a version pattern (e.g. `vX.Y.Z`). If clearly violated, re-dispatch once with a corrected ref.
+  - *Correct format, wrong data*: the ref is syntactically valid but drawn from the wrong identifier — e.g., an issue ID used where a PR number was expected. Check the dispatch context: if PM can identify the correct value from context, re-dispatch once with it.
+  - In either sub-case, if the re-dispatch also returns `error`, or no correction can be identified, surface the detail to PO and wait for direction.
 - **Any other error** — surface the detail to PO immediately and wait for direction.
 
 ## On failure result

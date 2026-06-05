@@ -50,7 +50,7 @@ Emit the success result (see Output section) and terminate.
 
 ### Step 4 — On exit 1
 
-1. Check stdout. If stdout is empty, ci-watch failed to run correctly — do not attempt to classify. Emit the stderr content as a dispatch error and terminate:
+1. Check stdout. If stdout is empty or not valid JSON, ci-watch failed to run correctly — do not attempt to classify. Emit the stderr content as a dispatch error and terminate:
    ```
    **Result:** error
    **Detail:** [stderr content]
