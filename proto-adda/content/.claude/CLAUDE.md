@@ -202,3 +202,29 @@ If PO does report the merge, monitor all runs triggered by the merge commit on m
 Exit 0: main is healthy; the task is complete.
 
 Exit 1: apply the same triage logic as step 5a. For `code_fix`, do not commit or push directly to main; create or reuse an appropriate fix branch, dispatch Coder there, and route the fix through the normal branch/PR/human-merge gate before monitoring main again.
+
+## Cutting a release
+
+Releases are tagged from `main`. The `release` workflow fires on any `v*` tag push and handles image stamping, retagging, launcher packaging, and GitHub release creation automatically.
+
+**Steps:**
+
+1. Confirm `main` CI is green.
+2. Summarize changes since the previous release and present the delta to PO:
+   ```bash
+   git log $(git describe --tags --abbrev=0)..HEAD --oneline
+   ```
+   Ask PO for the version number — PM never picks the version.
+3. Tag and push:
+   ```bash
+   git tag vX.Y.Z
+   git push origin vX.Y.Z
+   ```
+4. Monitor the release workflow:
+   ```bash
+   /usr/local/libexec/adda-dev-runtime/bin/ci-watch push --tag vX.Y.Z
+   ```
+   Exit 0: proceed. Exit 1: apply the same triage logic as step 5a. The release is not complete until `ci-watch` exits 0.
+5. Verify the resulting GitHub release has the launcher tarball attached.
+
+**Do not use `gh release create`.** It is on the deny list and will be blocked. Pushing the tag is the only correct trigger — the `release` workflow owns release creation. Using `gh release create` directly publishes the release immediately and empty; when the workflow then tries to upload the launcher tarball, GitHub rejects the upload because assets cannot be added to a published release. Recovering from this burns the version number.
