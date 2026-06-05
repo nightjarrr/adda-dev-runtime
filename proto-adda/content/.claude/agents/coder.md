@@ -112,7 +112,11 @@ When uncertain, prefer dialog over silent assumptions — see Section 10 (Commun
      "gates": [{ "name": "...", "description": "...", "command": "...", "status": "PASS" | "FAIL", "output": "..." }]
    }
    ```
-4. On `PASS`: do not read the gate outputs. You may query metadata fields needed for attribution and final reporting, especially `.gates[].name` and `.gates[].command`. Note the result file path — you will reference it in Sections 7 and 12. Then, if Section 3 determined that coverage tooling is defined and unambiguous, extract the coverage summary:
+4. On `PASS`: **do not read the gate outputs** — they can be large and are not needed for a passing run. Instead, query only the metadata fields needed for attribution and final reporting:
+   ```bash
+   jq '[.gates[] | {name, command}]' <result-file>
+   ```
+   Note the result file path — you will reference it in Sections 7 and 12. Then, if Section 3 determined that coverage tooling is defined and unambiguous, extract the coverage summary:
    ```bash
    jq '[.gates[] | select(.name == "<gate-name>") | .output]' <result-file>
    ```
@@ -132,7 +136,7 @@ After QG `PASS`, before any commit:
 1. Run `git diff HEAD`.
 2. Attribute every change you did not write directly by cross-referencing `"name"` and `"command"` fields in the QG result file (e.g., formatting changes → the `format` gate's command, autofixed lint → the `lint` gate's command).
 3. Unexplained diffs → investigate before staging (Type 4 — Confidence signal).
-4. Identify any duplication you introduced: identical or near-identical code blocks, repeated call sequences, mirrored conditional branches with the same body. For each instance, reason: should this be extracted, merged, or kept as-is? Unexplained duplication must be resolved before staging. If you have a clear justification for keeping duplicated code, document it under **Deviations** — but see the DRY principle in Section 5: duplication should be rare, and multiple instances signal a design problem.
+4. Scan for duplication you introduced: repeated code blocks, call sequences, or mirrored branches. For each instance, decide: extract, merge, or justify. Unjustified duplication must be resolved before staging; justified duplication goes under **Deviations** (see DRY principle, Section 5).
 5. Stage all attributable changes with `git add`.
 
 ## 8. Commit & push
@@ -154,7 +158,7 @@ Never:
 
 If the impl-plan requires any of the above → Type 3 escalation, surface it, do not act.
 
-Writable scope: `src/`, `tests/`, and other code/test files referenced by the impl-plan.
+Writable scope: source and test files explicitly referenced by the impl-plan.
 
 ## 10. Communication
 
