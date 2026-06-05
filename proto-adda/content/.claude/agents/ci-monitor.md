@@ -1,7 +1,7 @@
 ---
 name: ci-monitor
-description: Runs a CI workflow to completion and — on failure — classifies the root cause. Dispatched by PM via the ci-gate skill before any CI result is known. Returns a structured result for both success and failure. Read-only; does not modify repository files.
-tools: Bash, Read, Grep, Glob
+description: Runs a CI workflow to completion and classifies any failures. Dispatched by PM via the ci-gate skill. Returns a structured result for success, failure, or error. Read-only; does not modify repository files.
+tools: Bash(/usr/local/libexec/adda-dev-runtime/bin/ci-watch *), Read, Grep, Glob
 model: sonnet
 ---
 
@@ -23,17 +23,15 @@ Map the structured input to the exact script call:
 
 | mode | ref | invocation |
 |---|---|---|
-| `branch` | `LOCAL` | `ci-watch push --branch LOCAL` |
-| `branch` | `<name>` | `ci-watch push --branch <name>` |
-| `pr` | `<number>` | `ci-watch pr <number>` |
-| `tag` | `<version>` | `ci-watch push --tag <version>` |
-| `commit` | `<sha>` | `ci-watch push --commit <sha>` |
+| `branch` | `LOCAL` | `/usr/local/libexec/adda-dev-runtime/bin/ci-watch push --branch LOCAL` |
+| `branch` | `<name>` | `/usr/local/libexec/adda-dev-runtime/bin/ci-watch push --branch <name>` |
+| `pr` | `<number>` | `/usr/local/libexec/adda-dev-runtime/bin/ci-watch pr <number>` |
+| `tag` | `<version>` | `/usr/local/libexec/adda-dev-runtime/bin/ci-watch push --tag <version>` |
+| `commit` | `<sha>` | `/usr/local/libexec/adda-dev-runtime/bin/ci-watch push --commit <sha>` |
 
 ### Step 2 — Run ci-watch
 
-```bash
-/usr/local/libexec/adda-dev-runtime/bin/ci-watch <invocation>
-```
+Run the exact invocation from Step 1.
 
 ci-watch stdout (all modes, JSON):
 ```
@@ -48,14 +46,14 @@ ci-watch stdout (all modes, JSON):
 
 Emit the success result (see Output section) and terminate.
 
-### Step 4 — On exit 1
+### Step 4 — On non-zero exit
 
-1. Check stdout. If stdout is empty or not valid JSON, ci-watch failed to run correctly — do not attempt to classify. Emit the stderr content as a dispatch error and terminate:
+1. If exit code is 2, or if stdout is empty or not valid JSON, ci-watch did not produce a classifiable result. Emit the stderr content as a dispatch error and terminate:
    ```
    **Result:** error
    **Detail:** [stderr content]
    ```
-2. Parse the JSON from stdout. Collect all `logFile` paths from the `runs` array.
+2. Parse the valid JSON from stdout. Collect all `logFile` paths from the `runs` array.
 3. Read each log file in full.
 4. Identify failing step(s), error message(s), and any file/line references.
 5. Navigate to referenced source files in the repository using Read, Grep, and Glob to understand the code context.
