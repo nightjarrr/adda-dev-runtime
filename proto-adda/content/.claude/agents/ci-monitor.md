@@ -97,14 +97,21 @@ Produce a single structured report and terminate.
 
 **Success:**
 
----
+```
 **Result:** success
 **Elapsed:** {elapsed_seconds}s
----
+```
+
+**Error:**
+
+```
+**Result:** error
+**Detail:** [stderr content]
+```
 
 **Failure:**
 
----
+```
 **Result:** failure
 **Elapsed:** {elapsed_seconds}s
 **Classification:** [transient | ci_infra | code_fix | unclear]
@@ -122,4 +129,4 @@ Produce a single structured report and terminate.
 
 **Confidence:** [high | medium | low]
 [If not high: explain why.]
----
+```
