@@ -61,11 +61,11 @@ Dispatch the `ci-monitor` agent (subagent name: `ci-monitor`) with the `mode` an
 ```
 **Result:** failure
 **Elapsed:** 87s
-**Classification:** code_fix
+**Classification:** transient | ci_infra | code_fix | unclear
 **Root Cause:** ...
 **Affected Locations:** ...
 **Evidence:** ...
-**Confidence:** high
+**Confidence:** high | medium | low
 ```
 
 ## On success result
@@ -89,7 +89,7 @@ Act on the `classification` field and the current SDLC context.
 
 ### transient (any context)
 
-Surface `ci-monitor`'s result to PO including the failing run URL. Ask PO to re-run the failed workflow. Wait for PO confirmation, then return to **Dispatch ci-monitor** above and dispatch again.
+Surface `ci-monitor`'s result to PO including the failing run URL. Ask PO to re-run the failed workflow — the GitHub access token does not grant permission to trigger workflow re-runs directly. Wait for PO confirmation, then return to **Dispatch ci-monitor** above and dispatch again.
 
 ### ci_infra (any context)
 
@@ -103,24 +103,18 @@ Surface `ci-monitor`'s full result to PO. Wait for PO direction before proceedin
 
 Depending on the current SDLC stage, handling differs:
 
-**Active coding phase** (feature branch or PR checks context):
+#### Active coding phase (feature branch or PR checks context)
 
-Dispatch Coder (`coder` subagent) with: the current implementation plan, Coder's previous structured response, and `ci-monitor`'s result. Increment the consecutive `code_fix` counter. When Coder finishes, return to **Dispatch ci-monitor** above and dispatch again.
+Dispatch Coder (`coder` subagent) with: the current implementation plan, Coder's previous structured response, and `ci-monitor`'s failure analysis result. When Coder finishes, return to **Dispatch ci-monitor** above and dispatch again.
 
 > If no previous Coder response exists (e.g. a change was made directly in-session rather than via Coder dispatch), summarize your own recent changes into an equivalent structured input before dispatching.
 
-**Post-merge main context**:
+**Loop-break:** Track consecutive `code_fix` dispatches. The counter resets to zero on any green run, `transient`, `ci_infra`, or `unclear` failure; only `code_fix` increments it. After **3 consecutive `code_fix` failures**: stop the loop. Compile a per-iteration summary — for each of the 3 failed iterations, note what `ci-monitor` identified as the root cause and what fix was attempted. Surface this summary to PO and wait for direction.
+
+#### Post-merge main context
 
 Do not commit or push to main. Surface `ci-monitor`'s result to PO. Propose the following path forward: reopen the issue, recreate the feature branch, and follow the full SDLC process to produce a fix via the normal PR gate.
 
-**Release/tag context**:
+#### Release/tag context
 
 Surface `ci-monitor`'s result to PO. Propose a recovery path for PO to consider: create a fix branch, route the fix through the normal PR gate, then cut a new tag once main is green. Wait for PO's direction before taking any action.
-
-## Loop-break rule
-
-This rule applies only in the active coding phase, where `code_fix` failures are iterated autonomously.
-
-Track consecutive `code_fix` dispatches. The counter resets to zero on any green run, `transient`, `ci_infra`, or `unclear` failure; only `code_fix` increments it.
-
-After **3 consecutive `code_fix` failures**: stop the loop. Compile a per-iteration summary — for each of the 3 failed iterations, note what `ci-monitor` identified as the root cause and what fix was attempted. Surface this summary to PO and wait for direction.

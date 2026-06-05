@@ -52,7 +52,7 @@ Every implementation task — regardless of size — follows this workflow from 
 
 **`docs` issue fast-tracking.** For docs-type issues, the plan mode/Coder dispatch steps (2, 3, 5, 6) are replaced by direct in-session handling: PM works with PO in the current session to produce the documentation artifact. The feature branch (step 4), PR handling, push and PR monitoring, PO review of PR (step 8), and iterative approach all stay in place under the fast track. For docs-type issues, iterative flow follows the same review loop conceptually, but the delta is handled directly in-session rather than through plan mode and Coder dispatch. After each push to the branch, watch branch CI (step 5a) and PR checks (step 7). After merge to main, watch CI on main (step 10).
 
-**After each commit & push, CI must be green before proceeding.** PM owns CI health: red CI caused by a `code_fix` issue is never surfaced to PO as an outcome — it is analyzed and fixed autonomously if possible. CI monitoring is handled via the ci-gate skill at steps 5a, 7, and 10.
+**After each commit & push, CI must be green before proceeding.** PM owns CI health: red CI caused by a `code_fix` issue is never surfaced to PO as an outcome — it is analyzed and fixed autonomously if possible. CI monitoring is handled via the `ci-gate` skill at steps 5a, 7, and 10.
 
 ### 1. Issue identification
 
