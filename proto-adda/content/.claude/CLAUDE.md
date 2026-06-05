@@ -30,7 +30,7 @@ These roles are dispatched on-demand but do not own an integral part of the SDLC
 
 | Role | Subagent name in Agent tool | Description |
 |---|---|---|
-| **CI Failure Analyst** | `ci-failure-analyst` | Specialized agent performing analysis and classification of failed CI runs |
+| **CI Monitor** | `ci-monitor` | Runs a CI workflow to completion and classifies any failures. Dispatched by PM via the `ci-gate` skill. |
 
 ## Working together
 
@@ -52,7 +52,7 @@ Every implementation task — regardless of size — follows this workflow from 
 
 **`docs` issue fast-tracking.** For docs-type issues, the plan mode/Coder dispatch steps (2, 3, 5, 6) are replaced by direct in-session handling: PM works with PO in the current session to produce the documentation artifact. The feature branch (step 4), PR handling, push and PR monitoring, PO review of PR (step 8), and iterative approach all stay in place under the fast track. For docs-type issues, iterative flow follows the same review loop conceptually, but the delta is handled directly in-session rather than through plan mode and Coder dispatch. After each push to the branch, watch branch CI (step 5a) and PR checks (step 7). After merge to main, watch CI on main (step 10).
 
-**After each commit & push, CI must be green before proceeding.** PM owns CI health: red CI caused by a `code_fix` issue is never surfaced to PO as an outcome — it is analyzed and fixed autonomously if possible. See steps 5a, 7, and 10.
+**After each commit & push, CI must be green before proceeding.** PM owns CI health: red CI caused by a `code_fix` issue is never surfaced to PO as an outcome — it is analyzed and fixed autonomously if possible. CI monitoring is handled via the `ci-gate` skill at steps 5a, 7, and 10.
 
 ### 1. Issue identification
 
@@ -117,24 +117,7 @@ After Coder terminates and returns the structured response with the outcome of t
 
 ### 5a. Monitor CI after Coder push
 
-After Coder pushes, call `ci-watch` script and pass the special `LOCAL` value for the branch:
-
-```bash
-/usr/local/libexec/adda-dev-runtime/bin/ci-watch push --branch LOCAL
-```
-
-Exit 0: proceed to step 6.
-
-Exit 1: `ci-watch` prints a JSON summary to stdout and captures failed logs to a temp file referenced in the JSON. Dispatch the CI failure analyst agent (name for `Agent` tool: `ci-failure-analyst`) with the log file path(s) from the JSON. Do not read the log yourself or include details about the current implementation in the dispatch — the analyst must work as an independent reviewer. Read the analyst's report and act on the classification:
-
-- **`transient`** — ask PO to re-run; wait; return to step 5a.
-- **`ci_infra`** — surface the analyst's report to PO; wait for PO direction.
-- **`code_fix`** — dispatch Coder with: the current plan, Coder's previous structured response, the `ci-watch` JSON output, and the analyst's report. Increment the consecutive `code_fix` failure counter for this step. Return to step 5a when Coder finishes.
-- **`unclear`** — surface the analyst's report to PO; wait for PO direction.
-
-This inner loop is PM-owned. Do not ask PO before dispatching Coder on a `code_fix` classification — CI is not PO's problem to triage.
-
-**Loop-break rule.** After 3 consecutive `code_fix` dispatches that all end in red CI (exit 1), stop the loop. Before engaging PO, compile a per-iteration summary: for each of the 3 failed iterations, note what the analyst identified as the issue and what fix Coder attempted. Surface this summary to PO and wait for direction. The counter resets to zero on any green CI run (exit 0); only `code_fix` classifications increment it — `transient` and `ci_infra` do not. The counter is scoped to the current step: steps 5a, 7, and 10 each maintain their own independent count.
+Ensure CI is green on the current feature branch using the `ci-gate` skill. Step 5a is not complete until `ci-gate` resolves green.
 
 ### 6. Post outcome
 
@@ -158,15 +141,7 @@ To open PR, run:
 gh pr create --title "..." --body "..."
 ```
 
-When the PR is opened, monitor all checks to completion:
-
-```bash
-/usr/local/libexec/adda-dev-runtime/bin/ci-watch pr {pr-number}
-```
-
-Exit 0: step 7 is complete, proceed.
-
-Exit 1: apply the same triage logic as step 5a. Step 7 is not complete until all PR checks are green.
+When the PR is opened, watch PR checks using the `ci-gate` skill. Step 7 is not complete until `ci-gate` resolves green.
 
 ### 8. Review
 
@@ -193,15 +168,7 @@ The issue comment thread (plan/outcome pairs) is the baseline; do not restate wo
 
 This step is triggered only if PO explicitly reports that the PR was merged. PM must not ask, prompt, or urge PO to report merge status — if PO does not mention it, skip this step entirely.
 
-If PO does report the merge, monitor all runs triggered by the merge commit on main:
-
-```bash
-/usr/local/libexec/adda-dev-runtime/bin/ci-watch push --branch main
-```
-
-Exit 0: main is healthy; the task is complete.
-
-Exit 1: apply the same triage logic as step 5a. For `code_fix`, do not commit or push directly to main; create or reuse an appropriate fix branch, dispatch Coder there, and route the fix through the normal branch/PR/human-merge gate before monitoring main again.
+If PO does report the merge, ensure CI is green after merge to main using the `ci-gate` skill. Main is healthy when `ci-gate` resolves green.
 
 ## Cutting a release
 
@@ -220,11 +187,7 @@ Releases are tagged from `main`. The `release` workflow fires on any `v*` tag pu
    git tag vX.Y.Z
    git push origin vX.Y.Z
    ```
-4. Monitor the release workflow:
-   ```bash
-   /usr/local/libexec/adda-dev-runtime/bin/ci-watch push --tag vX.Y.Z
-   ```
-   Exit 0: proceed. Exit 1: apply the same triage logic as step 5a. The release is not complete until `ci-watch` exits 0.
+4. Ensure the release workflow completes successfully using the `ci-gate` skill. The release is not complete until `ci-gate` resolves green.
 5. Verify the resulting GitHub release has the launcher tarball attached.
 
 **Do not use `gh release create`.** It is on the deny list and will be blocked. Pushing the tag is the only correct trigger — the `release` workflow owns release creation. Using `gh release create` directly publishes the release immediately and empty; when the workflow then tries to upload the launcher tarball, GitHub rejects the upload because assets cannot be added to a published release. Recovering from this burns the version number.
