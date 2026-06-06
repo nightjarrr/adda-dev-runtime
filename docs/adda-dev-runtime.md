@@ -1,12 +1,287 @@
 # Claude Code development environment
 
-This document specifies the target design of an isolated, ephemeral, hardened container environment for running **Claude Code** against a GitHub-hosted project repository. It covers the tier architecture, the image, the network perimeter, the container lifecycle, and the host-side and container-side scripts that bootstrap the environment.
+This document specifies the target design of an isolated, ephemeral, hardened container environment for AI-assisted software development. It covers the tier architecture, design principles, host system, and the per-tier design of the infrastructure, SDLC implementation, and project layers.
 
 Companion to [adda-sdlc.md](https://github.com/nightjarrr/molim/blob/main/docs/adda-sdlc.md) — the vendor-agnostic conceptual design of the ADDA SDLC that this runtime implements.
 
 **Audience: human Project Owner only.** Read at setup time and when modifying the environment. Not part of any agent's runtime context.
 
 Throughout, `{owner}` and `{repo}` refer to the GitHub namespace and repository name of the project.
+
+---
+
+## Design principles
+
+### Ephemeral runtime
+
+A dev runtime exists for one feature workflow and is destroyed on exit. The only durable project state is state intentionally pushed or written to GitHub: code, documentation, branches, commits, pull requests, Issues, labels, and comments. Anything not pushed before exit is lost. This is an intentional and accepted trade-off for isolation and reproducibility.
+
+### Stateless agent, stateful world
+
+The AI tool rebuilds context at session start by reading GitHub state and repository artifacts. No agent runtime state is carried across container exits.
+
+### Defense in depth
+
+Three concentric boundaries protect the host and project from code running inside the development environment:
+
+1. **Container isolation** — the AI tool container has no host filesystem, process, device, display, Docker socket, or network namespace access beyond what the launcher explicitly grants.
+2. **Proxy-based network perimeter** — the AI tool container runs with `--network none`. All intended outbound traffic goes through a launcher-managed Envoy sidecar proxy over a mounted Unix domain socket. Envoy enforces a default-deny domain allow-list.
+3. **AI tool permission system** — the AI tool's agent, skill, and tool restrictions enforce the SDLC's permission matrix inside the container.
+
+Two further protections bound the impact of credential exposure:
+
+* **Host-side keyring** — authentication tokens never reside in plaintext on host disk; the keyring is encrypted at rest and unlocked only by an active login session.
+* **Token scoping** — the GitHub Token is recommended to be scoped to a single repository with no administration permissions, bounding GitHub blast radius.
+
+### Host launcher and Envoy are trusted perimeter components
+
+The AI tool container is treated as untrusted. Nothing inside it is assumed to be non-exploitable. The host launcher and the per-session Envoy sidecar are therefore part of the trusted computing base for network and runtime isolation. A user who deliberately bypasses the launcher or weakens the Envoy policy is outside the protection model.
+
+### Push-oriented persistence
+
+The durable persistence storage for project work is GitHub. The intended project-state path is commit and push to the feature branch, plus Issue/PR updates through GitHub APIs. No host source bind mount, no persistent AI tool config volume, no SSH agent forwarding, and no shared host clone are used.
+
+### No plaintext secrets on host disk
+
+Authentication tokens live in the host Secret Service keyring. The launcher retrieves tokens on demand. There is no project `.env` containing secrets, no credentials file, and no token in shell history.
+
+---
+
+## Threat model
+
+### Primary threat: host compromise from code inside the development environment
+
+The environment must prevent any code, tool, dependency, or AI agent running inside the AI tool container from affecting the host system.
+
+Non-negotiable constraints:
+
+* No AI tool install on the host.
+* No host home directory mount.
+* No host project source bind mount.
+* No persistent AI tool config volume.
+* No Docker socket inside the container.
+* No shared host namespaces: no `--privileged`, no `--network=host`, no `--pid=host`, no `--ipc=host`.
+* No host display forwarding: no `DISPLAY`, no X11 socket, no Wayland socket.
+* No SSH agent forwarding.
+* No general container network egress.
+* Non-root user inside the AI tool container.
+* `--cap-drop ALL` for the AI tool container.
+* No capability add-back for the AI tool container.
+* `--security-opt no-new-privileges` to block setuid/file-capability privilege gain.
+* Read-only root filesystem with explicit tmpfs mounts for writable runtime paths.
+
+Normal copy/paste between the AI tool's TUI and the host is mediated by the terminal emulator. In-container processes do not receive programmatic access to the host GUI clipboard.
+
+### Limits of container isolation
+
+Container isolation reduces likelihood and blast radius; it does not reduce risk to zero. The host kernel must be patched. Image provenance, base-image discipline, pinned digests, CI provenance, and minimal runtime privileges are part of the mitigation. A determined attacker exploiting an unpatched container escape CVE is outside of this design's guarantee.
+
+### Prompt injection
+
+Adversarial content may reach the AI agent's context through web pages, dependency READMEs, Issue bodies, PR comments, fetched files, or repository content.
+
+Recognized mitigations:
+
+* Ephemeral runtime limits persistence and blast radius.
+* Narrow GitHub Token scope prevents cross-repository or account-level damage.
+* AI tool permission configuration enforces the SDLC permission matrix.
+* Network egress allow-list limits where compromised code can communicate.
+* PR review remains the final human gate for code and workflow changes.
+
+Residual risk: hostile content may influence changes on the current branch until caught at review.
+
+### Malicious dependencies
+
+A dependency may execute hostile code during install, test, build, or runtime.
+
+The design distinguishes two dependency classes:
+
+- **Container/toolchain dependencies** — OS packages, shell tools, language managers, Bun, the AI tool, GitHub CLI, `socat`, and other infrastructure needed before the repository is cloned. These are baked into the image at build time and are not installed with root privileges at runtime.
+- **Project code dependencies** — dependencies declared by the repository after it is cloned, such as Python packages in `pyproject.toml` / `uv.lock`, Node packages in `package.json` / lockfiles, or analogous ecosystem dependencies. These may need package-registry access at runtime because the repository is not available during generic base-image build.
+
+Target-state mitigations:
+
+- Project dependencies are lockfile-pinned and installed with frozen/locked resolution.
+- Package-registry access is allowed only to explicit ecosystem registry domains required by the project bootstrap.
+- OS-level/package-manager installation such as `apt install` is not performed at runtime.
+- Runtime installs run as the unprivileged container user and write only to ephemeral tmpfs-backed paths.
+- Dependabot and PR review govern dependency changes.
+
+Residual risk: a malicious version already present in a reviewed lockfile can still execute inside the isolated container.
+
+### Network exfiltration
+
+A compromised tool or manipulated AI agent may try to send repository contents, tokens, or other data to an attacker-controlled endpoint.
+
+Primary mitigation: the AI tool container has no network interface beyond loopback. Proxy-aware traffic reaches the network only through the Envoy sidecar. Envoy enforces a default-deny domain allow-list.
+
+A process that ignores `HTTP_PROXY` / `HTTPS_PROXY` or opens raw sockets directly should fail because the container runs with `--network none`.
+
+### Token theft
+
+An attacker inside the AI tool container may read tokens available to that process.
+
+Recognized. The container must hold credentials or credential material to function. Mitigations:
+
+* GitHub Token is single-repository and has no administration permissions.
+* AI tool OAuth token is revocable.
+* The GitHub token is used for `gh auth login` and then removed from the process environment before handing off to the AI tool, where practical.
+* Exfiltration routes are constrained by Envoy's allow-list.
+* Tokens are never stored in plaintext on host disk.
+
+Accepted residual risk: an attacker in a live session can use available credentials within their granted scope until the session is terminated or tokens are revoked.
+
+### Quota and resource abuse
+
+A runaway AI agent session or hostile instruction may consume API quota, GitHub API rate limits, CPU, memory, or disk.
+
+Mitigations:
+
+* Ephemeral teardown stops further consumption.
+* Container resource limits should be applied by the launcher.
+* `tmpfs` sizes bound writable in-memory filesystem growth.
+* GitHub API rate limits naturally apply to the token.
+
+---
+
+## Host system and launcher
+
+### Host prerequisites
+
+Linux only, tested on Ubuntu 24.04. Several decisions in this document — POSIX shell launcher, Ghostty as terminal emulator, `tmux` for session survivability, and direct `docker run` orchestration — assume this target. Use on macOS or Windows is not supported; adaptation to those hosts is left to the reader.
+
+Prerequisites:
+
+* Docker Engine or compatible OCI runtime. Desktop is not required.
+* Bash.
+* `openssl` command-line utility, used by the launcher for random run/session identifiers.
+* Ghostty, or another modern terminal emulator.
+* `tmux`, used for survivable terminal sessions.
+* `libsecret-tools`, providing `secret-tool` for keyring access.
+* `seahorse`, optional but recommended for GUI keyring inspection.
+* An active GNOME, KDE, or compatible Secret Service login session, so the keyring is unlocked.
+
+Notably **not** required on the host:
+
+* `git`
+* `gh`
+* The AI tool CLI
+* Python, Node, uv, or any project-specific runtime tooling
+
+Those tools live inside containers.
+
+### Launcher script (`adda-dev.sh`)
+
+Host-side script. Its job is to create one ephemeral AI tool dev runtime.
+
+Invocation:
+
+```bash
+adda-dev.sh
+adda-dev.sh <issue-id>
+adda-dev.sh -- <cmd> [args...]
+adda-dev.sh <issue-id> -- <cmd> [args...]
+```
+
+#### Per-project configuration
+
+The launcher reads `scripts/adda-dev.env`.
+
+Required target variables:
+
+```bash
+#Github repo
+GITHUB_OWNER=
+GITHUB_REPO=
+
+# ADDA Dev Runtime container image configuration
+ADDA_DEV_IMAGE=
+ADDA_DEV_USER=adda
+ADDA_DEV_UID=1000
+ADDA_DEV_GID=1000
+ADDA_DEV_HOME_TMPFS_SIZE=500m
+ADDA_DEV_WORKSPACE_TMPFS_SIZE=200m
+# Needs to be a file directly in /run to support the /run tmpfs
+ADDA_DEV_PROXY_SOCKET_CONTAINER_PATH=/run/proxy.sock
+ADDA_DEV_PROXY_PORT=8080
+
+# Envoy perimeter sidecar configuration
+ENVOY_IMAGE=envoyproxy/envoy:v1.33.14
+ENVOY_SOCKET_CONTAINER_PATH=/run/adda-dev-proxy/proxy.sock
+```
+
+#### Behavior
+
+1. Validate arguments.
+2. Verify host prerequisites: `docker`, `secret-tool`, `tmux`, `openssl`.
+3. Source `adda-dev.env` and validate required variables.
+4. Seed `~/.tmux.conf` from `scripts/adda-dev.tmux.conf` only if missing; source it best-effort.
+5. If not already inside tmux, generate a session name, export it, and re-enter the launcher inside a named tmux session.
+6. Retrieve auth tokens from Secret Service keyring.
+7. Detect host timezone.
+8. Create a private per-run runtime directory under `${XDG_RUNTIME_DIR:-/tmp}`.
+9. Render Envoy config from `.devcontainer/envoy/envoy.yaml.template` into the runtime directory.
+10. Start Envoy sidecar container with hardened flags.
+11. Wait for the Envoy Unix socket.
+12. Create `adda-dev shell` and `adda-dev envoy logs` windows in the primary tmux session. The `adda-dev shell` window invokes a container-side script that waits for bootstrap to finish before opening the interactive bash prompt.
+13. Assemble and run the AI tool container with:
+
+    * `--rm -it`
+    * `--network none`
+    * `--cap-drop ALL`
+    * `--security-opt no-new-privileges`
+    * `--read-only`
+    * explicit tmpfs mounts
+    * Envoy socket bind mount
+    * required environment variables
+14. On exit, stop Envoy and remove the runtime directory.
+
+#### Envoy sidecar hardening
+
+The Envoy sidecar is outside the AI tool container trust boundary but should still be minimized:
+
+* exact image version and digest in target state;
+* `--rm -d`;
+* `--cap-drop ALL`;
+* `--security-opt no-new-privileges`;
+* read-only root where compatible;
+* tmpfs for `/tmp`;
+* admin interface not published to host; accessible via `docker exec` only.
+
+### Terminal emulator and tmux
+
+#### Ghostty
+
+Ghostty is the preferred terminal emulator. Increase host terminal scrollback if desired:
+
+```text
+scrollback-limit = 100000000
+```
+
+#### tmux
+
+The launcher uses tmux for survivability. It may seed user tmux config from `scripts/adda-dev.tmux.conf` only when `~/.tmux.conf` is absent. Existing user tmux config is never overwritten.
+
+Recommended seed behavior:
+
+* large scrollback;
+* mouse mode enabled;
+* slower mouse-wheel scrolling in copy mode;
+* short escape-time for responsive TUIs;
+* focus events enabled;
+* true-color terminal features;
+* clipboard/passthrough/title mutation disabled for safety;
+* no `remain-on-exit failed` default, because dead-pane UX is poor.
+
+With tmux mouse mode enabled, normal terminal selection may require Shift-drag depending on terminal emulator.
+
+Common tmux actions:
+
+```text
+Ctrl-b d     detach from session
+Ctrl-b [     enter copy mode
+Ctrl-b x     kill pane
+```
 
 ---
 
@@ -24,21 +299,19 @@ ADDA development is organised into three tiers. Each tier has a distinct concern
 
 **Bun as the Tier 1 scripting runtime:** Bun is included in Tier 1 as the shared scripting runtime for ADDA infrastructure scripts — the criterion for inclusion was that placing a runtime in Tier 1 makes it available to all higher tiers without additional setup. This is a deliberate architectural choice, not a project-specific convenience. It has the side effect that TypeScript/Bun Tier 3 projects require no additional tooling layer; all other language runtimes must be added at Tier 2 or Tier 3.
 
-**Image:** `ghcr.io/nightjarrr/adda-dev-runtime`
+**Image:** `ghcr.io/{owner}/adda-dev-runtime`
 
 ### Tier 2 — ADDA SDLC implementation
 
-**What it is:** a runnable image that packages a specific AI tool together with a complete implementation of the ADDA SDLC for that tool. Builds `FROM` Tier 1 and adds the AI tool binary, the SDLC methodology (CLAUDE.md deployed to `~/.claude/`, skills, settings, agent definitions), and a bootstrap hook that initialises the agent's working environment at container start.
+**What it is:** a runnable image that packages a specific AI tool together with a complete implementation of the ADDA SDLC for that tool. Builds `FROM` Tier 1 and adds the AI tool binary, the SDLC methodology (agent config, skills, settings, agent definitions), and a bootstrap hook that initialises the agent's working environment at container start.
 
 **Why it exists as an image:** the SDLC methodology and its AI tool must be distributed together as a versioned, reproducible unit. An image is the correct packaging for a self-contained, runnable system.
 
 **Multiple Tier 2 implementations:** Tier 2 is not a single image — it is a role. Multiple Tier 2 implementations can coexist as siblings, each pairing a different AI tool or a different SDLC implementation with the same Tier 1 base:
-- **proto-adda** — current implementation; Claude Code with a simplified SDLC. "Proto" reflects that it is a prototype: it covers the core workflow but does not implement all ADDA roles (Associate Architect is collapsed into PM).
+- **proto-adda** — current implementation; Claude Code with a simplified SDLC. "Proto" reflects that it is a prototype: it covers the core workflow but does not implement all ADDA roles (Associate Architect is collapsed into PM). See `docs/proto-adda.md` for implementation specifics.
 - **dawe** — planned future implementation; a full ADDA SDLC implementation (including a distinct Associate Architect subagent).
 
-The Tier 2 CLAUDE.md (deployed to `~/.claude/CLAUDE.md` at container start) contains the SDLC workflow, roles, working principles, and release process. It contains no project-specific content.
-
-**Image (proto-adda):** `ghcr.io/nightjarrr/proto-adda-dev-runtime`
+The Tier 2 agent config (deployed to `~/.claude/` or equivalent at container start) contains the SDLC workflow, roles, working principles, and release process. It contains no project-specific content.
 
 ### Tier 3 — the project
 
@@ -61,187 +334,29 @@ The choice between init hook and Dockerfile turns on the project's toolchain: if
 | **Concern** | Infrastructure | ADDA SDLC implementation | The project being developed |
 | **Form** | Docker image | Docker image (`FROM` Tier 1) | GitHub repository |
 | **Examples** | `adda-dev-runtime` | `proto-adda`, `dawe` (planned) | any project using ADDA |
-| **CLAUDE.md** | — | `~/.claude/CLAUDE.md` — SDLC methodology | `/workspace/CLAUDE.md` — project context |
+| **Agent config** | — | `~/.claude/CLAUDE.md` — SDLC methodology | `/workspace/CLAUDE.md` — project context |
 | **Multiplicity** | One | One per AI tool / SDLC variant | One per project |
 
 ---
 
-## Host system
+## Tier 1 — infrastructure
 
-Linux only, tested on Ubuntu 24.04. Several decisions in this document — POSIX shell launcher, Ghostty as terminal emulator, `tmux` for session survivability, and direct `docker run` orchestration — assume this target. Use on macOS or Windows is not supported; adaptation to those hosts is left to the reader.
+### Container and session model
 
-Prerequisites:
+One AI tool development session corresponds to one isolated AI tool container and one dedicated network perimeter sidecar.
 
-* Docker Engine or compatible OCI runtime. Desktop is not required.
-* Bash.
-* `openssl` command-line utility, used by the launcher for random run/session identifiers.
-* Ghostty, or another modern terminal emulator.
-* `tmux`, used for survivable terminal sessions.
-* `libsecret-tools`, providing `secret-tool` for keyring access.
-* `seahorse`, optional but recommended for GUI keyring inspection.
-* An active GNOME, KDE, or compatible Secret Service login session, so the keyring is unlocked.
+| Concept                      | Mapping                           |
+| ---------------------------- | --------------------------------- |
+| One GitHub Issue             | One feature workflow              |
+| One feature workflow         | One AI tool session               |
+| One AI tool session          | One AI tool process               |
+| One AI tool process          | One AI tool container             |
+| One AI tool container        | One Envoy sidecar proxy           |
+| One AI tool container        | One host `tmux` session           |
 
-Notably **not** required on the host:
+AI tool subagents run inside the parent AI tool process. They do not get separate containers.
 
-* `git`
-* `gh`
-* `claude`
-* Python, Node, uv, or any project-specific runtime tooling
-
-Those tools live inside containers.
-
----
-
-## Principles
-
-### Ephemeral runtime
-
-A Claude dev runtime exists for one feature workflow and is destroyed on exit. The only durable project state is state intentionally pushed or written to GitHub: code, documentation, branches, commits, pull requests, Issues, labels, and comments. Anything not pushed before exit is lost. This is an intentional and accepted trade-off for isolation and reproducibility.
-
-### Stateless agent, stateful world
-
-Claude Code rebuilds context at session start by reading GitHub state and repository artifacts. No agent runtime state is carried across container exits.
-
-### Defense in depth
-
-Three concentric boundaries protect the host and project from code running inside the development environment:
-
-1. **Container isolation** — the Claude container has no host filesystem, process, device, display, Docker socket, or network namespace access beyond what the launcher explicitly grants.
-2. **Proxy-based network perimeter** — the Claude container runs with `--network none`. All intended outbound traffic goes through a launcher-managed Envoy sidecar proxy over a mounted Unix domain socket. Envoy enforces a default-deny domain allow-list.
-3. **Claude permission system** — Claude Code's agent, skill, and tool restrictions enforce the SDLC's permission matrix inside the container.
-
-Two further protections bound the impact of credential exposure:
-
-* **Host-side keyring** — authentication tokens never reside in plaintext on host disk; the keyring is encrypted at rest and unlocked only by an active login session.
-* **Token scoping** — the GitHub Token is recommended to be scoped to a single repository with no administration permissions, bounding Github blast radius.
-
-### Host launcher and Envoy are trusted perimeter components
-
-The Claude container is treated as untrusted. Nothing inside it is assumed to be non-exploitable. The host launcher and the per-session Envoy sidecar are therefore part of the trusted computing base for network and runtime isolation. A user who deliberately bypasses the launcher or weakens the Envoy policy is outside the protection model.
-
-### Push-oriented persistence
-
-The durable persistence storage for project work is GitHub. The intended project-state path is commit and push to the feature branch, plus Issue/PR updates through GitHub APIs. No host source bind mount, no persistent `~/.claude` volume, no SSH agent forwarding, and no shared host clone are used.
-
-### No plaintext secrets on host disk
-
-Authentication tokens live in the host Secret Service keyring. The launcher retrieves tokens on demand. There is no project `.env` containing secrets, no credentials file, and no token in shell history.
-
----
-
-## Threat model
-
-### Primary threat: host compromise from code inside the development environment
-
-The environment must prevent any code, tool, dependency, or AI agent running inside the Claude dev container from affecting the host system.
-
-Non-negotiable constraints:
-
-* No `claude` install on the host.
-* No host home directory mount.
-* No host project source bind mount.
-* No persistent `~/.claude` volume.
-* No Docker socket inside the container.
-* No shared host namespaces: no `--privileged`, no `--network=host`, no `--pid=host`, no `--ipc=host`.
-* No host display forwarding: no `DISPLAY`, no X11 socket, no Wayland socket.
-* No SSH agent forwarding.
-* No general container network egress.
-* Non-root user inside the Claude container.
-* `--cap-drop ALL` for the Claude container.
-* No capability add-back for the Claude container.
-* `--security-opt no-new-privileges` to block setuid/file-capability privilege gain.
-* Read-only root filesystem with explicit tmpfs mounts for writable runtime paths.
-
-Normal copy/paste between Claude's TUI and the host is mediated by the terminal emulator. In-container processes do not receive programmatic access to the host GUI clipboard.
-
-### Limits of container isolation
-
-Container isolation reduces likelihood and blast radius; it does not reduce risk to zero. The host kernel must be patched. Image provenance, base-image discipline, pinned digests, CI provenance, and minimal runtime privileges are part of the mitigation. A determined attacker exploiting an unpatched container escape CVE is outside of this design's guarantee.
-
-### Prompt injection
-
-Adversarial content may reach Claude's context through web pages, dependency READMEs, Issue bodies, PR comments, fetched files, or repository content.
-
-Recognized mitigations:
-
-* Ephemeral runtime limits persistence and blast radius.
-* Narrow GitHub Token scope prevents cross-repository or account-level damage.
-* Claude Code permission configuration enforces the SDLC permission matrix.
-* Network egress allow-list limits where compromised code can communicate.
-* PR review remains the final human gate for code and workflow changes.
-
-Residual risk: hostile content may influence changes on the current branch until caught at review.
-
-### Malicious dependencies
-
-A dependency may execute hostile code during install, test, build, or runtime.
-
-The design distinguishes two dependency classes:
-
-- **Container/toolchain dependencies** — OS packages, shell tools, language managers, `uv`, Bun, Claude Code, GitHub CLI, `socat`, and other infrastructure needed before the repository is cloned. These are baked into the image at build time and are not installed with root privileges at runtime.
-- **Project code dependencies** — dependencies declared by the repository after it is cloned, such as Python packages in `pyproject.toml` / `uv.lock`, Node packages in `package.json` / lockfiles, or analogous ecosystem dependencies. These may need package-registry access at runtime because the repository is not available during generic base-image build.
-
-Target-state mitigations:
-
-- Project dependencies are lockfile-pinned and installed with frozen/locked resolution.
-- Package-registry access is allowed only to explicit ecosystem registry domains required by the project bootstrap.
-- OS-level/package-manager installation such as `apt install` is not performed at runtime.
-- Runtime installs run as the unprivileged container user and write only to ephemeral tmpfs-backed paths.
-- Dependabot and PR review govern dependency changes.
-
-Residual risk: a malicious version already present in a reviewed lockfile can still execute inside the isolated container.
-
-### Network exfiltration
-
-A compromised tool or manipulated Claude may try to send repository contents, tokens, or other data to an attacker-controlled endpoint.
-
-Primary mitigation: the Claude container has no network interface beyond loopback. Proxy-aware traffic reaches the network only through the Envoy sidecar. Envoy enforces a default-deny domain allow-list.
-
-A process that ignores `HTTP_PROXY` / `HTTPS_PROXY` or opens raw sockets directly should fail because the container runs with `--network none`.
-
-### Token theft
-
-An attacker inside the Claude container may read tokens available to that process.
-
-Recognized. The container must hold credentials or credential material to function. Mitigations:
-
-* GitHub Token is single-repository and has no administration permissions.
-* Claude OAuth token is revocable.
-* The GitHub token is used for `gh auth login` and then removed from the process environment before handing off to Claude Code, where practical.
-* Exfiltration routes are constrained by Envoy's allow-list.
-* Tokens are never stored in plaintext on host disk.
-
-Accepted residual risk: an attacker in a live session can use available credentials within their granted scope until the session is terminated or tokens are revoked.
-
-### Quota and resource abuse
-
-A runaway Claude session or hostile instruction may consume Anthropic quota, GitHub API rate limits, CPU, memory, or disk.
-
-Mitigations:
-
-* Ephemeral teardown stops further consumption.
-* Container resource limits should be applied by the launcher.
-* `tmpfs` sizes bound writable in-memory filesystem growth.
-* GitHub API rate limits naturally apply to the token.
-
----
-
-## Container and session model
-
-One Claude development session corresponds to one isolated Claude container and one dedicated network perimeter sidecar.
-
-| Concept                  | Mapping                         |
-| ------------------------ | ------------------------------- |
-| One GitHub Issue         | One feature workflow            |
-| One feature workflow     | One Claude Code session         |
-| One Claude Code session  | One `claude` process            |
-| One `claude` process     | One Claude dev container        |
-| One Claude dev container | One Envoy sidecar proxy         |
-| One Claude dev container | One host `tmux` session |
-
-Claude Code subagents run inside the parent `claude` process. They do not get separate containers.
-
-### Lifecycle
+#### Lifecycle
 
 A session is created when work begins:
 
@@ -258,33 +373,34 @@ Per-session runtime lifecycle:
 2. Launcher retrieves credentials from the host keyring.
 3. Launcher starts the Envoy sidecar container with a per-run runtime directory.
 4. Launcher waits for Envoy's Unix socket.
-5. Launcher starts the Claude dev container with `--network none` and the Envoy socket mounted into it.
+5. Launcher starts the AI tool container with `--network none` and the Envoy socket mounted into it.
 6. Entrypoint starts an in-container `socat` bridge from loopback TCP to the mounted Unix socket.
-7. Entrypoint configures GitHub auth, clone, branch selection, Claude config, and project bootstrap.
-8. Entrypoint runs Claude Code or the command override.
-9. On exit, launcher stops Envoy and removes the runtime directory.
+7. Entrypoint configures GitHub auth, clone, branch selection, and project bootstrap.
+8. Entrypoint sources `entrypoint.d/` hooks, then runs the Tier 3 init hook if present.
+9. Entrypoint execs the AI tool (CMD).
+10. On exit, launcher stops Envoy and removes the runtime directory.
 
-### Concurrency
+#### Concurrency
 
-Multiple features may run concurrently. Each invocation gets its own Claude container, Envoy sidecar, runtime directory, Unix socket, and tmux session. Containers share no state with each other except through GitHub.
+Multiple features may run concurrently. Each invocation gets its own AI tool container, Envoy sidecar, runtime directory, Unix socket, and tmux session. Containers share no state with each other except through GitHub.
 
-### TUI requirements
+#### TUI requirements
 
-Claude Code is a TUI. The container provides a real PTY (`docker run -it`), `TERM=xterm-256color` or compatible behavior, and a UTF-8 locale.
+The AI tool is a TUI application. The container provides a real PTY (`docker run -it`), `TERM=xterm-256color` or compatible behavior, and a UTF-8 locale.
 
 Micro is installed as the default TUI editor (`EDITOR=micro`, `VISUAL=micro`). It is available for interactive file editing and is the fallback editor for CLI tools that open `$EDITOR` (e.g. `git commit`, `gh pr create`).
 
 delta is installed as the git diff pager. All `git diff`, `git show`, `git log -p`, and `git add -p` output is automatically routed through delta for syntax highlighting, line numbers, and hunk navigation (n/N).
 
-### Survivability
+#### Survivability
 
 The launcher creates a named host `tmux` session and re-enters itself inside that session. This keeps the launcher, Envoy sidecar lifecycle, and `docker run` under tmux control. If the terminal emulator crashes or closes, the tmux server keeps the session alive. Reattach using the printed tmux session name.
 
-The launcher also opens a `adda-dev shell` window (interactive bash in the ADDA Dev Runtime container) and a `adda-dev envoy logs` window (`docker logs -f` on the Envoy sidecar) in the same session.
+The launcher also opens a `adda-dev shell` window (interactive bash in the container) and a `adda-dev envoy logs` window (`docker logs -f` on the Envoy sidecar) in the same session.
 
 ---
 
-## Authentication
+### Authentication
 
 Two secrets are required:
 
@@ -293,7 +409,7 @@ Two secrets are required:
 
 Both are stored in the host Secret Service keyring, retrieved by the launcher, and injected into the container at startup.
 
-### Secret naming in keyring
+#### Secret naming in keyring
 
 | Secret                  | Service      | Account    | Key                               |
 | ----------------------- | ------------ | ---------- | --------------------------------- |
@@ -303,7 +419,7 @@ Both are stored in the host Secret Service keyring, retrieved by the launcher, a
 
 All entries use the `adda-dev` service namespace. `account` identifies the target system; `key` identifies the credential within that system and is configured per-repo in `adda-dev.env` via `ADDA_DEV_KEYRING_GITHUB_KEY`, `ADDA_DEV_KEYRING_CLAUDE_KEY`, and `ADDA_DEV_KEYRING_DEEPSEEK_KEY`. Multiple GitHub repos can coexist in one keyring by using distinct `key` values (e.g., `acme-token`, `otherrepo-token`).
 
-### One-time bootstrap: Claude Code OAuth token
+#### One-time bootstrap: Claude Code OAuth token
 
 Acquire the token using a throwaway container:
 
@@ -326,7 +442,7 @@ secret-tool store --label='Claude Code OAuth' \
   service adda-dev account claude key oauth
 ```
 
-### One-time bootstrap: GitHub Token
+#### One-time bootstrap: GitHub Token
 
 Generate a fine-grained Personal Access Token in GitHub and store it directly in the keyring:
 
@@ -339,7 +455,7 @@ Replace `{repo}` with the actual repository name (e.g., `acme`). The `{repo}-tok
 
 Github token scoping and permissions are explained further in **GitHub Token scoping** section.
 
-### Retrieval
+#### Retrieval
 
 The launcher retrieves both tokens at runtime:
 
@@ -350,11 +466,11 @@ GITHUB_TOKEN_=$(secret-tool lookup service adda-dev account github key {repo}-to
 
 If either lookup returns empty, the launcher fails fast with a bootstrap-procedure pointer.
 
-### Rotation
+#### Rotation
 
 Re-run the bootstrap or GitHub token generation procedure and store a replacement value using the same `secret-tool store` attributes. Recommended GitHub Token rotation interval: 90 days or less.
 
-### GitHub Token scoping
+#### GitHub Token scoping
 
 Hard requirements:
 
@@ -378,14 +494,14 @@ Grey-area permissions are added only when a named SDLC operation requires them a
 
 ---
 
-## Network policy
+### Network policy
 
-### Target architecture
+#### Target architecture
 
-The Claude container has no general network interface:
+The AI tool container has no general network interface:
 
 ```text
-Claude container (--network none)
+AI tool container (--network none)
   -> loopback HTTP proxy endpoint
   -> in-container socat bridge
   -> mounted Unix domain socket
@@ -393,11 +509,11 @@ Claude container (--network none)
   -> allowed internet destinations
 ```
 
-The network perimeter is outside the Claude container. Nothing inside the untrusted Claude container is able to enforce its own network rules.
+The network perimeter is outside the AI tool container. Nothing inside the untrusted container is able to enforce its own network rules.
 
-### Claude container networking
+#### Container networking
 
-The Claude container is launched with:
+The AI tool container is launched with:
 
 ```bash
 --network none
@@ -411,9 +527,9 @@ Expected properties:
 * Direct TCP connections to internet IPs fail.
 * Tools that ignore proxy settings fail to reach the network.
 
-### Proxy bridge
+#### Proxy bridge
 
-Most applications understand HTTP proxies as `host:port`, not Unix sockets. The entrypoint therefore starts `socat` bridge inside the Claude container:
+Most applications understand HTTP proxies as `host:port`, not Unix sockets. The entrypoint therefore starts a `socat` bridge inside the container:
 
 ```text
 127.0.0.1:<ADDA_DEV_PROXY_PORT>
@@ -433,9 +549,9 @@ no_proxy=localhost,127.0.0.1,::1
 
 For HTTPS destinations, clients send HTTP `CONNECT` to Envoy. Envoy sees the target authority, such as `api.github.com:443`, but does not decrypt TLS in the baseline design.
 
-### Envoy sidecar
+#### Envoy sidecar
 
-Envoy runs as a separate sidecar container managed by the launcher. It is not inside the Claude container.
+Envoy runs as a separate sidecar container managed by the launcher. It is not inside the AI tool container.
 
 Envoy responsibilities:
 
@@ -448,9 +564,9 @@ Envoy responsibilities:
 * Emit access logs for audit/debugging.
 * Expose an admin interface on container loopback for diagnostics; it is not published to the host and is accessible via `docker exec`.
 
-Envoy is per-session. One Claude container gets one Envoy sidecar.
+Envoy is per-session. One AI tool container gets one Envoy sidecar.
 
-### Envoy admin interface
+#### Envoy admin interface
 
 The Envoy admin interface is bound to container loopback (`127.0.0.1:9901`) and is not published to any host port. Parallel Envoy sidecars can coexist without port conflicts.
 
@@ -469,7 +585,7 @@ It is for diagnostics only: readiness, stats, listeners, clusters, config dump, 
 
 **Future:** when allow-list enforcement and WebFetch/WebSearch handling are implemented, revisit whether to publish the admin interface to host loopback for operational use.
 
-### Allow-list
+#### Allow-list
 
 Target-state allow-list is default-deny. Requests are allowed only if the requested authority matches an explicit policy.
 
@@ -492,48 +608,48 @@ Runtime package-registry access:
 - Container/toolchain dependencies are baked into the image and do not require runtime package-manager access.
 - Project code dependencies may require runtime registry access because the repository is cloned by the entrypoint after the container starts.
 - Registry access must be explicit, ecosystem-specific, and lockfile/frozen-mode based. Examples: PyPI domains (`pypi.org`, `files.pythonhosted.org`) and the uv installer domain (`releases.astral.sh`) for Python/uv projects; npm registry domains for Node projects; or equivalent domains for other ecosystems.
-- OS package registries such as Ubuntu/Debian APT mirrors are not allowed in the Claude runtime container.
+- OS package registries such as Ubuntu/Debian APT mirrors are not allowed in the runtime container.
 
 Target-state non-goals for runtime allow-list:
 
-- `ghcr.io` is not required inside the Claude container. The host launcher pulls the image.
+- `ghcr.io` is not required inside the container. The host launcher pulls the image.
 - Arbitrary direct web fetch is not part of the baseline network policy.
 
-### Allow-list implementation
+#### Allow-list implementation
 
 Default-deny is achieved via Envoy RBAC `action: ALLOW` — no explicit wildcard deny rule is needed; a request that matches no policy entry is denied automatically. Policy match basis is `:authority`. For HTTPS `CONNECT`, authority is `host:port` (e.g. `api.github.com:443`); for plain HTTP, authority may be `host` or `host:port` — allow-list entries must account for both forms. The dynamic forward proxy cluster is retained; the RBAC filter restricts it before DNS resolution and upstream connection.
 
-### DNS
+#### DNS
 
-The Claude container does not resolve internet destinations for proxied traffic. It only connects to loopback. Envoy receives the requested authority from the explicit proxy request and resolves allowed destinations from the sidecar container.
+The AI tool container does not resolve internet destinations for proxied traffic. It only connects to loopback. Envoy receives the requested authority from the explicit proxy request and resolves allowed destinations from the sidecar container.
 
 Policy should be applied before DNS resolution and before upstream connection.
 
-### Failure handling
+#### Failure handling
 
 Target-state behavior:
 
-* If Envoy cannot start, the launcher fails before starting the Claude container.
+* If Envoy cannot start, the launcher fails before starting the AI tool container.
 * If the Unix socket does not appear, the launcher fails.
 * If the in-container `socat` bridge cannot start, the entrypoint fails.
 * If a request does not match the allow-list, Envoy denies it.
 * If a process bypasses proxy configuration, it has no network path due to `--network none`.
 
-### Broad web research / Web Fetch
+#### Broad web research / Web Fetch
 
-Direct URL fetching and broad internet research are recognized as a separate capability class. They conflict with a narrow runtime allow-list if executed inside the Claude dev container.
+Direct URL fetching and broad internet research are recognized as a separate capability class. They conflict with a narrow runtime allow-list if executed inside the container.
 
-Target-state baseline: do not open general internet egress from the Claude container for this use case.
+Target-state baseline: do not open general internet egress from the container for this use case.
 
 Future design work: define a separate retrieval plane or tool boundary for user-approved web research/fetch, isolated from the writable project container and credentials.
 
 ---
 
-## Filesystem and process hardening
+### Filesystem and process hardening
 
-### Claude container process privileges
+#### Container process privileges
 
-The Claude container is launched with:
+The AI tool container is launched with:
 
 ```bash
 --cap-drop ALL
@@ -549,17 +665,17 @@ NoNewPrivs:    1
 
 No capability is added back for firewall or network configuration. Network enforcement is outside the container.
 
-### Read-only root filesystem
+#### Read-only root filesystem
 
-The Claude container root filesystem is read-only:
+The AI tool container root filesystem is read-only:
 
 ```bash
 docker run --read-only
 ```
 
-Writable paths are explicit tmpfs mounts. The design assumes a single effective runtime user inside the Claude container. Writable mounts are owned by that runtime UID/GID and are private by default.
+Writable paths are explicit tmpfs mounts. The design assumes a single effective runtime user inside the container. Writable mounts are owned by that runtime UID/GID and are private by default.
 
-### Runtime user configuration
+#### Runtime user configuration
 
 The launcher/project configuration defines:
 
@@ -572,13 +688,13 @@ ADDA_DEV_HOME=/home/adda
 
 The image must run as that user, or the entrypoint should warn that runtime UID/GID do not match the expected configuration.
 
-### Writable tmpfs mounts
+#### Writable tmpfs mounts
 
 Target writable mounts:
 
 | Path                 | Mode   | Exec?             | Purpose                                                                     |
 | -------------------- | ------ | ----------------- | --------------------------------------------------------------------------- |
-| `/home/${ADDA_DEV_USER}` | `0700` | yes               | Claude state, gh config, git config, uv/Python runtime state, shell config. |
+| `/home/${ADDA_DEV_USER}` | `0700` | yes               | AI tool state, gh config, git config, runtime state, shell config. |
 | `/workspace`         | `0700` | yes               | Repository checkout, project writes, test/build output.                     |
 | `/tmp`               | `0700` | no | Temporary files.                                                            |
 | `/var/tmp`           | `0700` | no | Temporary files for tools that use `/var/tmp`.                              |
@@ -597,9 +713,9 @@ ADDA_DEV_WORKSPACE_TMPFS_SIZE=200m
 
 Sizes are limits, not pre-allocated RAM reservations. Linux tmpfs consumes host memory/swap according to actual usage.
 
-### Proxy socket mount
+#### Proxy socket mount
 
-The Envoy Unix socket is bind-mounted into the Claude container as an immediate child of `/run`, for example:
+The Envoy Unix socket is bind-mounted into the container as an immediate child of `/run`, for example:
 
 ```text
 /run/proxy.sock
@@ -607,9 +723,9 @@ The Envoy Unix socket is bind-mounted into the Claude container as an immediate 
 
 This avoids relying on nested parent directories under a tmpfs-mounted `/run`.
 
-The socket file itself is created by Envoy in the launcher runtime directory. Socket permissions must allow the Claude runtime user to connect despite possible UID/GID mismatch between host user, Envoy sidecar process, and Claude container user. The private per-run host runtime directory plus narrow socket bind mount form the main access boundary.
+The socket file itself is created by Envoy in the launcher runtime directory. Socket permissions must allow the container runtime user to connect despite possible UID/GID mismatch between host user, Envoy sidecar process, and container user. The private per-run host runtime directory plus narrow socket bind mount form the main access boundary.
 
-### Expected Docker-managed mounts
+#### Expected Docker-managed mounts
 
 Docker may still provide managed files such as:
 
@@ -621,206 +737,11 @@ These do not by themselves provide network access. They should be treated as exp
 
 ---
 
-## libexec structure
+### Entrypoint (`entrypoint.sh`)
 
-Scripts and executables are installed under `/usr/local/libexec/adda-dev-runtime/` and split into two subdirectories by purpose:
+Container-side script. It validates the runtime contract, starts the local proxy bridge, bootstraps the repository, sources `entrypoint.d/` hooks, runs the Tier 3 init hook if present, and hands off to CMD.
 
-### `bootstrap/` — startup scripts (not agent-invokable)
-
-Contains scripts that run during container startup: `entrypoint.sh`, the `entrypoint.d/` hook directory, and the interactive-shell helper. These scripts are **not** covered by the agent permission wildcard and cannot be invoked by the agent.
-
-### `bin/` — runtime executables (agent-invokable)
-
-Contains Bun executables that the agent calls during a session: `ci-watch`, `quality-gates`, `resolve-issue-branch`. The agent permission entry `Bash(/usr/local/libexec/adda-dev-runtime/bin/*)` covers exactly this directory.
-
-### Source-to-destination mapping
-
-The following table covers Tier 1 and Tier 2 artifacts only — scripts and executables baked into the images. Tier 3 project artifacts (`.adda-init.sh`, project CLAUDE.md, `.quality-gates.conf`, etc.) live in the project repository and are not baked into any image.
-
-The following table shows where each artifact originates in the repo and where it lands in the image:
-
-```
-Source                                                                Destination
-──────────────────────────────────────────────────────────────────────────────────────────────────────
-Tier 1 invariant
-  content/scripts/bootstrap/entrypoint.sh.source               /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh
-
-Tier 1 — adda-dev-runtime
-  src/runtime/<name>.ts                                         /usr/local/libexec/adda-dev-runtime/bin/<name>
-  src/bootstrap/<name>.ts                                       /usr/local/libexec/adda-dev-runtime/bootstrap/<name>
-  src/lib/                                                      (shared; not deployed directly)
-  content/scripts/runtime/<name>.sh.source                     /usr/local/libexec/adda-dev-runtime/bin/<name>.sh
-  content/scripts/bootstrap/<name>.sh.source                   /usr/local/libexec/adda-dev-runtime/bootstrap/<name>.sh
-
-Tier 2 — proto-adda (and any tier built FROM adda-dev-runtime)
-  src/runtime/<name>.ts                                         /usr/local/libexec/adda-dev-runtime/bin/<name>
-  src/bootstrap/<name>.ts                                       /usr/local/libexec/adda-dev-runtime/bootstrap/<name>
-  content/scripts/runtime/<name>.sh.source                     /usr/local/libexec/adda-dev-runtime/bin/<name>.sh
-  content/scripts/bootstrap/<name>.sh.source                   /usr/local/libexec/adda-dev-runtime/bootstrap/<name>.sh
-  content/scripts/bootstrap/entrypoint.d/<h>.sh.source         /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/<h>.sh
-```
-
-### Shared library
-
-`src/lib/` lives at the top level of `src/` (not under `runtime/` or `bootstrap/`) so it is equally importable by both `src/runtime/` and `src/bootstrap/` scripts. It is not deployed directly; it is compiled into the executables during the `bun build` step. The `@adda/lib` tsconfig path alias resolves to `adda-dev-runtime/src/lib`.
-
-### `.sh.source` rename convention
-
-Shell scripts in the repo carry a `.sh.source` extension and have no exec bit. The Dockerfile `RUN` step renames each file (strips `.source`) and sets the exec bit with `chmod`. This applies to all shell scripts baked to `libexec/`, regardless of tier or subdirectory.
-
----
-
-## Repository layout
-
-The harness lives in the project repository.
-
-```text
-.devcontainer/
-  adda-dev-runtime/
-    Dockerfile                       # Claude dev image definition
-    entrypoint.sh                    # in-container bootstrap/orchestration
-    .claude.json.template            # Claude Code configuration template 
-  envoy/
-    envoy.yaml.template              # Envoy sidecar forward-proxy config template
-  image.digest                       # pinned digest of published dev image, target-state
-
-.claude/
-  ...                                # Claude Code project configuration
-
-scripts/
-  adda-dev.sh                      # host-side launcher
-  adda-dev.env                     # host side launcher configuration (per-project)
-  adda-dev.tmux.conf               # seed tmux config, copied only if ~/.tmux.conf is absent
-
-.github/workflows/
-  devenv.yml                         # target-state image build/publish workflow
-```
-
-Harness changes follow the project's regular SDLC as `chore` Issues.
-
----
-
-## Image build and distribution
-
-### Target state
-
-The dev image is built by CI and hosted on GHCR:
-
-```text
-ghcr.io/{owner}/{repo}-devenv
-```
-
-The launcher does not rely on floating tags. It pulls the digest stored in `.devcontainer/image.digest`.
-
-Target tags:
-
-| Tag              | Updated when                          | Purpose                            |
-| ---------------- | ------------------------------------- | ---------------------------------- |
-| `latest`         | Push to `main` touching harness paths | Most recent stable build.          |
-| `sha-{shortsha}` | Every build                           | Immutable commit-linked reference. |
-| `weekly-{date}`  | Scheduled weekly                      | Security refresh rebuild.          |
-| `pr-{n}`         | PRs touching harness paths            | Verification only.                 |
-
-### Runtime image identification
-
-Two environment variables carry image identity into every running container:
-
-| Variable | Example value | Set by | When empty |
-|---|---|---|---|
-| `ADDA_DEV_RUNTIME_IMAGE` | `ghcr.io/nightjarrr/proto-adda-dev-runtime:edge` | Launcher at run time (`-e` flag) | Not injected (e.g., container started without the launcher) |
-| `ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA` | `a1b2c3d4e5f6...` | CI at build time (`--build-arg`) | Local builds |
-
-Both variables are displayed during entrypoint bootstrap and remain available for the full session lifetime. Their display is informational only — no validation failure occurs when either is absent.
-
-`ADDA_DEV_RUNTIME_IMAGE` is not baked into the image because the same image layer can be tagged and referenced under different names. The launcher already holds `ADDA_DEV_IMAGE` (the image reference it is about to start) and injects it at run time. `ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA` is baked at build time because only CI has the commit SHA at the moment the image is built.
-
----
-
-## Launcher script (`adda-dev.sh`)
-
-Host-side script. Its job is to create one ephemeral Claude dev runtime.
-
-Invocation:
-
-```bash
-adda-dev.sh
-adda-dev.sh <issue-id>
-adda-dev.sh -- <cmd> [args...]
-adda-dev.sh <issue-id> -- <cmd> [args...]
-```
-
-### Per-project configuration
-
-The launcher reads `scripts/adda-dev.env`.
-
-Required target variables:
-
-```bash
-#Github repo
-GITHUB_OWNER=
-GITHUB_REPO=
-
-# ADDA Dev Runtime container image configuration
-ADDA_DEV_IMAGE=
-ADDA_DEV_USER=adda
-ADDA_DEV_UID=1000
-ADDA_DEV_GID=1000
-ADDA_DEV_HOME_TMPFS_SIZE=500m
-ADDA_DEV_WORKSPACE_TMPFS_SIZE=200m
-# Needs to be a file directly in /run to support the /run tmpfs
-ADDA_DEV_PROXY_SOCKET_CONTAINER_PATH=/run/proxy.sock
-ADDA_DEV_PROXY_PORT=8080
- 
-# Envoy perimeter sidecar configuration
-ENVOY_IMAGE=envoyproxy/envoy:v1.33.14
-ENVOY_SOCKET_CONTAINER_PATH=/run/adda-dev-proxy/proxy.sock
-```
-
-### Behavior
-
-1. Validate arguments.
-2. Verify host prerequisites: `docker`, `secret-tool`, `tmux`, `openssl`.
-3. Source `adda-dev.env` and validate required variables.
-4. Seed `~/.tmux.conf` from `scripts/adda-dev.tmux.conf` only if missing; source it best-effort.
-5. If not already inside tmux, generate a session name, export it, and re-enter the launcher inside a named tmux session.
-6. Retrieve auth tokens from Secret Service keyring.
-7. Detect host timezone.
-8. Create a private per-run runtime directory under `${XDG_RUNTIME_DIR:-/tmp}`.
-9. Render Envoy config from `.devcontainer/envoy/envoy.yaml.template` into the runtime directory.
-10. Start Envoy sidecar container with hardened flags.
-11. Wait for the Envoy Unix socket.
-12. Create `adda-dev shell` and `adda-dev envoy logs` windows in the primary tmux session. The `adda-dev shell` window invokes a container-side script that waits for bootstrap to finish before opening the interactive bash prompt.
-13. Assemble and run the Claude dev container with:
-
-    * `--rm -it`
-    * `--network none`
-    * `--cap-drop ALL`
-    * `--security-opt no-new-privileges`
-    * `--read-only`
-    * explicit tmpfs mounts
-    * Envoy socket bind mount
-    * required environment variables
-14. On exit, stop Envoy and remove the runtime directory.
-
-### Envoy sidecar hardening
-
-Envoy sidecar is outside the Claude trust boundary but should still be minimized:
-
-* exact image version and digest in target state;
-* `--rm -d`;
-* `--cap-drop ALL`;
-* `--security-opt no-new-privileges`;
-* read-only root where compatible;
-* tmpfs for `/tmp`;
-* admin interface not published to host; accessible via `docker exec` only.
-
----
-
-## Entrypoint script (`entrypoint.sh`)
-
-Container-side script. It validates the runtime contract, starts the local proxy bridge, bootstraps the repository, and hands off to Claude Code or command override.
-
-### Behavior
+#### Behavior
 
 1. Print welcome banner.
 
@@ -862,69 +783,173 @@ Container-side script. It validates the runtime contract, starts the local proxy
     * issue has one linked branch: check it out;
     * issue has multiple linked branches: fail and ask Project Owner to resolve ambiguity.
 
-13. Initialize Claude Code configuration in `$HOME`.
+13. Source `entrypoint.d/` hooks — run each `.sh` file in `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/` in lexicographic order. Hooks are sourced (not subprocess) so they may export variables into the bootstrap environment. An absent or empty `entrypoint.d/` directory is not an error. This is where Tier 2 performs AI tool configuration and session initialization.
 
-14. Run repo-level init hook: source `/workspace/.adda-init.sh` if it exists (see *Repo-level init hook* section). Non-existence is not an error.
+14. Run Tier 3 init hook: execute `/workspace/.adda-init.sh` as a subprocess if it exists. Non-existence is not an error. See *Tier 3 — project* for the full init hook contract.
 
 15. Write `~/.bashrc` with `PS1` and the propagated environment variables (`HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy`, `https_proxy`, `NO_PROXY`, `no_proxy`, `GH_REPO`). Touch the bootstrap-complete marker at `/run/.adda_bootstrap_complete`. The marker is also touched by the EXIT trap installed in step 5 so it is created even when bootstrap fails, allowing the parallel interactive shell to open for live autopsy.
 
 16. Print session summary.
 
-17. Run Docker image's CMD, `claude` by default.
+17. Exec Docker image's CMD. Tier 1 defaults CMD to `/bin/bash`; Tier 2 images override CMD to their AI tool executable.
 
 18. If CMD exits, drop to an interactive shell for inspection.
 
 19. On final shell exit, print git status and unpushed commit trail.
 
-### Branch resolution
+#### Branch resolution
 
 Branch lookup uses GitHub's first-class Issue branch linkage, not a naming convention. Implementation may use GitHub GraphQL to query linked branches.
 
 The branch naming convention remains documentation. The entrypoint stays convention-agnostic.
 
-### Repo-level init hook
+---
 
-See *Repo-level init hook* section for the full hook contract.
+### libexec structure
 
-### Base/project split
+Scripts and executables are installed under `/usr/local/libexec/adda-dev-runtime/` and split into two subdirectories by purpose:
 
-Long-term structure should separate:
+#### `bootstrap/` — startup scripts (not agent-invokable)
 
-* base Claude dev runtime behavior;
-* project-specific bootstrap steps.
+Contains scripts that run during container startup: `entrypoint.sh`, the `entrypoint.d/` hook directory, and the interactive-shell helper. These scripts are **not** covered by the agent permission wildcard and cannot be invoked by the agent.
 
-The base image should own validation, hardening diagnostics, proxy bridge, GitHub auth, clone, branch resolution, Claude config, and handoff. The project layer should own dependency installation and project-specific checks.
+#### `bin/` — runtime executables (agent-invokable)
+
+Contains executables the agent calls during a session. The agent permission entry `Bash(/usr/local/libexec/adda-dev-runtime/bin/*)` covers exactly this directory.
+
+#### Source-to-destination mapping
+
+Scripts and executables baked to `libexec/` follow this source convention across all tiers:
+
+```
+Source                                                                Destination
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+Tier 1 invariant
+  content/scripts/bootstrap/entrypoint.sh.source               /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh
+
+Tier 1 — adda-dev-runtime
+  src/runtime/<name>.ts                                         /usr/local/libexec/adda-dev-runtime/bin/<name>
+  src/bootstrap/<name>.ts                                       /usr/local/libexec/adda-dev-runtime/bootstrap/<name>
+  src/lib/                                                      (shared; not deployed directly)
+  content/scripts/runtime/<name>.sh.source                     /usr/local/libexec/adda-dev-runtime/bin/<name>.sh
+  content/scripts/bootstrap/<name>.sh.source                   /usr/local/libexec/adda-dev-runtime/bootstrap/<name>.sh
+
+Tier 2 (any implementation built FROM adda-dev-runtime)
+  src/runtime/<name>.ts                                         /usr/local/libexec/adda-dev-runtime/bin/<name>
+  src/bootstrap/<name>.ts                                       /usr/local/libexec/adda-dev-runtime/bootstrap/<name>
+  content/scripts/runtime/<name>.sh.source                     /usr/local/libexec/adda-dev-runtime/bin/<name>.sh
+  content/scripts/bootstrap/<name>.sh.source                   /usr/local/libexec/adda-dev-runtime/bootstrap/<name>.sh
+  content/scripts/bootstrap/entrypoint.d/<h>.sh.source         /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/<h>.sh
+```
+
+Tier 3 project artifacts (`.adda-init.sh`, project CLAUDE.md, `.quality-gates.conf`, etc.) live in the project repository and are not baked into any image.
+
+#### Shared library
+
+`src/lib/` lives at the top level of `src/` (not under `runtime/` or `bootstrap/`) so it is equally importable by both `src/runtime/` and `src/bootstrap/` scripts. It is not deployed directly; it is compiled into the executables during the `bun build` step. The `@adda/lib` tsconfig path alias resolves to `adda-dev-runtime/src/lib`.
+
+#### `.sh.source` rename convention
+
+Shell scripts in the repo carry a `.sh.source` extension and have no exec bit. The Dockerfile `RUN` step renames each file (strips `.source`) and sets the exec bit with `chmod`. This applies to all shell scripts baked to `libexec/`, regardless of tier or subdirectory.
 
 ---
 
-## Repo-level init hook
+## Tier 2 — SDLC implementation
+
+### Primary responsibility
+
+Tier 2's primary responsibility is to implement the ADDA SDLC (see [adda-sdlc.md](https://github.com/nightjarrr/molim/blob/main/docs/adda-sdlc.md)) for a specific AI tool. The SDLC design — roles, phases, permissions, skills, and workflow — is defined in that document. Tier 2 translates it into a concrete, runnable implementation for its target platform.
+
+### Infrastructure contract
+
+From Tier 1's perspective, any Tier 2 image must satisfy the following:
+
+**Image:** must build `FROM` a Tier 1 image. Must not weaken Tier 1's security model — no capability additions, no network bypass, no privilege escalation.
+
+**Bootstrap hook:** must deliver one or more `entrypoint.d/` hooks to `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/`. Hooks are sourced by the Tier 1 entrypoint after core bootstrap completes (GitHub auth, clone, and branch resolution are done). Hooks are sourced — not subprocess — so they share the entrypoint's shell environment and may export variables downstream.
+
+**CMD:** must override Tier 1's default CMD (`/bin/bash`) to the AI tool executable.
+
+### entrypoint.d hook requirements
+
+A Tier 2 `entrypoint.d/` hook must:
+
+- Use Tier 1 helper functions (`require_env`, `require_tool`, `section`, `success`, `die`) for consistent output and failure handling.
+- Validate AI-tool-specific environment variables using `require_env`.
+- Validate that the AI tool binary is present using `require_tool`.
+- Initialise the AI tool configuration in `$HOME` so that the AI tool is ready when CMD runs.
+
+Hooks are named with a numeric prefix for explicit ordering (e.g. `10-<name>.sh`). Multiple hooks are sourced in lexicographic order.
+
+### Runtime executables
+
+A Tier 2 implementation may add Bun executables to `/usr/local/libexec/adda-dev-runtime/bin/` and shell scripts to `bootstrap/`, following the same `.sh.source` and `bun build` conventions as Tier 1. See [libexec structure](#libexec-structure) in the Tier 1 section for the source-to-destination pattern.
+
+### CMD convention
+
+Tier 1 defaults CMD to `/bin/bash`. Tier 2 overrides CMD to its AI tool executable. The Tier 1 entrypoint execs CMD after bootstrap completes; if CMD exits, the entrypoint drops to an interactive bash shell for inspection.
+
+---
+
+## Tier 3 — project
+
+### Repository layout
+
+A Tier 3 project is a standard GitHub repository. The following structure shows the ADDA-specific elements alongside the project's own source tree:
+
+```text
+project-repo/
+├── CLAUDE.md                    # Project-specific agent orientation
+├── .adda-init.sh                # Optional: project initialization hook
+├── .quality-gates.conf          # Quality gate commands (Coder-invokable)
+├── adda-dev.env                 # Launcher configuration (Tier 2 image reference, repo identity)
+├── CHANGELOG.md                 # Running changelog with UPCOMING section
+├── docs/
+│   ├── architecture.md          # Persistent project architecture reference (AA/PM)
+│   ├── conventions.md           # Coding conventions reference (AA/Coder)
+│   └── {issue-id}-{slug}/       # Per-feature SDLC artifacts (created during development)
+│       ├── spec.md
+│       ├── tech-design.md
+│       └── impl-plan.md
+└── (project source tree)
+```
+
+Optional, when the project needs OS-level tooling not provided by Tier 1:
+
+```text
+├── Dockerfile                   # FROM <tier2-image>, adds project toolchain
+```
+
+The project CLAUDE.md provides the agent with project-specific orientation — architecture, conventions, toolchain, repo layout. It contains no SDLC methodology; that is inherited from the Tier 2 image.
+
+### Init hook (`.adda-init.sh`)
 
 `/workspace/.adda-init.sh`, if present in the repository root, is a repo-level lifecycle hook invoked as a subprocess by the runtime.
 
-### Discovery
+#### Discovery
 
 The runtime discovers exactly `/workspace/.adda-init.sh`. No other hook file paths are recognized.
 
-### Invocation contexts
+#### Invocation contexts
 
 1. **Entrypoint at bootstrap** — run as a subprocess after all `entrypoint.d` hooks and before CMD handoff; output is streamed to the terminal.
 2. **`current-issue switch` mid-session** — run as a subprocess after the branch checkout and state write; output is captured in the success envelope under `details.hook`.
 
-### Environment
+#### Environment
 
-The hook inherits environment variables from the caller — GitHub auth, proxy settings, `BUN_VERSION`, and any variables set by `entrypoint.d` hooks. Shell functions and sourced helpers from the caller are **not** available across the subprocess boundary.
+The hook inherits environment variables from the caller — GitHub auth, proxy settings, `BUN_VERSION`, and any variables exported by `entrypoint.d` hooks. Shell functions and sourced helpers from the caller are **not** available across the subprocess boundary.
 
-### Permitted use
+#### Permitted use
 
 - Install or update project dependencies (`bun install`, `uv sync`, etc.).
 - Write files in `/workspace`.
 - Exit non-zero to fail the calling operation.
 
-### Prohibited — modifying the runtime shell environment
+#### Prohibited — modifying the runtime shell environment
 
 `export` statements, PATH modifications, and shell option changes (`set -o` / `set +o`) are structurally ineffective across a subprocess boundary and are explicitly out of scope. Examples: `export PATH=...`, `export MY_VAR=...`. Such statements execute inside the hook's subprocess and have no effect on the caller's environment.
 
-### Standalone safety
+#### Standalone safety
 
 The hook must:
 
@@ -932,50 +957,71 @@ The hook must:
 - Use absolute paths — the working directory is not guaranteed.
 - Not rely on shell helper functions from the caller.
 
-### Tool invocation in the hook
+#### Tool invocation in the hook
 
 Install project tools as dependencies and invoke them via their ecosystem runner — for example, `bun run <tool>` for Node/Bun projects, `uv run <tool>` for Python/uv projects. Do not rely on the session PATH for tool invocation.
 
-### Failure semantics
+#### Failure semantics
 
 A non-zero exit from the hook fails the calling operation. An absent hook is not an error.
 
+### Optional Dockerfile
+
+A Tier 3 project adds a Dockerfile only when its language runtime is absent from Tier 1. The Dockerfile builds `FROM` the Tier 2 image in use and adds the required OS-level tooling.
+
+Tier 1 ships Bun — TypeScript/Bun projects require no Dockerfile. Any other language runtime (Python/uv, Go, Java, etc.) requires either a Tier 3 Dockerfile (clean, reproducible, fast startup) or bootstrapping via the init hook (acceptable for lightweight package installs; fragile for full language runtimes that must themselves be installed).
+
 ---
 
-## Terminal emulator and tmux
+## Image build and distribution
 
-### Ghostty
+### Shared conventions
 
-Ghostty is the preferred terminal emulator. Increase host terminal scrollback if desired:
+These conventions apply to any image in the tier stack that has a Dockerfile.
 
-```text
-scrollback-limit = 100000000
-```
+**Version pinning:** all tool versions are pinned via `ENV` variables in the Dockerfile. A version comment block at the top of each Dockerfile is the visible source of truth; bumps go through an explicit chore Issue.
 
-### tmux
+**Base image pinning:** `FROM` lines are pinned to specific point releases, not rolling tags (e.g. `debian:12.11-slim`, not `debian:bookworm-slim`). The version comment block tracks the pin date.
 
-The launcher uses tmux for survivability. It may seed user tmux config from `scripts/adda-dev.tmux.conf` only when `~/.tmux.conf` is absent. Existing user tmux config is never overwritten.
+**apt packages:** package versions are *not* pinned to specific apt version strings. Debian stable's release policy (security and critical bug-fix updates only within a minor release) is the structural pin. Pinning individual apt version strings would be brittle without improving reproducibility. Hadolint DL3008 is suppressed inline with a rationale comment.
 
-Recommended seed behavior:
+**Dockerfile quality:** hadolint runs in CI on every Dockerfile change.
 
-* large scrollback;
-* mouse mode enabled;
-* slower mouse-wheel scrolling in copy mode;
-* short escape-time for responsive TUIs;
-* focus events enabled;
-* true-color terminal features;
-* clipboard/passthrough/title mutation disabled for safety;
-* no `remain-on-exit failed` default, because dead-pane UX is poor.
+**TypeScript compilation:** Bun executables are compiled in a multi-stage build. A `bun-builder` stage compiles `.ts` source files to extensionless executables; the runtime stage copies only the compiled output and pruned `node_modules`.
 
-With tmux mouse mode enabled, normal terminal selection may require Shift-drag depending on terminal emulator.
+**GHCR distribution:** production images are published to GHCR. Each build is tagged with its commit SHA for immutable reference.
 
-Common tmux actions:
+**Runtime image identification:** two environment variables carry image identity into every running container:
 
-```text
-Ctrl-b d     detach from session
-Ctrl-b [     enter copy mode
-Ctrl-b x     kill pane
-```
+| Variable | Set by | When empty |
+|---|---|---|
+| `ADDA_DEV_RUNTIME_IMAGE` | Launcher at run time (`-e` flag) | Not injected (container started without the launcher) |
+| `ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA` | CI at build time (`--build-arg`) | Local builds |
+
+Both are displayed during bootstrap and remain available for the session lifetime. Neither is required; absence is not an error. `ADDA_DEV_RUNTIME_IMAGE` is not baked into the image because the same layer can be referenced under multiple tags; `ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA` is baked because only CI holds the commit SHA at build time.
+
+### Tier 1 image
+
+Built from `adda-dev-runtime/Dockerfile`. Published as `ghcr.io/{owner}/adda-dev-runtime`.
+
+Standard tags:
+
+| Tag | Updated when | Purpose |
+| --- | --- | --- |
+| `edge` | Push to `main` | Most recent stable build, SHA-stamped |
+| `sha-{shortsha}` | Every build | Immutable commit-linked reference |
+| `weekly-{date}` | Scheduled weekly | Security refresh rebuild |
+| `pr-{n}` | PRs touching image paths | Verification only |
+
+### Tier 2 image
+
+Built `FROM` a Tier 1 image. The `BASE_TAG` build argument pins the exact Tier 1 image used. Published under its own name (e.g. `ghcr.io/{owner}/proto-adda-dev-runtime`). Each Tier 2 implementation publishes independently using the same tag conventions as Tier 1.
+
+See `docs/proto-adda.md` for proto-adda image specifics.
+
+### Tier 3 image
+
+Optional. Present only when the project needs OS-level tooling not in Tier 1. Built `FROM` the Tier 2 image. Published per the project's own CI if needed; not published to this repository's GHCR namespace.
 
 ---
 
@@ -987,27 +1033,27 @@ The workflow is terminal-first. IDE integration and host-container IPC sockets a
 
 ### No in-container firewall
 
-Network isolation is not enforced by iptables inside the Claude container. The Claude container runs with `--network none`; Envoy sidecar enforces allowed destinations.
+Network isolation is not enforced by iptables inside the AI tool container. The container runs with `--network none`; the Envoy sidecar enforces allowed destinations.
 
-### No `NET_ADMIN` capability in Claude container
+### No `NET_ADMIN` capability in the AI tool container
 
-The Claude container gets `--cap-drop ALL` and no capability add-back for firewall manipulation.
+The container gets `--cap-drop ALL` and no capability add-back for firewall manipulation.
 
 ### No host-wide daemon proxy
 
-The proxy is per-session runtime infrastructure. It starts with the Claude session and stops when the Claude session exits.
+The proxy is per-session runtime infrastructure. It starts with the AI tool session and stops when the session exits.
 
-### No Envoy inside the Claude container
+### No Envoy inside the AI tool container
 
-Envoy is a separate sidecar container. Running it inside the Claude container would collapse the security boundary.
+Envoy is a separate sidecar container. Running it inside the AI tool container would collapse the security boundary.
 
 ### No external off-host proxy requirement
 
-The perimeter proxy runs on the same host as the Claude container. The design does not require a corporate or remote proxy service.
+The perimeter proxy runs on the same host as the AI tool container. The design does not require a corporate or remote proxy service.
 
-### No general web-fetch egress from the Claude container
+### No general web-fetch egress from the AI tool container
 
-Broad web fetch/research is deferred to a separate design. The baseline dev container remains narrowly networked.
+Broad web fetch/research is deferred to a separate design. The baseline container remains narrowly networked.
 
 ### No host home directory mount
 
@@ -1017,9 +1063,9 @@ The container has no view of host configuration files, SSH keys, browser profile
 
 GitHub access is via HTTPS using a fine-grained GitHub Token scoped to the project repository.
 
-### No persistent `~/.claude` volume
+### No persistent AI tool config volume
 
-Claude state is ephemeral. Credentials are injected at startup and not preserved as a host-mounted Claude directory.
+AI tool state is ephemeral. Credentials are injected at startup and not preserved as a host-mounted config directory.
 
 ### No Docker socket inside the container
 
@@ -1035,7 +1081,7 @@ The container exits with `--rm`; uncommitted work is lost. The SDLC's commit-and
 
 ### No multi-container per-subagent isolation
 
-Claude Code subagents share one container per feature. Per-role separation is enforced by Claude Code permissions, not container boundaries.
+AI tool subagents share one container per feature. Per-role separation is enforced by AI tool permissions, not container boundaries.
 
 ### No host-side `gh` or `git` dependency
 
@@ -1045,11 +1091,11 @@ GitHub-aware operations happen inside the container.
 
 All external dependencies are pinned. Floating versions let upstream changes enter the environment without review — this policy eliminates that risk. Pinning operates at three layers:
 
-1. **Application and tool versions** — exact versions are pinned in the Dockerfile via `ENV` variables and hard-coded curl download URLs (GitHub CLI, Micro, Delta, Bun, Claude Code). The version comment block at the top of `adda-dev-runtime/Dockerfile` is the single visible source of truth; bumps go through an explicit chore Issue.
+1. **Application and tool versions** — exact versions are pinned in the Dockerfile via `ENV` variables and hard-coded curl download URLs. The version comment block at the top of each Dockerfile is the single visible source of truth; bumps go through an explicit chore Issue.
 
-2. **Base image** — the Tier 1 `FROM` line is pinned to the current Debian 12 point release (`debian:12.11-slim`) rather than the rolling `debian:bookworm-slim` tag. The version comment block tracks the pin date; bumping requires an explicit chore Issue.
+2. **Base image** — `FROM` lines are pinned to specific point releases rather than rolling tags. The version comment block tracks the pin date; bumping requires an explicit chore Issue.
 
-3. **apt-installed packages** — package versions are *not* pinned to specific apt version strings. Debian stable's release policy is itself the structural pin: packages in `stable` only receive security and critical bug-fix updates within a minor release cycle, making the distribution the effective version anchor. Pinning individual apt package versions would be brittle (version strings differ between architectures and snapshot dates) without meaningfully improving reproducibility. Hadolint DL3008 is suppressed inline with a rationale comment for this reason.
+3. **apt-installed packages** — package versions are *not* pinned to specific apt version strings. See shared image build conventions above.
 
 ---
 
@@ -1057,7 +1103,7 @@ All external dependencies are pinned. Floating versions let upstream changes ent
 
 The following are recognized but not part of the immediate baseline implementation:
 
-1. **Broad web retrieval plane** — define how user-approved direct URL fetch and research should work without opening general egress from the Claude dev container.
+1. **Broad web retrieval plane** — define how user-approved direct URL fetch and research should work without opening general egress from the container.
 2. **Live allow-list management** — explore whether Envoy policy should be reloadable without sidecar restart, and whether a UI/control plane is justified.
 3. **Credential hiding behind proxy/gateway** — investigate whether future API-specific gateways can inject auth headers so selected tools do not receive raw tokens.
 4. **Image provenance hardening** — GHCR publishing is implemented; remaining work: digest pinning, SLSA provenance attestation, and scheduled weekly rebuild workflow.
