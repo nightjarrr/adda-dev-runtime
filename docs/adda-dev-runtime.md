@@ -1,12 +1,68 @@
 # Claude Code development environment
 
-This document specifies the target design of an isolated, ephemeral, hardened container environment for running **Claude Code** against a GitHub-hosted project repository. It covers the image, the network perimeter, the container lifecycle, and the host-side and container-side scripts that bootstrap the environment.
+This document specifies the target design of an isolated, ephemeral, hardened container environment for running **Claude Code** against a GitHub-hosted project repository. It covers the tier architecture, the image, the network perimeter, the container lifecycle, and the host-side and container-side scripts that bootstrap the environment.
 
-Companion to [`adda-sdlc.md`](adda-sdlc.md).
+Companion to [adda-sdlc.md](https://github.com/nightjarrr/molim/blob/main/docs/adda-sdlc.md) — the vendor-agnostic conceptual design of the ADDA SDLC that this runtime implements.
 
 **Audience: human Project Owner only.** Read at setup time and when modifying the environment. Not part of any agent's runtime context.
 
 Throughout, `{owner}` and `{repo}` refer to the GitHub namespace and repository name of the project.
+
+---
+
+## Tier architecture
+
+ADDA development is organised into three tiers. Each tier has a distinct concern and a distinct form.
+
+### Tier 1 — infrastructure
+
+**What it is:** the hardened, isolated, ephemeral container that ADDA-based development runs inside. Provides base OS packages, `git`, `gh`, `curl`, `jq`, `rg`, `fdfind`, Bun, a runtime user, and the entrypoint with its `entrypoint.d/` hook mechanism.
+
+**Why it exists as an image:** Tier 1 is pure infrastructure. Packaging it as a Docker image gives every higher tier and every project a reproducible, version-pinned base with no host-side toolchain requirements.
+
+**What it does not include:** any AI tool, any AI tool configuration, or any project-specific tooling. Tier 1 is AI-tool-agnostic by design.
+
+**Bun as the Tier 1 scripting runtime:** Bun is included in Tier 1 as the shared scripting runtime for ADDA infrastructure scripts — the criterion for inclusion was that placing a runtime in Tier 1 makes it available to all higher tiers without additional setup. This is a deliberate architectural choice, not a project-specific convenience. It has the side effect that TypeScript/Bun Tier 3 projects require no additional tooling layer; all other language runtimes must be added at Tier 2 or Tier 3.
+
+**Image:** `ghcr.io/nightjarrr/adda-dev-runtime`
+
+### Tier 2 — ADDA SDLC implementation
+
+**What it is:** a runnable image that packages a specific AI tool together with a complete implementation of the ADDA SDLC for that tool. Builds `FROM` Tier 1 and adds the AI tool binary, the SDLC methodology (CLAUDE.md deployed to `~/.claude/`, skills, settings, agent definitions), and a bootstrap hook that initialises the agent's working environment at container start.
+
+**Why it exists as an image:** the SDLC methodology and its AI tool must be distributed together as a versioned, reproducible unit. An image is the correct packaging for a self-contained, runnable system.
+
+**Multiple Tier 2 implementations:** Tier 2 is not a single image — it is a role. Multiple Tier 2 implementations can coexist as siblings, each pairing a different AI tool or a different SDLC implementation with the same Tier 1 base:
+- **proto-adda** — current implementation; Claude Code with a simplified SDLC. "Proto" reflects that it is a prototype: it covers the core workflow but does not implement all ADDA roles (Associate Architect is collapsed into PM).
+- **dawe** — planned future implementation; a full ADDA SDLC implementation (including a distinct Associate Architect subagent).
+
+The Tier 2 CLAUDE.md (deployed to `~/.claude/CLAUDE.md` at container start) contains the SDLC workflow, roles, working principles, and release process. It contains no project-specific content.
+
+**Image (proto-adda):** `ghcr.io/nightjarrr/proto-adda-dev-runtime`
+
+### Tier 3 — the project
+
+**What it is:** the GitHub repository of the actual software being developed. Tier 3 is not an image and not infrastructure — it is the project that uses a Tier 2 runtime to develop itself.
+
+**Form:** a GitHub repository. The Tier 2 launcher clones it into `/workspace` at container start. The project's `/workspace/CLAUDE.md` provides the agent with project-specific orientation (architecture, conventions, toolchain). The SDLC methodology is not in the project CLAUDE.md — it is inherited from the Tier 2 image.
+
+**Optional infrastructure elements** — a Tier 3 project may carry infrastructure only when strictly necessary:
+
+- **`.adda-init.sh`** — a repo-level init hook run as a subprocess after bootstrap. Used to install project dependencies (`bun install`, `uv sync`, etc.). Appropriate when project dependencies must be installed at runtime rather than baked into an image. Cannot modify the calling shell's environment (subprocess boundary).
+
+- **`FROM Tier2` Dockerfile** — a project-specific image that extends a Tier 2 image with additional OS-level tooling. Appropriate when the project's language runtime is not provided by Tier 1 (e.g. Python, Go, Java). For TypeScript/Bun projects, Bun is already in Tier 1 and no Dockerfile is needed.
+
+The choice between init hook and Dockerfile turns on the project's toolchain: if the language runtime is in Tier 1, an init hook that installs packages suffices; if the runtime itself must be added, a Dockerfile is the clean solution (bootstrapping a full language runtime via `curl` in an init hook is fragile).
+
+### Tier summary
+
+| | Tier 1 | Tier 2 | Tier 3 |
+|---|---|---|---|
+| **Concern** | Infrastructure | ADDA SDLC implementation | The project being developed |
+| **Form** | Docker image | Docker image (`FROM` Tier 1) | GitHub repository |
+| **Examples** | `adda-dev-runtime` | `proto-adda`, `dawe` (planned) | any project using ADDA |
+| **CLAUDE.md** | — | `~/.claude/CLAUDE.md` — SDLC methodology | `/workspace/CLAUDE.md` — project context |
+| **Multiplicity** | One | One per AI tool / SDLC variant | One per project |
 
 ---
 
@@ -579,6 +635,8 @@ Contains Bun executables that the agent calls during a session: `ci-watch`, `qua
 
 ### Source-to-destination mapping
 
+The following table covers Tier 1 and Tier 2 artifacts only — scripts and executables baked into the images. Tier 3 project artifacts (`.adda-init.sh`, project CLAUDE.md, `.quality-gates.conf`, etc.) live in the project repository and are not baked into any image.
+
 The following table shows where each artifact originates in the repo and where it lands in the image:
 
 ```
@@ -874,7 +932,7 @@ The hook must:
 - Use absolute paths — the working directory is not guaranteed.
 - Not rely on shell helper functions from the caller.
 
-### Tier 3 guidance
+### Tool invocation in the hook
 
 Install project tools as dependencies and invoke them via their ecosystem runner — for example, `bun run <tool>` for Node/Bun projects, `uv run <tool>` for Python/uv projects. Do not rely on the session PATH for tool invocation.
 

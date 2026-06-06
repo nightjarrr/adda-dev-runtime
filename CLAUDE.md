@@ -67,7 +67,7 @@ When adding a new script, use these four axes to determine where it goes:
 1. **Tier**: Tier 1 (`adda-dev-runtime/`) if generic and AI-tool-agnostic, or if
    the script modifies the bootstrap/entrypoint process itself (rather than
    extending it via a hook or other extensibility point); Tier 2 (`proto-adda/`)
-   if harness- or project-specific.
+   if harness-specific.
 
 2. **bootstrap vs bin vs build**: `bootstrap/` if the script runs during container startup
    (entrypoint, hook, interactive-shell helper) and must **not** be agent-invokable;
