@@ -817,23 +817,6 @@ Contains scripts that run during container startup: `entrypoint.sh`, the `entryp
 
 Contains executables the agent may invoke during a session.
 
-#### Source-to-destination mapping
-
-Scripts and executables baked to `libexec/` follow this source convention across all tiers:
-
-```
-Source                                                                Destination
-──────────────────────────────────────────────────────────────────────────────────────────────────────
-Tier 1 invariant
-  content/scripts/bootstrap/entrypoint.sh.source               /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh
-
-Tier 1 — adda-dev-runtime
-  src/runtime/<name>.ts                                         /usr/local/libexec/adda-dev-runtime/bin/<name>
-  src/bootstrap/<name>.ts                                       /usr/local/libexec/adda-dev-runtime/bootstrap/<name>
-  content/scripts/runtime/<name>.sh.source                     /usr/local/libexec/adda-dev-runtime/bin/<name>.sh
-  content/scripts/bootstrap/<name>.sh.source                   /usr/local/libexec/adda-dev-runtime/bootstrap/<name>.sh
-```
-
 ---
 
 ## Tier 2 — ADDA SDLC implementation
@@ -863,20 +846,9 @@ A Tier 2 `entrypoint.d/` hook should:
 
 Hooks are named with a numeric prefix for explicit ordering (e.g. `10-<name>.sh`). Multiple hooks are sourced in lexicographic order.
 
-### Runtime executables and source layout
+### Runtime executables
 
-A Tier 2 implementation may add Bun executables to `/usr/local/libexec/adda-dev-runtime/bin/` and shell scripts to `bootstrap/`, following the same source conventions as Tier 1:
-
-```
-Source                                                                Destination
-──────────────────────────────────────────────────────────────────────────────────────────────────────
-Tier 2 (any implementation built FROM adda-dev-runtime)
-  src/runtime/<name>.ts                                         /usr/local/libexec/adda-dev-runtime/bin/<name>
-  src/bootstrap/<name>.ts                                       /usr/local/libexec/adda-dev-runtime/bootstrap/<name>
-  content/scripts/runtime/<name>.sh.source                     /usr/local/libexec/adda-dev-runtime/bin/<name>.sh
-  content/scripts/bootstrap/<name>.sh.source                   /usr/local/libexec/adda-dev-runtime/bootstrap/<name>.sh
-  content/scripts/bootstrap/entrypoint.d/<h>.sh.source         /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/<h>.sh
-```
+A Tier 2 implementation may add Bun executables to `/usr/local/libexec/adda-dev-runtime/bin/` and shell scripts to `/usr/local/libexec/adda-dev-runtime/bootstrap/`. Source placement conventions and the build mapping are in `CLAUDE.md`.
 
 ### CMD convention
 

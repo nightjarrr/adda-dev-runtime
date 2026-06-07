@@ -97,6 +97,27 @@ Correct invocations:
 Edit repo source only — never runtime copies. Changes affect future image builds,
 not the running container.
 
+Source paths map to image destinations by a consistent convention. `{tier}` is
+`adda-dev-runtime` for Tier 1 and the Tier 2 repo directory (e.g. `proto-adda`)
+for Tier 2. `<libexec>` expands to `/usr/local/libexec/adda-dev-runtime`:
+
+```
+Source                                                            Destination
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+{tier}/content/scripts/bootstrap/entrypoint.sh.source           <libexec>/bootstrap/entrypoint.sh  (Tier 1 only)
+{tier}/src/runtime/<name>.ts                                     <libexec>/bin/<name>
+{tier}/src/bootstrap/<name>.ts                                   <libexec>/bootstrap/<name>
+{tier}/content/scripts/runtime/<name>.sh.source                  <libexec>/bin/<name>.sh
+{tier}/content/scripts/bootstrap/<name>.sh.source                <libexec>/bootstrap/<name>.sh
+{tier}/content/scripts/bootstrap/entrypoint.d/<h>.sh.source      <libexec>/bootstrap/entrypoint.d/<h>.sh  (Tier 2)
+```
+
+Shell scripts (`.sh.source`) carry no exec bit in the repo; the Dockerfile renames
+them (strips `.source`) and sets the exec bit. Bun executables are compiled from
+`.ts` source in a multi-stage build.
+
+Current artifacts:
+
 | Artifact | Repo source | Image-baked path | Bootstrapped to |
 |---|---|---|---|
 | Tier 1 entrypoint | `adda-dev-runtime/content/scripts/bootstrap/entrypoint.sh.source` | `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh` | — |
@@ -109,9 +130,6 @@ not the running container.
 | `render-adda-shell-tools` (Bun executable) | `proto-adda/src/runtime/render-adda-shell-tools.ts` | `/usr/local/libexec/adda-dev-runtime/bin/render-adda-shell-tools` | — |
 | `prune-node-modules.sh` (build script) | `adda-dev-runtime/build/prune-node-modules.sh` | (build-stage only, not in final image) | — |
 | `current-issue` (Bun executable) | `adda-dev-runtime/src/runtime/current-issue.ts` | `/usr/local/libexec/adda-dev-runtime/bin/current-issue` | — |
-
-Scripts baked to `/usr/local/libexec/` use a `.sh.source` extension in the repo
-and carry no exec bit; the Dockerfile `RUN chmod` sets the exec bit at build time.
 
 ## CI/build pipeline
 
