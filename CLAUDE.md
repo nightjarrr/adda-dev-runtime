@@ -97,19 +97,25 @@ Correct invocations:
 Edit repo source only — never runtime copies. Changes affect future image builds,
 not the running container.
 
-Source paths map to image destinations by a consistent convention. `{tier}` is
-`adda-dev-runtime` for Tier 1 and the Tier 2 repo directory (e.g. `proto-adda`)
-for Tier 2. `<libexec>` expands to `/usr/local/libexec/adda-dev-runtime`:
+Source paths map to image destinations by a consistent convention. `<libexec>`
+expands to `/usr/local/libexec/adda-dev-runtime`:
 
 ```
-Source                                                            Destination
+Source                                                                         Destination
 ──────────────────────────────────────────────────────────────────────────────────────────────────────
-{tier}/content/scripts/bootstrap/entrypoint.sh.source           <libexec>/bootstrap/entrypoint.sh  (Tier 1 only)
-{tier}/src/runtime/<name>.ts                                     <libexec>/bin/<name>
-{tier}/src/bootstrap/<name>.ts                                   <libexec>/bootstrap/<name>
-{tier}/content/scripts/runtime/<name>.sh.source                  <libexec>/bin/<name>.sh
-{tier}/content/scripts/bootstrap/<name>.sh.source                <libexec>/bootstrap/<name>.sh
-{tier}/content/scripts/bootstrap/entrypoint.d/<h>.sh.source      <libexec>/bootstrap/entrypoint.d/<h>.sh  (Tier 2)
+Tier 1 (adda-dev-runtime)
+  adda-dev-runtime/content/scripts/bootstrap/entrypoint.sh.source             <libexec>/bootstrap/entrypoint.sh
+  adda-dev-runtime/src/runtime/<name>.ts                                       <libexec>/bin/<name>
+  adda-dev-runtime/src/bootstrap/<name>.ts                                     <libexec>/bootstrap/<name>
+  adda-dev-runtime/content/scripts/runtime/<name>.sh.source                    <libexec>/bin/<name>.sh
+  adda-dev-runtime/content/scripts/bootstrap/<name>.sh.source                  <libexec>/bootstrap/<name>.sh
+
+Tier 2 (proto-adda)
+  proto-adda/src/runtime/<name>.ts                                              <libexec>/bin/<name>
+  proto-adda/src/bootstrap/<name>.ts                                            <libexec>/bootstrap/<name>
+  proto-adda/content/scripts/runtime/<name>.sh.source                           <libexec>/bin/<name>.sh
+  proto-adda/content/scripts/bootstrap/<name>.sh.source                         <libexec>/bootstrap/<name>.sh
+  proto-adda/content/scripts/bootstrap/entrypoint.d/<h>.sh.source               <libexec>/bootstrap/entrypoint.d/<h>.sh
 ```
 
 Shell scripts (`.sh.source`) carry no exec bit in the repo; the Dockerfile renames
