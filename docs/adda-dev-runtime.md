@@ -783,15 +783,15 @@ Container-side script. It validates the runtime contract, starts the local proxy
     * issue has one linked branch: check it out;
     * issue has multiple linked branches: fail and ask Project Owner to resolve ambiguity.
 
-13. Source `entrypoint.d/` hooks — run each `.sh` file in `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/` in lexicographic order. Hooks are sourced (not subprocess) so they may export variables into the bootstrap environment. An absent or empty `entrypoint.d/` directory is not an error. This is where Tier 2 performs AI harness configuration and session initialization.
+13. Source `entrypoint.d/` hooks — run each `.sh` file in `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/` in lexicographic order. Hooks are sourced (not subprocess) so they may export variables into the bootstrap environment. The `entrypoint.d/` directory is created by the Tier 1 Dockerfile and is always present; an empty directory is not an error.
 
-14. Run Tier 3 init hook: execute `/workspace/.adda-init.sh` as a subprocess if it exists. Non-existence is not an error. See *Tier 3 — project* for the full init hook contract.
+14. Run Tier 3 repo init hook: execute `/workspace/.adda-init.sh` as a subprocess if it exists. Non-existence is not an error. See *Tier 3 — project* for the full init hook contract.
 
 15. Write `~/.bashrc` with `PS1` and the propagated environment variables (`HTTP_PROXY`, `HTTPS_PROXY`, `http_proxy`, `https_proxy`, `NO_PROXY`, `no_proxy`, `GH_REPO`). Touch the bootstrap-complete marker at `/run/.adda_bootstrap_complete`. The marker is also touched by the EXIT trap installed in step 5 so it is created even when bootstrap fails, allowing the parallel interactive shell to open for live autopsy.
 
 16. Print session summary.
 
-17. Exec Docker image's CMD. Tier 1 defaults CMD to `/bin/bash`; Tier 2 images override CMD to their AI harness executable.
+17. Exec Docker image's CMD. Tier 1 defaults CMD to `/bin/bash`; Tier 2 and Tier 3 images may override CMD (Tier 2 typically sets it to the AI harness executable; Tier 3 may further customize it).
 
 18. If CMD exits, drop to an interactive shell for inspection.
 
@@ -831,7 +831,7 @@ From Tier 1's perspective, any Tier 2 image must satisfy the following:
 
 **Image:** builds `FROM` a Tier 1 image. The launcher configuration for a Tier 2 image must preserve Tier 1's security model — no capability additions, no network bypass, no privilege escalation.
 
-**Bootstrap hook:** typically delivers one or more `entrypoint.d/` hooks to `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/`. Hooks are sourced by the Tier 1 entrypoint after core bootstrap completes (GitHub auth, clone, and branch resolution are done). Hooks are sourced — not subprocess — so they share the entrypoint's shell environment and may export variables downstream. An absent `entrypoint.d/` directory is not an error.
+**Bootstrap hook:** delivers `entrypoint.d/` hooks to `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/`. Hooks are sourced by the Tier 1 entrypoint after core bootstrap completes (GitHub auth, clone, and branch resolution are done). Hooks are sourced — not subprocess — so they share the entrypoint's shell environment and may export variables downstream. A Tier 2 image with no hooks is valid; the `entrypoint.d/` directory is always present (guaranteed by Tier 1).
 
 **CMD:** overrides Tier 1's default CMD (`/bin/bash`) to the AI harness executable, making the harness the primary process.
 
@@ -848,7 +848,7 @@ Hooks are named with a numeric prefix for explicit ordering (e.g. `10-<name>.sh`
 
 ### Runtime executables
 
-A Tier 2 implementation may add Bun executables to `/usr/local/libexec/adda-dev-runtime/bin/` and shell scripts to `/usr/local/libexec/adda-dev-runtime/bootstrap/`. Source placement conventions and the build mapping are in `CLAUDE.md`.
+A Tier 2 implementation may add executables to `/usr/local/libexec/adda-dev-runtime/bin/` and scripts to `/usr/local/libexec/adda-dev-runtime/bootstrap/`, following the same libexec structure defined in Tier 1. See *libexec structure* above.
 
 ### CMD convention
 
@@ -862,38 +862,35 @@ Tier 1 defaults CMD to `/bin/bash`. Tier 2 overrides CMD to its AI harness execu
 
 A Tier 3 project is a standard GitHub repository. The project's technology stack is entirely unconstrained by ADDA Dev Runtime or by Tier 1/2 infrastructure — it may use any language, framework, or tooling. Projects benefit from tools pre-installed in Tier 1 or Tier 2 (`git`, `gh`, `curl`, `jq`, `rg`, `fdfind`, Bun, and any harness-specific additions) but are not required to use them.
 
-The only runtime-required ADDA elements are:
+A Tier 3 project may carry any combination of the following ADDA elements:
 
 ```text
 project-repo/
 ├── <agent-context-file>    # Project-specific agent context (file name set by AI harness)
-├── .adda-init.sh           # Optional: project initialization hook
+├── .adda-init.sh           # Project initialization hook (runs at bootstrap and branch switch)
+├── Dockerfile              # FROM <tier2-image>; extends the tier stack for this project
 └── (project source tree)
 ```
 
-The following shows the additional structure typical of a project using a full ADDA SDLC implementation. These elements are SDLC-implementation-specific — their names and layout vary by Tier 2:
+None of these are mandatory — bootstrap does not fail if any are absent.
+
+The agent context file provides the agent with project-specific orientation: architecture, conventions, toolchain, repo layout. Its name is determined by the AI harness in use. It contains no SDLC methodology; that is inherited from the Tier 2 image.
+
+The following additional structure is typical of a project following the full ADDA SDLC. These elements are defined by the ADDA SDLC design, not by Tier 2:
 
 ```text
 project-repo/
-├── .quality-gates.conf          # Quality gate commands (Coder-invokable)
+├── .quality-gates.toml          # Quality gate commands (Coder-invokable)
 ├── CHANGELOG.md                 # Running changelog with UPCOMING section
 ├── docs/
 │   ├── architecture.md          # Persistent project architecture reference (AA/PM)
 │   ├── conventions.md           # Coding conventions reference (AA/Coder)
-│   └── {issue-id}-{slug}/       # Per-feature SDLC artifacts (phase names vary by impl.)
+│   └── {issue-id}-{slug}/       # Per-feature SDLC artifacts
 │       ├── spec.md
 │       ├── tech-design.md
 │       └── impl-plan.md
 └── (project source tree)
 ```
-
-Optional, when the project needs OS-level tooling not provided by Tier 1:
-
-```text
-├── Dockerfile                   # FROM <tier2-image>, adds project toolchain
-```
-
-The project's agent context file provides the agent with project-specific orientation — architecture, conventions, toolchain, repo layout. Its name is determined by the AI harness in use. It contains no SDLC methodology; that is inherited from the Tier 2 image.
 
 ### Init hook (`.adda-init.sh`)
 
@@ -940,11 +937,16 @@ A non-zero exit from the hook fails the calling operation. An absent hook is not
 
 ### Optional Dockerfile
 
-A Tier 3 project adds a Dockerfile only when its language runtime is absent from Tier 1 or the Tier 2 image in use. The Dockerfile builds `FROM` the Tier 2 image in use and adds the required OS-level tooling.
+A Tier 3 Dockerfile builds `FROM` the Tier 2 image in use. When present, it gives the project the full capability set available to any tier in the stack:
 
-Tier 1 ships Bun — TypeScript/Bun projects require no Dockerfile. Any other language runtime (Python/uv, Go, Java, etc.) requires either a Tier 3 Dockerfile (clean, reproducible, fast startup) or bootstrapping via the init hook (acceptable for lightweight package installs; fragile for full language runtimes that must themselves be installed).
+- **OS-level tooling** — add language runtimes and tools not present in Tier 1 or Tier 2 (Python/uv, Go, Java, etc.).
+- **`entrypoint.d/` hooks** — drop hooks into `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/` to run custom initialization during bootstrap.
+- **CMD override** — customize the command that runs after bootstrap (e.g. to run the AI harness with project-specific parameters).
+- **libexec extensions** — add executables to `bin/` or scripts to `bootstrap/` following the same libexec structure as Tier 1 and Tier 2.
 
-**Launcher target:** when the project carries no Dockerfile, `adda-dev.env` references the Tier 2 image as the launcher target. When a project Dockerfile is present and built, `adda-dev.env` references the project image instead — the Tier 2 image becomes an intermediate build stage, not the runtime target.
+Tier 1 ships Bun — TypeScript/Bun projects require no Dockerfile for tooling. Any other language runtime requires either a Tier 3 Dockerfile (clean, reproducible, fast startup) or bootstrapping via the init hook (acceptable for lightweight package installs; fragile for full language runtimes that must themselves be installed).
+
+**Launcher target:** when the project carries no Dockerfile, the launcher configuration references the Tier 2 image as the runtime target. When a project Dockerfile is present and built, the launcher configuration references the project image instead — the Tier 2 image becomes an intermediate build stage.
 
 ---
 
@@ -1082,6 +1084,5 @@ The following are recognized but not part of the immediate baseline implementati
 1. **Broad web retrieval plane** — define how user-approved direct URL fetch and research should work without opening general egress from the container.
 2. **Live allow-list management** — explore whether Envoy policy should be reloadable without sidecar restart, and whether a UI/control plane is justified.
 3. **Credential hiding behind proxy/gateway** — investigate whether future API-specific gateways can inject auth headers so selected tools do not receive raw tokens.
-4. **Image provenance hardening** — GHCR publishing is implemented; remaining work: digest pinning, SLSA provenance attestation, and scheduled weekly rebuild workflow.
-5. **Stronger sandboxing** — evaluate gVisor or VM isolation if kernel escape risk becomes a higher priority.
-6. **Container resource limits** — CPU, memory, and disk quotas for the AI harness container are not currently enforced by the launcher. Evaluate `--memory`, `--cpus`, and cgroup-based limits.
+4. **Stronger sandboxing** — evaluate gVisor or VM isolation if kernel escape risk becomes a higher priority.
+5. **Container resource limits** — CPU, memory, and disk quotas for the AI harness container are not currently enforced by the launcher. Evaluate `--memory`, `--cpus`, and cgroup-based limits.
