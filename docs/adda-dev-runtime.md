@@ -862,35 +862,26 @@ Tier 1 defaults CMD to `/bin/bash`. Tier 2 overrides CMD to its AI harness execu
 
 A Tier 3 project is a standard GitHub repository. The project's technology stack is entirely unconstrained by ADDA Dev Runtime or by Tier 1/2 infrastructure — it may use any language, framework, or tooling. Projects benefit from tools pre-installed in Tier 1 or Tier 2 (`git`, `gh`, `curl`, `jq`, `rg`, `fdfind`, Bun, and any harness-specific additions) but are not required to use them.
 
-A Tier 3 project may carry any combination of the following ADDA elements:
+A Tier 3 project may carry any combination of the following ADDA elements. None are mandatory — bootstrap does not fail if any are absent.
 
 ```text
 project-repo/
-├── <agent-context-file>    # Project-specific agent context (file name set by AI harness)
-├── .adda-init.sh           # Project initialization hook (runs at bootstrap and branch switch)
-├── Dockerfile              # FROM <tier2-image>; extends the tier stack for this project
-└── (project source tree)
-```
-
-None of these are mandatory — bootstrap does not fail if any are absent.
-
-The agent context file provides the agent with project-specific orientation: architecture, conventions, toolchain, repo layout. Its name is determined by the AI harness in use. It contains no SDLC methodology; that is inherited from the Tier 2 image.
-
-The following additional structure is typical of a project following the full ADDA SDLC. These elements are defined by the ADDA SDLC design, not by Tier 2:
-
-```text
-project-repo/
-├── .quality-gates.toml          # Quality gate commands (Coder-invokable)
-├── CHANGELOG.md                 # Running changelog with UPCOMING section
+├── <agent-context-file>         # Project-specific agent context (file name set by AI harness)
+├── .adda-init.sh                # Project initialization hook (runs at bootstrap and branch switch)
+├── Dockerfile                   # FROM <tier2-image>; extends the tier stack for this project
+├── .quality-gates.toml          # SDLC: quality gate commands (Coder-invokable)
+├── CHANGELOG.md                 # SDLC: running changelog with UPCOMING section
 ├── docs/
-│   ├── architecture.md          # Persistent project architecture reference (AA/PM)
-│   ├── conventions.md           # Coding conventions reference (AA/Coder)
-│   └── {issue-id}-{slug}/       # Per-feature SDLC artifacts
+│   ├── architecture.md          # SDLC: project architecture reference (AA/PM)
+│   ├── conventions.md           # SDLC: coding conventions reference (AA/Coder)
+│   └── {issue-id}-{slug}/       # SDLC: per-feature artifacts
 │       ├── spec.md
 │       ├── tech-design.md
 │       └── impl-plan.md
 └── (project source tree)
 ```
+
+The agent context file provides the agent with project-specific orientation: architecture, conventions, toolchain, repo layout. Its name is determined by the AI harness in use. It contains no SDLC methodology; that is inherited from the Tier 2 image. Elements marked `SDLC:` are defined by the ADDA SDLC design and are not Tier 2-specific.
 
 ### Init hook (`.adda-init.sh`)
 
