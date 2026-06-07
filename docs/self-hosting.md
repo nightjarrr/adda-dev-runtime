@@ -44,7 +44,7 @@ The Tier 1 and Tier 2 source directories contain the repo's primary deliverables
 
 **Edit repo source only — never runtime copies.** The running container's scripts and executables are baked into the image. They are read-only at paths like `/usr/local/libexec/adda-dev-runtime/`. Editing them would have no effect and would fail due to the read-only root filesystem. All edits go to the repo source files under `/workspace`. Changes reach the container only after CI builds and publishes a new image.
 
-**Verification scope is limited.** Inside the container, verification is restricted to file/path checks and running `quality-gates`. Live image testing — launching a container from the built image, exercising entrypoint behavior, or testing host-side launcher flows — requires the host and is a PO operation.
+**Image-level verification requires the host.** Code-level verification works normally inside the container: `quality-gates`, bun tests, source invocation, `/tmp` playground scenarios, and real-scenario tests are all available. What cannot be verified inside the container is anything that requires a built Docker image or a running container: entrypoint behavior, container hardening diagnostics, host-side launcher flows. Those are PO operations on the host.
 
 ---
 
