@@ -41,7 +41,7 @@ Ensure CI is green after merge to main:
 Ensure release workflow completes for v0.4.1:
 > mode: tag, ref: v0.4.1
 
-Dispatch the `ci-monitor` agent (subagent name: `ci-monitor`) with the `mode` and `ref`, and `run_in_background: true`. Wait for the background completion notification, then read the structured result.
+Dispatch the `ci-monitor` agent (subagent name: `ci-monitor`) with the `mode` and `ref`. Set `run_in_background: true` on the Agent call. Wait for the background completion notification, then read the structured result.
 
 `ci-monitor` returns one of three result shapes:
 
