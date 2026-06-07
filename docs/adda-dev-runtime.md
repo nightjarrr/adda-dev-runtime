@@ -309,7 +309,7 @@ The ADDA development runtime is organised into three tiers. Each tier has a dist
 
 ### Tier 2 — ADDA SDLC implementation
 
-**What it is:** a runnable image that packages a specific AI harness together with a complete implementation of the ADDA SDLC for that tool. Builds `FROM` Tier 1 and adds the AI harness binary, the SDLC methodology (agent config, skills, settings, agent definitions), and a bootstrap hook that initialises the agent's working environment at container start.
+**What it is:** a runnable image that packages a specific AI harness together with a complete implementation of the ADDA SDLC for that harness. Builds `FROM` Tier 1 and adds the AI harness binary, the SDLC methodology (agent config, skills, settings, agent definitions), and a bootstrap hook that initialises the agent's working environment at container start.
 
 **Why it exists as an image:** the SDLC methodology and its AI harness must be distributed together as a versioned, reproducible unit. An image is the correct packaging for a self-contained, runnable system.
 
@@ -351,14 +351,14 @@ The choice between init hook and Dockerfile turns on the project's toolchain: if
 
 One AI harness development session corresponds to one isolated AI harness container and one dedicated network perimeter sidecar.
 
-| Concept                      | Mapping                           |
-| ---------------------------- | --------------------------------- |
-| One GitHub Issue             | One feature workflow              |
-| One feature workflow         | One AI harness session               |
-| One AI harness session          | One AI harness process               |
-| One AI harness process          | One AI harness container             |
-| One AI harness container        | One Envoy sidecar proxy           |
-| One AI harness container        | One host `tmux` session           |
+| Concept                   | Mapping                      |
+| ------------------------- | ---------------------------- |
+| One GitHub Issue          | One feature workflow         |
+| One feature workflow      | One AI harness session       |
+| One AI harness session    | One AI harness process       |
+| One AI harness process    | One AI harness container     |
+| One AI harness container  | One Envoy sidecar proxy      |
+| One AI harness container  | One host `tmux` session      |
 
 Subagents run inside the parent AI harness process. They do not get separate containers.
 
@@ -410,10 +410,10 @@ The launcher also opens a `adda-dev shell` window (interactive bash in the conta
 
 Authentication secrets:
 
-* Claude Code OAuth token for Anthropic API access.
+* AI harness credential — either a Claude Code OAuth token (Anthropic backend) or a DeepSeek API key (DeepSeek backend), depending on the configured backend.
 * GitHub Token for repository access.
 
-Both are stored in the host Secret Service keyring, retrieved by the launcher, and injected into the container at startup.
+These are stored in the host Secret Service keyring, retrieved by the launcher, and injected into the container at startup.
 
 #### Secret naming in keyring
 
@@ -463,7 +463,7 @@ Github token scoping and permissions are explained further in **GitHub Token sco
 
 #### Retrieval
 
-The launcher retrieves both tokens at runtime:
+The launcher retrieves the required credentials at runtime:
 
 ```bash
 CLAUDE_CODE_OAUTH_TOKEN=$(secret-tool lookup service adda-dev account claude key oauth)
@@ -836,15 +836,13 @@ Tier 1 invariant
 Tier 1 — adda-dev-runtime
   src/runtime/<name>.ts                                         /usr/local/libexec/adda-dev-runtime/bin/<name>
   src/bootstrap/<name>.ts                                       /usr/local/libexec/adda-dev-runtime/bootstrap/<name>
-  src/lib/                                                      (shared; not deployed directly)
   content/scripts/runtime/<name>.sh.source                     /usr/local/libexec/adda-dev-runtime/bin/<name>.sh
   content/scripts/bootstrap/<name>.sh.source                   /usr/local/libexec/adda-dev-runtime/bootstrap/<name>.sh
-
 ```
 
 ---
 
-## Tier 2 — SDLC implementation
+## Tier 2 — ADDA SDLC implementation
 
 ### Primary responsibility
 
@@ -898,19 +896,25 @@ Tier 1 defaults CMD to `/bin/bash`. Tier 2 overrides CMD to its AI harness execu
 
 A Tier 3 project is a standard GitHub repository. The project's technology stack is entirely unconstrained by ADDA Dev Runtime or by Tier 1/2 infrastructure — it may use any language, framework, or tooling. Projects benefit from tools pre-installed in Tier 1 or Tier 2 (`git`, `gh`, `curl`, `jq`, `rg`, `fdfind`, Bun, and any harness-specific additions) but are not required to use them.
 
-The following structure shows the ADDA-specific elements alongside the project's own source tree:
+The only runtime-required ADDA elements are:
 
 ```text
 project-repo/
-├── <agent-context-file>         # Project-specific agent context (file name set by AI harness)
-├── .adda-init.sh                # Optional: project initialization hook
+├── <agent-context-file>    # Project-specific agent context (file name set by AI harness)
+├── .adda-init.sh           # Optional: project initialization hook
+└── (project source tree)
+```
+
+The following shows the additional structure typical of a project using a full ADDA SDLC implementation. These elements are SDLC-implementation-specific — their names and layout vary by Tier 2:
+
+```text
+project-repo/
 ├── .quality-gates.conf          # Quality gate commands (Coder-invokable)
-├── adda-dev.env                 # Launcher configuration (Tier 2 image reference, repo identity)
 ├── CHANGELOG.md                 # Running changelog with UPCOMING section
 ├── docs/
 │   ├── architecture.md          # Persistent project architecture reference (AA/PM)
 │   ├── conventions.md           # Coding conventions reference (AA/Coder)
-│   └── {issue-id}-{slug}/       # Per-feature SDLC artifacts (created during development)
+│   └── {issue-id}-{slug}/       # Per-feature SDLC artifacts (phase names vary by impl.)
 │       ├── spec.md
 │       ├── tech-design.md
 │       └── impl-plan.md
