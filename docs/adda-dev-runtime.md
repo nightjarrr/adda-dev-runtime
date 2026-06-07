@@ -12,13 +12,18 @@ Throughout, `{owner}` and `{repo}` refer to the GitHub namespace and repository 
 
 ## Design principles
 
-### Ephemeral runtime
+### Ephemeral runtime, stateless agent, persistent GitHub
 
-A dev runtime exists for one feature workflow and is destroyed on exit. The only durable project state is state intentionally pushed or written to GitHub: code, documentation, branches, commits, pull requests, Issues, labels, and comments. Anything not pushed before exit is lost. This is an intentional and accepted trade-off for isolation and reproducibility.
+A dev runtime exists for one feature workflow and is destroyed on exit. The AI agent carries no state across container exits — it rebuilds context at session start by reading GitHub state and repository artifacts. Anything not pushed before exit is lost. This is an intentional and accepted trade-off for isolation and reproducibility.
 
-### Stateless agent, stateful world
+GitHub is the persistence layer for all project work. Project state flows to GitHub through:
 
-The AI agent rebuilds context at session start by reading GitHub state and repository artifacts. No agent runtime state is carried across container exits.
+- commits pushed to feature branches;
+- Issues — including hierarchies, cross-links, and comments — tracking requirements, design decisions, and outcomes;
+- Pull Requests and their review trails;
+- GitHub API state (labels, milestones, phase tracking).
+
+Nothing outside GitHub persists: no host source bind mount, no persistent AI harness config volume, no SSH agent forwarding, and no shared host clone are used.
 
 ### Defense in depth
 
@@ -36,17 +41,6 @@ Two further protections bound the impact of credential exposure:
 ### Host launcher and Envoy are trusted perimeter components
 
 The AI harness container is treated as untrusted. Nothing inside it is assumed to be non-exploitable. The host launcher and the per-session Envoy sidecar are therefore part of the trusted computing base for network and runtime isolation. A user who deliberately bypasses the launcher or weakens the Envoy policy is outside the protection model.
-
-### GitHub as durable state
-
-GitHub is the persistence layer for all project work. Project state flows to GitHub through:
-
-- commits pushed to feature branches;
-- Issues — including hierarchies, cross-links, and comments — tracking requirements, design decisions, and outcomes;
-- Pull Requests and their review trails;
-- GitHub API state (labels, milestones, phase tracking).
-
-Nothing outside GitHub persists: no host source bind mount, no persistent AI harness config volume, no SSH agent forwarding, and no shared host clone are used.
 
 ### No plaintext secrets on host disk
 
