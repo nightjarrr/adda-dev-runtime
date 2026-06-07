@@ -885,19 +885,15 @@ The agent context file provides the agent with project-specific orientation: arc
 
 ### Init hook (`.adda-init.sh`)
 
-`/workspace/.adda-init.sh`, if present in the repository root, is a repo-level lifecycle hook invoked as a subprocess by the runtime.
+`/workspace/.adda-init.sh`, if present in the repository root, is a repo-level lifecycle hook. Unlike `entrypoint.d/` hooks, it is executed rather than sourced. Guaranteed to run at bootstrap if present; also invoked when the session switches to a different issue and a branch checkout is performed.
 
 #### Discovery
 
 The runtime discovers exactly `/workspace/.adda-init.sh`. No other hook file paths are recognized.
 
-#### Invocation contexts
-
-Guaranteed to run at bootstrap if present. Also invoked when the session switches to a different issue and a branch checkout is performed.
-
 #### Environment
 
-The hook inherits environment variables from the caller — GitHub auth, proxy settings, `BUN_VERSION`, and any variables exported by `entrypoint.d` hooks. Shell functions and sourced helpers from the caller are **not** available across the subprocess boundary.
+The hook inherits environment variables from the caller — GitHub auth, proxy settings, `BUN_VERSION`, and any variables exported by `entrypoint.d` hooks. Shell functions and sourced helpers from the caller are **not** available.
 
 #### Permitted use
 
