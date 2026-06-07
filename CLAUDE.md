@@ -67,7 +67,7 @@ When adding a new script, use these four axes to determine where it goes:
 1. **Tier**: Tier 1 (`adda-dev-runtime/`) if generic and AI-tool-agnostic, or if
    the script modifies the bootstrap/entrypoint process itself (rather than
    extending it via a hook or other extensibility point); Tier 2 (`proto-adda/`)
-   if harness- or project-specific.
+   if harness-specific.
 
 2. **bootstrap vs bin vs build**: `bootstrap/` if the script runs during container startup
    (entrypoint, hook, interactive-shell helper) and must **not** be agent-invokable;
@@ -97,6 +97,33 @@ Correct invocations:
 Edit repo source only — never runtime copies. Changes affect future image builds,
 not the running container.
 
+Source paths map to image destinations by a consistent convention. `<libexec>`
+expands to `/usr/local/libexec/adda-dev-runtime`:
+
+```
+Source                                                                         Destination
+──────────────────────────────────────────────────────────────────────────────────────────────────────
+Tier 1 (adda-dev-runtime)
+  adda-dev-runtime/content/scripts/bootstrap/entrypoint.sh.source             <libexec>/bootstrap/entrypoint.sh
+  adda-dev-runtime/src/runtime/<name>.ts                                       <libexec>/bin/<name>
+  adda-dev-runtime/src/bootstrap/<name>.ts                                     <libexec>/bootstrap/<name>
+  adda-dev-runtime/content/scripts/runtime/<name>.sh.source                    <libexec>/bin/<name>.sh
+  adda-dev-runtime/content/scripts/bootstrap/<name>.sh.source                  <libexec>/bootstrap/<name>.sh
+
+Tier 2 (proto-adda)
+  proto-adda/src/runtime/<name>.ts                                              <libexec>/bin/<name>
+  proto-adda/src/bootstrap/<name>.ts                                            <libexec>/bootstrap/<name>
+  proto-adda/content/scripts/runtime/<name>.sh.source                           <libexec>/bin/<name>.sh
+  proto-adda/content/scripts/bootstrap/<name>.sh.source                         <libexec>/bootstrap/<name>.sh
+  proto-adda/content/scripts/bootstrap/entrypoint.d/<h>.sh.source               <libexec>/bootstrap/entrypoint.d/<h>.sh
+```
+
+Shell scripts (`.sh.source`) carry no exec bit in the repo; the Dockerfile renames
+them (strips `.source`) and sets the exec bit. Bun executables are compiled from
+`.ts` source in a multi-stage build.
+
+Current artifacts:
+
 | Artifact | Repo source | Image-baked path | Bootstrapped to |
 |---|---|---|---|
 | Tier 1 entrypoint | `adda-dev-runtime/content/scripts/bootstrap/entrypoint.sh.source` | `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh` | — |
@@ -109,9 +136,6 @@ not the running container.
 | `render-adda-shell-tools` (Bun executable) | `proto-adda/src/runtime/render-adda-shell-tools.ts` | `/usr/local/libexec/adda-dev-runtime/bin/render-adda-shell-tools` | — |
 | `prune-node-modules.sh` (build script) | `adda-dev-runtime/build/prune-node-modules.sh` | (build-stage only, not in final image) | — |
 | `current-issue` (Bun executable) | `adda-dev-runtime/src/runtime/current-issue.ts` | `/usr/local/libexec/adda-dev-runtime/bin/current-issue` | — |
-
-Scripts baked to `/usr/local/libexec/` use a `.sh.source` extension in the repo
-and carry no exec bit; the Dockerfile `RUN chmod` sets the exec bit at build time.
 
 ## CI/build pipeline
 
