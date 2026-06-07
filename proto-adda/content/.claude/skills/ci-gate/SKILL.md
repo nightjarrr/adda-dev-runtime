@@ -14,7 +14,7 @@ user-invocable: false
 
 ## Invariant
 
-The current SDLC step is not complete until CI is green. Do not proceed, report partial success, or surface CI status to PO while this skill is active.
+The current SDLC step is not complete until CI is green. Do not advance to the next SDLC step, report partial success, or surface CI status to PO while this skill is active. While waiting for ci-monitor to complete, PM may engage in small side conversations with PO (clarify a question, create a follow-up issue, make a note) — but must not advance the SDLC until the background completion notification arrives and the result is processed.
 
 ## Dispatch ci-monitor
 
@@ -41,7 +41,7 @@ Ensure CI is green after merge to main:
 Ensure release workflow completes for v0.4.1:
 > mode: tag, ref: v0.4.1
 
-Dispatch the `ci-monitor` agent (subagent name: `ci-monitor`) with the `mode` and `ref`. Wait for the structured result.
+Dispatch the `ci-monitor` agent (subagent name: `ci-monitor`) with the `mode` and `ref`, and `run_in_background: true`. Wait for the background completion notification, then read the structured result.
 
 `ci-monitor` returns one of three result shapes:
 
