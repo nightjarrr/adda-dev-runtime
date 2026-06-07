@@ -12,15 +12,8 @@ This repo *is* the dev runtime. Design is documented in `docs/adda-dev-runtime.m
 ## Working on the runtime from inside the runtime
 
 The Claude Code session that develops this repo runs in a proto-adda
-container built from this same repo. See `docs/self-hosting.md` for a full
-explanation of what this means and the constraints it creates.
-
-Summary of consequences:
-
-- **No Docker in the container.** Image builds and launch tests are run by
-  PO on the host, not by the agent. Verification inside the container is
-  limited to file/path checks and `quality-gates`.
-- **`/workspace` is the only durable path.**
+container built from this same repo. See `docs/self-hosting.md` for what
+this means and the constraints it creates.
 
 ## Tier architecture
 
