@@ -191,7 +191,7 @@ adda-dev.sh <issue-id> -- <cmd> [args...]
 
 #### Per-project configuration
 
-The launcher reads `scripts/adda-dev.env`.
+The launcher reads `adda-dev.env` from the same directory as the launcher script.
 
 Required target variables:
 
@@ -226,7 +226,7 @@ ENVOY_SOCKET_CONTAINER_PATH=/run/adda-dev-proxy/proxy.sock
 6. Retrieve auth tokens from Secret Service keyring.
 7. Detect host timezone.
 8. Create a private per-run runtime directory under `${XDG_RUNTIME_DIR:-/tmp}`.
-9. Render Envoy config from `.devcontainer/envoy/envoy.yaml.template` into the runtime directory.
+9. Render Envoy config from `envoy.yaml.template`, co-located with the launcher script, into the runtime directory.
 10. Start Envoy sidecar container with hardened flags.
 11. Wait for the Envoy Unix socket.
 12. Create `adda-dev shell` and `adda-dev envoy logs` windows in the primary tmux session. The `adda-dev shell` window invokes a container-side script that waits for bootstrap to finish before opening the interactive bash prompt.
@@ -974,7 +974,7 @@ A non-zero exit from the hook fails the calling operation. An absent hook is not
 
 ### Optional Dockerfile
 
-A Tier 3 project adds a Dockerfile only when its language runtime is absent from Tier 1. The Dockerfile builds `FROM` the Tier 2 image in use and adds the required OS-level tooling.
+A Tier 3 project adds a Dockerfile only when its language runtime is absent from Tier 1 or the Tier 2 image in use. The Dockerfile builds `FROM` the Tier 2 image in use and adds the required OS-level tooling.
 
 Tier 1 ships Bun — TypeScript/Bun projects require no Dockerfile. Any other language runtime (Python/uv, Go, Java, etc.) requires either a Tier 3 Dockerfile (clean, reproducible, fast startup) or bootstrapping via the init hook (acceptable for lightweight package installs; fragile for full language runtimes that must themselves be installed).
 
