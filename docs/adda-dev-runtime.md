@@ -26,7 +26,7 @@ Three concentric boundaries protect the host and project from code running insid
 
 1. **Container isolation** — the AI harness container has no host filesystem, process, device, display, Docker socket, or network namespace access beyond what the launcher explicitly grants.
 2. **Proxy-based network perimeter** — the AI harness container runs with `--network none`. All intended outbound traffic goes through a launcher-managed Envoy sidecar proxy over a mounted Unix domain socket. Envoy enforces a default-deny domain allow-list.
-3. **AI harness permission configuration** — the AI harness enforces least privilege inside the container.
+3. **AI harness permission configuration** — enforces least privilege when granting permissions to AI actors: agents, skills, and tools.
 
 Two further protections bound the impact of credential exposure:
 
@@ -815,7 +815,7 @@ The branch naming convention remains documentation. The entrypoint stays convent
 
 Scripts and executables are installed under `/usr/local/libexec/adda-dev-runtime/` and split into two subdirectories by purpose:
 
-#### `bootstrap/` — startup scripts (not agent-invokable)
+#### `bootstrap/` — startup scripts
 
 Contains scripts that run during container startup: `entrypoint.sh`, the `entrypoint.d/` hook directory, and the interactive-shell helper. These scripts run during bootstrap, before the agent starts, and are not intended to be invoked by the agent.
 
@@ -896,13 +896,13 @@ Tier 1 defaults CMD to `/bin/bash`. Tier 2 overrides CMD to its AI harness execu
 
 ### Repository layout
 
-A Tier 3 project is a standard GitHub repository. The project's technology stack is entirely unconstrained by ADDA Dev Runtime or by Tier 1/2 infrastructure — it may use any language, framework, or tooling. Projects benefit from tools pre-installed in Tier 1 (`git`, `gh`, `curl`, `jq`, `rg`, `fdfind`, Bun) but are not required to use them.
+A Tier 3 project is a standard GitHub repository. The project's technology stack is entirely unconstrained by ADDA Dev Runtime or by Tier 1/2 infrastructure — it may use any language, framework, or tooling. Projects benefit from tools pre-installed in Tier 1 or Tier 2 (`git`, `gh`, `curl`, `jq`, `rg`, `fdfind`, Bun, and any harness-specific additions) but are not required to use them.
 
 The following structure shows the ADDA-specific elements alongside the project's own source tree:
 
 ```text
 project-repo/
-├── CLAUDE.md                    # Project-specific agent orientation
+├── <agent-context-file>         # Project-specific agent context (file name set by AI harness)
 ├── .adda-init.sh                # Optional: project initialization hook
 ├── .quality-gates.conf          # Quality gate commands (Coder-invokable)
 ├── adda-dev.env                 # Launcher configuration (Tier 2 image reference, repo identity)
@@ -923,7 +923,7 @@ Optional, when the project needs OS-level tooling not provided by Tier 1:
 ├── Dockerfile                   # FROM <tier2-image>, adds project toolchain
 ```
 
-The project CLAUDE.md provides the agent with project-specific orientation — architecture, conventions, toolchain, repo layout. It contains no SDLC methodology; that is inherited from the Tier 2 image.
+The project's agent context file provides the agent with project-specific orientation — architecture, conventions, toolchain, repo layout. Its name is determined by the AI harness in use. It contains no SDLC methodology; that is inherited from the Tier 2 image.
 
 ### Init hook (`.adda-init.sh`)
 
@@ -974,6 +974,8 @@ A Tier 3 project adds a Dockerfile only when its language runtime is absent from
 
 Tier 1 ships Bun — TypeScript/Bun projects require no Dockerfile. Any other language runtime (Python/uv, Go, Java, etc.) requires either a Tier 3 Dockerfile (clean, reproducible, fast startup) or bootstrapping via the init hook (acceptable for lightweight package installs; fragile for full language runtimes that must themselves be installed).
 
+**Launcher target:** when the project carries no Dockerfile, `adda-dev.env` references the Tier 2 image as the launcher target. When a project Dockerfile is present and built, `adda-dev.env` references the project image instead — the Tier 2 image becomes an intermediate build stage, not the runtime target.
+
 ---
 
 ## Image build and distribution
@@ -984,7 +986,7 @@ These conventions apply to any image in the tier stack that has a Dockerfile.
 
 **Version pinning:** all tool versions are pinned via `ENV` variables in the Dockerfile. A version comment block at the top of each Dockerfile is the visible source of truth; bumps go through an explicit chore Issue.
 
-**Base image pinning:** `FROM` lines are pinned to specific point releases, not rolling tags (e.g. `debian:12.11-slim`, not `debian:bookworm-slim`). The version comment block tracks the pin date.
+**Base image pinning:** `FROM` lines are pinned to specific point releases, not rolling tags (e.g. `debian:12.11-slim`, not `debian:bookworm-slim`). The version comment block tracks the pin date. Exception: during cross-tier development, a Tier 2 feature branch may deliberately reference the Tier 1 `edge` tag as a floating target for testing against the latest Tier 1 main-branch changes before a release is cut.
 
 **apt packages:** package versions are *not* pinned to specific apt version strings. Debian stable's release policy (security and critical bug-fix updates only within a minor release) is the structural pin. Pinning individual apt version strings would be brittle without improving reproducibility. Hadolint DL3008 is suppressed inline with a rationale comment.
 
@@ -1011,10 +1013,11 @@ Standard tags:
 
 | Tag | Updated when | Purpose |
 | --- | --- | --- |
-| `edge` | Push to `main` | Most recent stable build, SHA-stamped |
-| `sha-{shortsha}` | Every build | Immutable commit-linked reference |
-| `weekly-{date}` | Scheduled weekly | Security refresh rebuild |
-| `pr-{n}` | PRs touching image paths | Verification only |
+| `edge` | Push to `main` | Most recent main-branch build, SHA-stamped |
+| `latest` | Release tag push | Most recent versioned release |
+| `v{X.Y.Z}` | Release tag push | Immutable versioned release |
+| `{sha}` | Every CI build | Immutable commit-linked reference; primary intermediate tag |
+| `ci` | Every CI build | Latest CI build (mutable; overwritten each run) |
 
 ### Tier 2 image
 
