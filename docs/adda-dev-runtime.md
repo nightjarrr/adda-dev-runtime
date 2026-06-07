@@ -1,4 +1,4 @@
-# Claude Code development environment
+# ADDA Dev Runtime - Design Document
 
 This document specifies the target design of an isolated, ephemeral, hardened container environment for AI-assisted software development. It covers the tier architecture, design principles, host system, and the per-tier design of the infrastructure, SDLC implementation, and project layers.
 
