@@ -221,7 +221,7 @@ require_tool openssl     "Install OpenSSL (apt install openssl)."
 # Load and validate adda-dev.env
 # ----------------------------------------------------------------------
 if [[ ! -f "$ENV_FILE" ]]; then
-    die "adda-dev.env not found at ${ENV_FILE}. See docs/adda-dev-runtime-technical-design.md for required contents."
+    die "adda-dev.env not found at ${ENV_FILE}."
 fi
 
 # shellcheck disable=SC1090
@@ -341,7 +341,7 @@ keyring_lookup() {
     local value
     value="$(secret-tool lookup service adda-dev account "$account" key "$key" || true)"
     if [[ -z "$value" ]]; then
-        die "no secret found in keyring for service=adda-dev account=${account} key=${key}. See docs/adda-dev-runtime-technical-design.md for the bootstrap procedure."
+        die "no secret found in keyring for service=adda-dev account=${account} key=${key}."
     fi
     printf '%s' "$value"
 }

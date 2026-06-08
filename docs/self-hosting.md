@@ -2,7 +2,7 @@
 
 **Audience: the agent working inside the development container.**
 
-For the canonical tier model, see [`docs/adda-dev-runtime-design.md`](adda-dev-runtime-design.md).
+For the conceptual design, see [`docs/adda-dev-runtime-design.md`](adda-dev-runtime-design.md). For the technical implementation reference, see [`docs/adda-dev-runtime-technical-design.md`](adda-dev-runtime-technical-design.md).
 
 ---
 
