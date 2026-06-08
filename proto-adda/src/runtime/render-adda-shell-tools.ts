@@ -1,13 +1,13 @@
 import type { parseArgs } from "node:util";
-import type { EmptyArgs, EnvDep, FileReaderDep, ShellDep, StdioDep } from "@adda/lib";
-import { defaultDeps, parseJson, ScriptBase, ScriptError } from "@adda/lib";
+import type { EmptyArgs, FileReaderDep, ShellDep, StdioDep } from "@adda/lib";
+import { defaultDeps, parseJson, ScriptBase } from "@adda/lib";
 import { z } from "zod";
 
 // --- Types ---
 
 export type Tool = { name: string; cmd: string; desc: string };
 
-type RenderAddaShellToolsDeps = FileReaderDep & ShellDep & StdioDep & EnvDep;
+type RenderAddaShellToolsDeps = FileReaderDep & ShellDep & StdioDep;
 
 // --- Constants ---
 
@@ -139,9 +139,7 @@ export class RenderAddaShellTools extends ScriptBase<RenderAddaShellToolsDeps, E
     }
 
     protected async execute(_args: EmptyArgs): Promise<void> {
-        const home = this.deps.env.get("HOME");
-        if (!home) throw new ScriptError("HOME environment variable is not set");
-        const shellToolsPath = `${home}/.claude/shell-tools.jsonl`;
+        const shellToolsPath = "/run/.adda-shell-tools.jsonl";
 
         const warnings: string[] = [];
 
@@ -150,7 +148,7 @@ export class RenderAddaShellTools extends ScriptBase<RenderAddaShellToolsDeps, E
             raw = await this.deps.fileReader.readFile(shellToolsPath);
         } catch {
             const readFileWarning =
-                "Warning: ~/.claude/shell-tools.jsonl could not be read — the container may not have bootstrapped correctly. If you encounter unexpected tool availability issues, consider mentioning this to PO.";
+                "Warning: /run/.adda-shell-tools.jsonl could not be read — the container may not have bootstrapped correctly. If you encounter unexpected tool availability issues, consider mentioning this to PO.";
             warnings.push(readFileWarning);
             raw = "";
         }
@@ -159,7 +157,7 @@ export class RenderAddaShellTools extends ScriptBase<RenderAddaShellToolsDeps, E
 
         if (skippedLines.length > 0) {
             const malformedWarning =
-                "Warning: some entries in ~/.claude/shell-tools.jsonl were skipped due to malformed content. If tool availability seems incorrect, consider asking PO for guidance.";
+                "Warning: some entries in /run/.adda-shell-tools.jsonl were skipped due to malformed content. If tool availability seems incorrect, consider asking PO for guidance.";
             warnings.push(malformedWarning);
         }
 
