@@ -31,8 +31,8 @@ Nothing outside GitHub persists: no host source bind mount, no persistent AI har
 
 Three concentric boundaries protect the host and project from code running inside the development environment:
 
-1. **Container isolation** — the AI harness container has no host filesystem, process, device, display, Docker socket, or network namespace access beyond what the launcher explicitly grants.
-2. **Proxy-based network perimeter** — the AI harness container has no general network access. All intended outbound traffic goes through a launcher-managed Envoy sidecar proxy that enforces a default-deny domain allow-list.
+1. **Container isolation** — the AI harness container has no host filesystem, process, device, display, container engine socket, or network namespace access beyond what the launcher explicitly grants.
+2. **Proxy-based network perimeter** — the AI harness container has no general network access. All intended outbound traffic goes through a launcher-managed network sidecar proxy that enforces a default-deny domain allow-list.
 3. **AI harness permission configuration** — enforces least privilege when granting permissions to AI actors: agents, skills, and tools.
 
 Two further protections bound the impact of credential exposure:
@@ -40,39 +40,35 @@ Two further protections bound the impact of credential exposure:
 - **Host-side keyring** — authentication tokens never reside in plaintext on host disk; the keyring is encrypted at rest and unlocked only by an active login session.
 - **Token scoping** — the GitHub Token is scoped to a single repository with no administration permissions, bounding GitHub blast radius.
 
-### Host launcher and Envoy are trusted perimeter components
+### Host launcher and network proxy are trusted perimeter components
 
-The AI harness container is treated as untrusted. Nothing inside it is assumed to be non-exploitable. The host launcher and the per-session Envoy sidecar are therefore part of the trusted computing base for network and runtime isolation. A user who deliberately bypasses the launcher or weakens the Envoy policy is outside the protection model.
+The AI harness container is treated as untrusted. Nothing inside it is assumed to be non-exploitable. The host launcher and the per-session network proxy sidecar are therefore part of the trusted computing base for network and runtime isolation. A user who deliberately bypasses the launcher or weakens the network proxy policy is outside the protection model.
 
 ### No plaintext secrets on host disk
 
-Authentication tokens live in the host Secret Service keyring. The launcher retrieves tokens on demand. There is no project `.env` containing secrets, no credentials file, and no token in shell history.
+Authentication tokens live in the host keyring. The launcher retrieves tokens on demand. There is no project `.env` containing secrets, no credentials file, and no token in shell history.
 
 ---
 
 ## Components
 
-The ADDA Dev Runtime is composed of five distinct components. Understanding what each component is and its trust level is essential for the design principles and threat model to be meaningful.
+The ADDA Dev Runtime is composed of four distinct components. Understanding what each component is and its trust level is essential for the design principles and threat model to be meaningful.
 
 ### Host system
 
-The machine on which the development environment runs. The only fully trusted environment. It carries the host keyring (secrets at rest), the launcher script, and the terminal multiplexer. Docker Engine runs here. The host system is never directly accessible from inside the AI harness container.
+The machine on which the development environment runs. The only fully trusted environment. It carries the host keyring (secrets at rest) and the launcher program. The container engine runs here. The host system is never directly accessible from inside the AI harness container.
 
 ### Launcher
 
-A host-side script that creates and tears down a single development session. The launcher retrieves credentials from the host keyring, starts the Envoy sidecar, assembles and runs the AI harness container with its required security constraints, and cleans up on exit. It is the only component that can set session parameters — container flags, mounted sockets, injected environment variables. The launcher is a trusted perimeter component.
+A host-side program that creates and tears down a single development session. The launcher retrieves credentials from the host keyring, starts the network proxy sidecar, assembles and runs the AI harness container with its required security constraints, and cleans up on exit. It is the only component that can set session parameters. The launcher is a trusted perimeter component.
 
-### Envoy sidecar
+### Network proxy sidecar
 
-A per-session network perimeter proxy. It runs as a separate container managed by the launcher — outside the AI harness container trust boundary — and enforces a default-deny domain allow-list on all outbound traffic from the session. The Envoy sidecar is a trusted perimeter component. One Envoy sidecar runs per session.
+A per-session network perimeter proxy. It runs as a separate component managed by the launcher — outside the AI harness container trust boundary — and enforces a default-deny domain allow-list on all outbound traffic from the session. The network proxy sidecar is a trusted perimeter component. One network proxy sidecar runs per session.
 
 ### AI harness container
 
-The isolated, ephemeral runtime in which the AI agent and all development tooling run. It is explicitly treated as untrusted — nothing running inside it is assumed to be non-exploitable. The container has no general network access; outbound traffic reaches the internet only through the Envoy sidecar via a mounted Unix socket. Its root filesystem is read-only; writable paths are explicit in-memory mounts. All of Tiers 1 and 2 (and optionally Tier 3) run inside this container.
-
-### Tier stack
-
-The layered software stack inside the AI harness container, composed of Tiers 1, 2, and optionally 3. Described in detail in the *Tier architecture* section below.
+The isolated, ephemeral runtime in which the AI agent and all development tooling run. It is explicitly treated as untrusted — nothing running inside it is assumed to be non-exploitable. The container has no general network access; outbound traffic reaches the internet only through the network proxy sidecar. Its root filesystem is read-only; writable paths are explicit in-memory mounts. The tier stack (Tiers 1 and 2, and optionally Tier 3) runs inside this container; see *Tier architecture* below.
 
 ---
 
@@ -82,10 +78,10 @@ The layered software stack inside the AI harness container, composed of Tiers 1,
 |---|---|---|
 | Host system | Fully trusted | The user's machine; outside the threat boundary |
 | Launcher | Trusted | User-controlled; part of the trusted computing base |
-| Envoy sidecar | Trusted | Runs outside the container; enforces network policy |
+| Network proxy sidecar | Trusted | Runs outside the container; enforces network policy |
 | AI harness container | **Untrusted** | May run exploited or manipulated code |
 
-The boundary between trusted and untrusted runs at the container wall. Network enforcement sits outside this boundary — in Envoy — specifically because components inside the boundary cannot be trusted to enforce their own rules.
+The boundary between trusted and untrusted runs at the container wall. Network enforcement sits outside this boundary — in the network proxy — specifically because components inside the boundary cannot be trusted to enforce their own rules.
 
 ---
 
@@ -95,7 +91,7 @@ The boundary between trusted and untrusted runs at the container wall. Network e
 
 The environment must prevent any code, tool, dependency, or AI agent running inside the AI harness container from affecting the host system.
 
-The container is constrained by a set of non-negotiable properties: no host namespace access, no Docker socket, non-root user, all capabilities dropped, read-only root filesystem, and no general network egress. See the technical design for the exact flags and constraints that implement these properties.
+The container is constrained by a set of non-negotiable properties: no host namespace access, no container engine socket, non-root user, minimal OS-level privileges, read-only root filesystem, and no general network egress. See the technical design for the exact constraints that implement these properties.
 
 ### Limits of container isolation
 
@@ -113,7 +109,7 @@ Residual risk: hostile content may influence changes on the current branch until
 
 A dependency may execute hostile code during install, test, build, or runtime. Two dependency classes are distinguished:
 
-- **Container/toolchain dependencies** — OS packages, shell tools, language managers, the AI harness, and other infrastructure baked into the image at build time. Not installed with root privileges at runtime.
+- **Container/toolchain dependencies** — OS packages, shell tools, language managers, the AI harness, and other infrastructure baked into the image at build time. Not installed with elevated privileges at runtime.
 - **Project code dependencies** — dependencies declared by the repository after it is cloned. Installed at runtime from locked registries, under the unprivileged container user, with only the package-registry access the project requires.
 
 Residual risk: a malicious version already present in a reviewed lockfile can still execute inside the isolated container.
@@ -122,7 +118,7 @@ Residual risk: a malicious version already present in a reviewed lockfile can st
 
 A compromised tool or manipulated AI agent may attempt to send repository contents, tokens, or other data to an attacker-controlled endpoint.
 
-Primary mitigation: the container has no network interface beyond loopback; all proxied traffic reaches the internet only through Envoy's default-deny domain allow-list; processes that ignore proxy configuration fail because there is no direct network path.
+Primary mitigation: the container has no network interface beyond loopback; all proxied traffic reaches the internet only through the network proxy's default-deny domain allow-list; processes that ignore proxy configuration fail because there is no direct network path.
 
 ### Token theft
 
@@ -132,7 +128,7 @@ Accepted residual risk: an attacker in a live session can use available credenti
 
 ### Quota and resource abuse
 
-A runaway AI agent session or hostile instruction may consume API quota, GitHub API rate limits, CPU, memory, or disk. Mitigations: ephemeral container teardown stops further consumption; in-memory filesystem sizes bound writable growth; GitHub API rate limits apply naturally.
+A runaway AI agent session or hostile instruction may consume API quota, GitHub API rate limits, or host CPU and memory. Mitigations: ephemeral container teardown stops further consumption; in-memory filesystem sizes bound writable storage growth; GitHub API rate limits apply naturally.
 
 ---
 
@@ -145,8 +141,8 @@ One development session is a coordinated unit — one of each component, created
 | One GitHub Issue | One feature workflow |
 | One feature workflow | One AI harness session |
 | One AI harness session | One AI harness container |
-| One AI harness container | One Envoy sidecar proxy |
-| One AI harness container | One host tmux session |
+| One AI harness container | One network proxy sidecar |
+| One AI harness container | One host terminal session |
 
 Subagents run inside the parent AI harness process and share its container. They do not get separate containers.
 
@@ -162,23 +158,21 @@ The AI harness container runs a layered stack of three tiers. Each tier has a di
 
 ### Tier 1 — infrastructure
 
-**What it is:** the hardened, isolated, ephemeral container base. Provides OS packages, core CLI tools, Bun as the shared scripting runtime, a runtime user, and the entrypoint with its hook mechanism.
+**What it is:** the hardened, isolated, ephemeral container base. Provides OS packages, core CLI tools, a shared scripting runtime, a runtime user, and the entrypoint with its hook mechanism.
 
-**Why it exists as an image:** Tier 1 is pure infrastructure. Packaging it as a Docker image gives every higher tier and every project a reproducible, version-pinned base with no host-side toolchain requirements.
+**Why it exists as an image:** Tier 1 is pure infrastructure. Packaging it as a container image gives every higher tier and every project a reproducible, version-pinned base with no host-side toolchain requirements.
 
 **What it does not include:** any AI harness, any AI harness configuration, or any project-specific tooling. Tier 1 is AI-harness-agnostic by design.
 
-**Bun as the Tier 1 scripting runtime:** Bun is included as the shared scripting runtime for ADDA infrastructure scripts — the criterion for inclusion was that placing a runtime in Tier 1 makes it available to all higher tiers without additional setup. This is a deliberate architectural choice, not a project-specific convenience. It has the side effect that TypeScript/Bun projects at Tier 3 require no additional tooling layer; all other language runtimes must be added at Tier 2 or Tier 3.
-
-**Image:** `ghcr.io/{owner}/adda-dev-runtime`
+**Shared scripting runtime:** a scripting runtime is included in Tier 1 as a deliberate architectural choice: infrastructure scripts across all tiers share a consistent runtime environment without requiring additional setup at higher tiers. The choice of specific runtime is an implementation detail documented in the technical design.
 
 ### Tier 2 — ADDA SDLC implementation
 
-**What it is:** a runnable image that packages a specific AI harness together with a complete implementation of the ADDA SDLC for that harness. Builds `FROM` Tier 1 and adds the AI harness binary, the SDLC methodology (agent config, skills, settings, agent definitions), and a bootstrap hook that initialises the agent's working environment at container start.
+**What it is:** a runnable image that packages a specific AI harness together with a complete implementation of the ADDA SDLC for that harness. Builds on Tier 1 and adds the AI harness binary, the SDLC methodology (agent config, skills, settings, agent definitions), and a bootstrap hook that initialises the agent's working environment at container start.
 
 **Why it exists as an image:** the SDLC methodology and its AI harness must be distributed together as a versioned, reproducible unit. An image is the correct packaging for a self-contained, runnable system.
 
-**Multiple Tier 2 implementations:** Tier 2 is a role, not a single image. Multiple implementations can coexist as siblings, each pairing a different AI harness or SDLC implementation with the same Tier 1 base:
+**Multiple Tier 2 implementations:** Tier 2 is a role, not a single implementation. Multiple implementations can coexist as siblings, each pairing a different AI harness or SDLC implementation with the same Tier 1 base:
 - **proto-adda** — current implementation; Claude Code with a simplified SDLC. See `docs/proto-adda.md`.
 - **DAWE** — planned full ADDA SDLC implementation. See [dawe-proposal.md](https://github.com/nightjarrr/molim/blob/main/docs/claude-sdlc/dawe-proposal.md).
 
@@ -188,18 +182,18 @@ The Tier 2 agent configuration contains the SDLC workflow, roles, working princi
 
 **What it is:** the GitHub repository of the actual software being developed. Not an image and not infrastructure — the project that uses a Tier 2 runtime to develop itself.
 
-**Form:** a GitHub repository, cloned into `/workspace` at container start. The project supplies the agent with project-specific orientation (architecture, conventions, toolchain). The SDLC methodology is inherited from the Tier 2 image.
+**Form:** a GitHub repository, cloned into the workspace at container start. The project supplies the agent with project-specific orientation (architecture, conventions, toolchain). The SDLC methodology is inherited from the Tier 2 image.
 
 **Optional infrastructure elements** — a Tier 3 project may carry infrastructure only when strictly necessary:
 - **`.adda-init.sh`** — a repo-level init hook run after bootstrap, used to install project dependencies.
-- **`FROM Tier2` Dockerfile** — extends a Tier 2 image with OS-level tooling for language runtimes not provided by Tier 1. For TypeScript/Bun projects, no Dockerfile is needed; Bun is already in Tier 1.
+- **A project container image extending Tier 2** — adds OS-level tooling for language runtimes not provided by Tier 1.
 
 ### Tier summary
 
 | | Tier 1 | Tier 2 | Tier 3 |
 |---|---|---|---|
 | **Concern** | Infrastructure | ADDA SDLC implementation | The project being developed |
-| **Form** | Docker image | Docker image (`FROM` Tier 1) | GitHub repository |
+| **Form** | Container image | Container image (extending Tier 1) | GitHub repository |
 | **Examples** | `adda-dev-runtime` | `proto-adda`, `DAWE` (planned) | any project using ADDA |
 | **Agent config** | — | Bundled SDLC implementation, project-agnostic | Project-specific harness configuration and context |
 | **Multiplicity** | One | One per AI harness / SDLC implementation | One per project |
@@ -212,21 +206,17 @@ The Tier 2 agent configuration contains the SDLC workflow, roles, working princi
 
 The workflow is terminal-first. IDE integration and host-container IPC sockets are not part of this design.
 
-### No in-container firewall
+### No in-container network policy enforcement
 
-Network isolation is not enforced by iptables inside the AI harness container. The container has no network interface beyond loopback; the Envoy sidecar enforces allowed destinations.
-
-### No `NET_ADMIN` capability in the AI harness container
-
-The container gets all capabilities dropped with no add-back for firewall manipulation.
+Network isolation is not the container's responsibility. The container has no network interface beyond loopback and holds no network administration privileges. The network proxy sidecar, running outside the container trust boundary, is the sole enforcement point for outbound network policy.
 
 ### No host-wide daemon proxy
 
 The proxy is per-session runtime infrastructure. It starts with the session and stops when the session exits.
 
-### No Envoy inside the AI harness container
+### No network proxy inside the AI harness container
 
-Envoy is a separate sidecar container. Running it inside the AI harness container would collapse the security boundary between trusted and untrusted components.
+The network proxy runs as a separate component outside the container trust boundary. Running it inside the AI harness container would collapse the security boundary between trusted and untrusted components.
 
 ### No external off-host proxy requirement
 
@@ -238,7 +228,7 @@ Broad web fetch/research is deferred to a separate design. The baseline containe
 
 ### No host home directory mount
 
-The container has no view of host configuration files, SSH keys, browser profiles, or personal state.
+The container has no view of host configuration files, keys, browser profiles, or personal state.
 
 ### No SSH agent forwarding
 
@@ -248,17 +238,17 @@ GitHub access is via HTTPS using a fine-grained GitHub Token scoped to the proje
 
 AI harness state is ephemeral. Credentials are injected at startup and not preserved as a host-mounted config directory.
 
-### No Docker socket inside the container
+### No container engine socket inside the container
 
-Mounting `/var/run/docker.sock` would be equivalent to host escape.
+Mounting the container engine socket inside the AI harness container would be equivalent to host escape.
 
 ### No git worktrees on the host
 
-Each session clones into an isolated in-container `/workspace`.
+Each session clones into an isolated in-container workspace.
 
 ### No save-on-exit
 
-The container exits with `--rm`; uncommitted work is lost. The SDLC's commit-and-push discipline bounds this risk.
+Containers are not preserved on exit; uncommitted work is lost. The SDLC's commit-and-push discipline bounds this risk.
 
 ### No multi-container per-subagent isolation
 
@@ -272,9 +262,9 @@ GitHub-aware operations happen inside the container.
 
 All external dependencies are pinned. Floating versions let upstream changes enter the environment without review — this policy eliminates that risk. Pinning operates at three layers:
 
-1. **Application and tool versions** — exact versions are pinned in Dockerfiles via `ENV` variables.
-2. **Base image** — `FROM` lines are pinned to specific point releases rather than rolling tags.
-3. **apt-installed packages** — not pinned to specific apt version strings; Debian stable's release policy is the structural pin.
+1. **Application and tool versions** — exact versions are pinned in image definitions.
+2. **Base image** — base image versions are pinned to specific releases rather than rolling tags.
+3. **OS-level packages** — not pinned to specific package manager version strings; the base distribution's stability policy is the structural pin.
 
 ---
 
@@ -283,7 +273,7 @@ All external dependencies are pinned. Floating versions let upstream changes ent
 The following are recognized but not part of the immediate baseline implementation:
 
 1. **Broad web retrieval plane** — define how user-approved direct URL fetch and research should work without opening general egress from the container.
-2. **Live allow-list management** — explore whether Envoy policy should be reloadable without sidecar restart, and whether a UI/control plane is justified.
+2. **Live allow-list management** — explore whether network proxy policy should be reloadable without sidecar restart, and whether a UI/control plane is justified.
 3. **Credential hiding behind proxy/gateway** — investigate whether future API-specific gateways can inject auth headers so selected tools do not receive raw tokens.
-4. **Stronger sandboxing** — evaluate gVisor or VM isolation if kernel escape risk becomes a higher priority.
-5. **Container resource limits** — CPU, memory, and disk quotas for the AI harness container are not currently enforced. Evaluate `--memory`, `--cpus`, and cgroup-based limits.
+4. **Stronger sandboxing** — evaluate alternative container isolation technologies (e.g. gVisor, VM-based runtimes) if kernel escape risk becomes a higher priority.
+5. **Container resource limits** — CPU and memory quotas for the AI harness container are not currently enforced. Evaluate container runtime resource constraint features.
