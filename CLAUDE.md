@@ -1,6 +1,6 @@
 # ADDA Dev Runtime
 
-This repo *is* the dev runtime. Design is documented in `docs/adda-dev-runtime.md`.
+This repo *is* the dev runtime. Conceptual design is documented in `docs/adda-dev-runtime-design.md`; technical design (entrypoint sequence, configuration, artifact routing) is in `docs/adda-dev-runtime-technical-design.md`.
 
 ## Repo layout
 
