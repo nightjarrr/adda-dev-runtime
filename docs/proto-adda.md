@@ -73,13 +73,11 @@ The hook performs the following in order:
 
 1. **Claude config deployment** — copies the staged config from `/usr/local/share/adda-dev-runtime/.claude/` to `~/.claude/`. Fails if `~/.claude/` already exists and is non-empty (guards against double-initialisation).
 
-2. **Shell tool list** — writes `~/.claude/shell-tools.jsonl` from the tool registry accumulated by Tier 1 and any earlier hooks. This file is the input for the `adda-shell-tools` skill — see *Shell tool awareness* below.
+2. **`~/.claude.json` generation** — renders the template at `/usr/local/share/adda-dev-runtime/templates/.claude.json.template` with `CLAUDE_CODE_VERSION` substituted. The resulting file pre-accepts Claude Code onboarding and grants workspace trust to `/workspace`, so the session starts without interactive prompts.
 
-3. **`~/.claude.json` generation** — renders the template at `/usr/local/share/adda-dev-runtime/templates/.claude.json.template` with `CLAUDE_CODE_VERSION` substituted. The resulting file pre-accepts Claude Code onboarding and grants workspace trust to `/workspace`, so the session starts without interactive prompts.
+3. **Memory directory** — creates `/workspace/.claude/memory/` for the PM agent's persistent auto-memory. This path is inside the repository so memory survives container restarts through git.
 
-4. **Memory directory** — creates `/workspace/.claude/memory/` for the PM agent's persistent auto-memory. This path is inside the repository so memory survives container restarts through git.
-
-5. **Git identity** — configures global git identity as `Claude Code (authorized by ${GH_USERNAME})` with email `${GH_USER_ID}+${GH_USERNAME}@users.noreply.github.com`. Commits are attributed to the Claude Code process but the noreply email is keyed to the human's GitHub user ID, so the avatar routes to the human's profile in the GitHub UI.
+4. **Git identity** — configures global git identity as `Claude Code (authorized by ${GH_USERNAME})` with email `${GH_USER_ID}+${GH_USERNAME}@users.noreply.github.com`. Commits are attributed to the Claude Code process but the noreply email is keyed to the human's GitHub user ID, so the avatar routes to the human's profile in the GitHub UI.
 
 ---
 
@@ -91,7 +89,7 @@ The mechanism spans three components:
 
 1. **Tier 1 tool registry** — the Tier 1 entrypoint and any earlier `entrypoint.d/` hooks accumulate tool announcements via the `announce_shell_tool` helper. This builds a JSONL registry in memory during bootstrap.
 
-2. **Persistence** — the bootstrap hook writes the accumulated registry to `~/.claude/shell-tools.jsonl` (step 2 of initialisation above).
+2. **Persistence** — the Tier 1 entrypoint writes the accumulated registry to `/run/.adda-shell-tools.jsonl` after all `entrypoint.d/` hooks complete.
 
 3. **Rendering** — the `render-adda-shell-tools` executable reads `shell-tools.jsonl` and produces a formatted markdown table, including warnings about scripting runtimes that are absent (with Bun alternatives) and tools that are present but non-functional under container security policy. The `adda-shell-tools` skill invokes this executable and returns its output.
 

@@ -59,7 +59,7 @@ _ANNOUNCED_SHELL_TOOLS=""
 
 # announce_shell_tool name cmd desc
 # Registers a shell tool entry in JSONL format.
-# Tier 3 hooks call this before 10-claude-config.sh runs to extend the list.
+# entrypoint.d hooks may also call this to extend the list before Tier 1 writes the registry.
 announce_shell_tool() {
     local name="$1" cmd="$2" desc="$3"
     local entry

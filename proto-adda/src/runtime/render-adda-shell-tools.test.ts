@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { Env, EnvDep, FileReader, FileReaderDep, Shell, ShellDep, ShellResult, StdioDep } from "@adda/lib";
+import type { FileReader, FileReaderDep, Shell, ShellDep, ShellResult, StdioDep } from "@adda/lib";
 import {
     CONSTRAINED_PROBES,
     FALLBACK,
@@ -15,7 +15,7 @@ import {
 
 // --- Mock helpers ---
 
-type RenderAddaShellToolsDeps = FileReaderDep & ShellDep & StdioDep & EnvDep;
+type RenderAddaShellToolsDeps = FileReaderDep & ShellDep & StdioDep;
 
 /**
  * All known probe names: used by tests that want a specific set to be present or absent.
@@ -55,17 +55,9 @@ function makeMockDeps(options: { fileContent?: string | Error; whichResults?: Re
         ),
     };
 
-    const mockEnv: Env = {
-        get: mock((_name: string): string | undefined => {
-            if (_name === "HOME") return "/tmp";
-            return undefined;
-        }),
-    };
-
     const deps: RenderAddaShellToolsDeps = {
         fileReader: mockFileReader,
         shell: mockShell,
-        env: mockEnv,
         stdio: {
             stdin: { text: mock(async () => "") },
             stdout: {
@@ -437,7 +429,7 @@ describe("RenderAddaShellTools", () => {
         expect(code).toBe(0);
         const out = outLines.join("");
         const expectedWarning =
-            "Warning: ~/.claude/shell-tools.jsonl could not be read — the container may not have bootstrapped correctly. If you encounter unexpected tool availability issues, consider mentioning this to PO.";
+            "Warning: /run/.adda-shell-tools.jsonl could not be read — the container may not have bootstrapped correctly. If you encounter unexpected tool availability issues, consider mentioning this to PO.";
         expect(out).toContain(expectedWarning);
     });
 
@@ -452,15 +444,7 @@ describe("RenderAddaShellTools", () => {
         expect(code).toBe(0);
         const out = outLines.join("");
         const expectedWarning =
-            "Warning: some entries in ~/.claude/shell-tools.jsonl were skipped due to malformed content. If tool availability seems incorrect, consider asking PO for guidance.";
+            "Warning: some entries in /run/.adda-shell-tools.jsonl were skipped due to malformed content. If tool availability seems incorrect, consider asking PO for guidance.";
         expect(out).toContain(expectedWarning);
-    });
-
-    test("HOME unset — throws ScriptError and exits non-zero", async () => {
-        const { deps } = makeMockDeps({ fileContent: "" });
-        // Override env to return undefined for HOME
-        deps.env = { get: mock((_name: string) => undefined) };
-        const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
-        expect(code).not.toBe(0);
     });
 });
