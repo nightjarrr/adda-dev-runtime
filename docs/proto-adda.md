@@ -1,10 +1,24 @@
 # proto-adda — Implementation Specifics
 
-proto-adda is the Claude Code–based Tier 2 implementation of the ADDA SDLC. It builds `FROM` the Tier 1 `adda-dev-runtime` image and adds the Claude Code AI harness, the SDLC agent configuration, and a bootstrap hook that initialises the Claude environment at container start.
+proto-adda is the Claude Code–based Tier 2 implementation of the ADDA SDLC. It builds `FROM` the Tier 1 `adda-dev-runtime` image, installs Claude Code, and adds the SDLC agent configuration and a bootstrap hook that initialises the Claude environment at container start.
 
-**"Proto"** reflects a deliberate simplification: the Associate Architect role defined in the [ADDA SDLC design](https://github.com/nightjarrr/molim/blob/main/docs/adda-sdlc.md) is collapsed into the Project Manager. The PM handles all creative and decision-heavy work directly — spec drafting, technical design, implementation planning, documentation updates — rather than delegating to a separate AA subagent. This covers the core development workflow but is not a complete implementation of all ADDA roles.
+**"Proto"** reflects a deliberate, scoped simplification of the full ADDA SDLC design. The simplifications are intentional, not gaps to fill: proto-adda exists to provide a minimal viable workflow that is itself good enough to support agentic development of full ADDA implementations (DAWE and other future Tier 2s). Concretely: the Associate Architect role is collapsed into the Project Manager; the per-issue artifact structure (spec, tech design, implementation plan) is not produced; issue phases are simplified; and changelog handling is omitted. The core loop — triage, implement, review, merge — is covered.
 
 Companion to [`docs/adda-dev-runtime.md`](adda-dev-runtime.md), which covers the tier architecture, Tier 1 design, and shared build conventions.
+
+---
+
+## Image
+
+**Name:** `ghcr.io/nightjarrr/proto-adda-dev-runtime`
+
+**Base:** `FROM ghcr.io/nightjarrr/adda-dev-runtime` (Tier 1)
+
+**Claude Code** is installed as a version-pinned global Bun package. The version is set via `ENV CLAUDE_CODE_VERSION` in the Dockerfile — the same value drives the package install at build time and is injected into `~/.claude.json` by the bootstrap hook at runtime. Version bumps go through an explicit chore Issue.
+
+**CMD:** `["claude"]` — overrides Tier 1's default `/bin/bash`, making the Claude Code process the primary session process. If Claude Code exits, the Tier 1 entrypoint drops to an interactive bash shell for inspection.
+
+Tags and distribution follow the same conventions as Tier 1 — `edge`, `latest`, `v{X.Y.Z}`, `{sha}`, `ci` — documented in the *Image build and distribution* section of `docs/adda-dev-runtime.md`.
 
 ---
 
@@ -19,36 +33,19 @@ Companion to [`docs/adda-dev-runtime.md`](adda-dev-runtime.md), which covers the
 | Associate Architect | Collapsed into PM (proto simplification) |
 | Coder | `coder` subagent |
 
-The PM role is implemented as the primary Claude Code session. It owns the full SDLC workflow: reads Issue and repository state, runs or delegates each phase, manages all GitHub state updates, and surfaces gates to the Project Owner. Because AA is collapsed into PM, PM performs all artefact authoring work (specs, technical designs, implementation plans, documentation) directly in the main session rather than delegating.
+The PM role is implemented as the primary Claude Code session. It owns the SDLC workflow: reads Issue and repository state, runs or delegates each phase, manages all GitHub state updates, and surfaces gates to the Project Owner. Because AA is collapsed into PM, PM performs all artefact authoring work directly in the main session rather than delegating.
 
-The Coder role is implemented as a dispatched subagent. It is the only role with shell execution capability and is responsible for code changes, test coverage, and quality gates.
-
-A secondary subagent, `ci-monitor`, handles CI workflow monitoring. It is dispatched by the `ci-gate` skill and is not a role defined in the ADDA SDLC design — it is proto-adda infrastructure.
+The Coder role is implemented as a dispatched subagent, responsible for code changes, test coverage, and quality gates.
 
 ### Skills
 
-**SDLC-mapped skills** — implement operations defined in the ADDA SDLC skill catalog:
+Proto-adda implements two skills from the ADDA SDLC skill catalog: `new-issue` (New Issue) and `ensure-github-labels` (Ensure GitHub Labels). The `quality-gates` executable in Tier 1 implements the ADDA Quality Gates skill and is invoked by Coder.
 
-| Skill | ADDA SDLC counterpart |
-|---|---|
-| `new-issue` | New Issue |
-| `ensure-github-labels` | Ensure GitHub Labels |
-
-**Proto-adda-specific skills** — runtime infrastructure not in the SDLC design:
-
-| Skill | Purpose |
-|---|---|
-| `go` | Issue workflow entry point — resolves issue state and starts the SDLC session |
-| `ci-gate` | CI monitoring coordination — dispatches `ci-monitor` and interprets results |
-| `adda-shell-tools` | Shell tool awareness — see *Shell tool awareness* below |
-
-Additional auxiliary skills may be added over time and are not exhaustively listed here.
-
-The `quality-gates` executable (Tier 1) implements the ADDA SDLC Quality Gates skill and is invoked by the Coder subagent.
+In addition, proto-adda ships infrastructure skills that are not part of the SDLC design: `go` as the issue workflow entry point, `ci-gate` for CI monitoring coordination, and `adda-shell-tools` for shell tool awareness (see *Shell tool awareness* below). Further auxiliary skills may be added over time.
 
 ### Agent permissions
 
-The PM session operates under a least-privilege permission profile defined in `settings.json`. PM has read/write access to git and GitHub operations, invocation rights for SDLC-relevant skills, and explicit deny rules for destructive operations (force push, PR merge, secret access, release creation). PM has no direct shell execution — all shell operations flow through the Coder subagent.
+The PM session operates under a least-privilege permission profile. PM has pre-allowlisted shell access for specific toolsets (git, gh, bun, runtime executables) and explicit deny rules for destructive operations (force push, PR merge, secret access, release creation). Arbitrary shell execution is not permitted to PM — unbounded shell access is scoped to the Coder subagent.
 
 ---
 
@@ -63,8 +60,8 @@ The hook validates the presence of the `claude` binary and a set of required env
 **`anthropic` backend** — direct Anthropic API access:
 - `CLAUDE_CODE_OAUTH_TOKEN` — Claude Code OAuth token
 
-**`deepseek` backend** — OpenAI-compatible proxy routing:
-- `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` — proxy endpoint and auth
+**`deepseek` backend** — Anthropic API-compatible alternative backend:
+- `ANTHROPIC_BASE_URL`, `ANTHROPIC_AUTH_TOKEN` — endpoint and auth
 - `ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`, `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_HAIKU_MODEL` — model routing
 - `CLAUDE_CODE_SUBAGENT_MODEL`, `CLAUDE_CODE_EFFORT_LEVEL` — subagent and effort configuration
 
@@ -112,17 +109,3 @@ Source paths in the repo map to image destinations by the convention described i
 | `proto-adda/src/runtime/render-adda-shell-tools.ts` | `/usr/local/libexec/adda-dev-runtime/bin/render-adda-shell-tools` |
 
 Shell scripts (`.sh.source`) are renamed and made executable by the Dockerfile at build time. TypeScript sources are compiled to extensionless Bun executables in a multi-stage build; only the compiled output ships in the final image.
-
----
-
-## Image
-
-**Name:** `ghcr.io/nightjarrr/proto-adda-dev-runtime`
-
-**Base:** `FROM ghcr.io/nightjarrr/adda-dev-runtime` (Tier 1)
-
-**CMD:** `["claude"]` — overrides Tier 1's default `/bin/bash`, making the Claude Code process the primary session process. If Claude Code exits, the Tier 1 entrypoint drops to an interactive bash shell for inspection.
-
-**Claude Code version** is pinned via `ENV CLAUDE_CODE_VERSION` in the Dockerfile. The same value is used during the build (to install the correct package version) and at runtime (injected into `~/.claude.json` by the bootstrap hook). Version bumps go through an explicit chore Issue.
-
-Tags and distribution follow the same conventions as Tier 1 — `edge`, `latest`, `v{X.Y.Z}`, `{sha}`, `ci` — documented in the *Image build and distribution* section of `docs/adda-dev-runtime.md`.
