@@ -56,11 +56,16 @@ require_tool() {
 # ----------------------------------------------------------------------
 
 _ANNOUNCED_SHELL_TOOLS=""
+_SHELL_TOOLS_SEALED=""
 
 # announce_shell_tool name cmd desc
 # Registers a shell tool entry in JSONL format.
 # entrypoint.d hooks may also call this to extend the list before Tier 1 writes the registry.
+# Fails with a non-zero exit if called after hook 95 has sealed the registry.
 announce_shell_tool() {
+    if [[ -n "${_SHELL_TOOLS_SEALED}" ]]; then
+        die "announce_shell_tool: registry is sealed (hook 95 has run)"
+    fi
     local name="$1" cmd="$2" desc="$3"
     local entry
     entry=$(jq -cn --arg n "$name" --arg c "$cmd" --arg d "$desc" \
@@ -69,6 +74,10 @@ announce_shell_tool() {
 }
 
 # list_shell_tools — prints accumulated JSONL to stdout, one object per line.
+# Fails with a non-zero exit if called before hook 95 has sealed the registry.
 list_shell_tools() {
+    if [[ -z "${_SHELL_TOOLS_SEALED}" ]]; then
+        die "list_shell_tools: registry is not yet sealed (call after hook 95)"
+    fi
     printf '%s' "${_ANNOUNCED_SHELL_TOOLS}"
 }

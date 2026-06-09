@@ -1,0 +1,19 @@
+# ======================================================================
+# 96-render-shell-tools.sh — Tier 2 post-gate: renders the shell tools
+#   registry into agent-facing markdown.
+#
+# Sourced by: entrypoint.sh (as an entrypoint.d hook, after hook 95 has
+#   sealed the registry and written /run/.adda-shell-tools.jsonl).
+# Sourcing context: runs in the entrypoint shell; all helper functions
+#   from 00-helpers.sh are available.
+#
+# Effect: writes /run/.adda-shell-tools.md — the rendered markdown
+#   content that CLAUDE.md @imports so agents receive live tool
+#   constraints inline. No modification to ~/.claude/CLAUDE.md is
+#   needed; the @import handles injection automatically.
+# ======================================================================
+
+section "Rendering shell tools registry"
+
+render-adda-shell-tools > /run/.adda-shell-tools.md
+success "Shell tools rendered to /run/.adda-shell-tools.md."

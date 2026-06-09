@@ -138,19 +138,6 @@ if [[ -d /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d ]]; then
 fi
 
 # ======================================================================
-# SHELL TOOLS — write announced tool registry to well-known runtime path
-# All entrypoint.d hooks have now had the chance to call announce_shell_tool.
-# ======================================================================
-section "Writing shell tool registry"
-
-if [[ -z "${_ANNOUNCED_SHELL_TOOLS}" ]]; then
-    echo "Warning: _ANNOUNCED_SHELL_TOOLS is empty — shell tool registry not written."
-else
-    list_shell_tools > /run/.adda-shell-tools.jsonl
-    success "Shell tool registry written to /run/.adda-shell-tools.jsonl."
-fi
-
-# ======================================================================
 # REPO INIT — optional repo-level init hook
 # Sourced after image hooks so it has access to the full bootstrapped
 # environment: GitHub auth, proxy, git config, and any exports from

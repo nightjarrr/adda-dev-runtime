@@ -114,7 +114,7 @@ export function render(
         return FALLBACK;
     }
 
-    const parts: string[] = ["## Container shell tools"];
+    const parts: string[] = [];
 
     if (tools.length > 0) {
         parts.push("Use the following tools — they are available in this container:");

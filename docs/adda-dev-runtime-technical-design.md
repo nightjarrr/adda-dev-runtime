@@ -514,6 +514,11 @@ Hooks in `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/` are sourc
 
 Hooks are named with a numeric prefix for explicit ordering (e.g. `10-name.sh`). Multiple hooks are sourced in lexicographic order.
 
+**Hook number convention:**
+- **10–79**: Extension hooks — Tier 2 and Tier 3 Dockerfiles place `announce_shell_tool` calls and other setup here.
+- **95**: Tier 1-owned gate — seals the announcement list and writes `/run/.adda-shell-tools.jsonl`. Must not be overridden or reused.
+- **96–99**: Post-gate — the tool list is final. Tier 2/3 may render or process the registry but must not call `announce_shell_tool`.
+
 Available helper functions (sourced from Tier 1):
 - `require_env <VAR>` — fail with a clear message if the variable is unset or empty.
 - `require_tool <cmd>` — fail with a clear message if the command is not found.
@@ -521,7 +526,7 @@ Available helper functions (sourced from Tier 1):
 - `success <msg>` — print a success line.
 - `warning <msg>` — print a warning line (non-fatal).
 - `die <msg>` — print an error and exit non-zero.
-- `announce_shell_tool <name> <cmd> <desc>` — register a CLI tool in the agent-visible shell tools registry; hooks call this to extend the registry before Tier 1 writes it.
+- `announce_shell_tool <name> <cmd> <desc>` — register a CLI tool in the agent-visible shell tools registry; hooks numbered 10–79 call this to extend the registry before hook 95 seals it. Calling this after hook 95 is a fatal error.
 
 The `entrypoint.d/` directory is created by the Tier 1 Dockerfile and is always present. An empty directory is not an error.
 
@@ -541,11 +546,11 @@ Tier 1 announces its own tools during the entrypoint run. `entrypoint.d/` hooks 
 
 **Writing the registry:**
 
-After all `entrypoint.d/` hooks have run, the Tier 1 entrypoint writes the accumulated registry to `/run/.adda-shell-tools.jsonl`. Because the write happens after the full hook chain completes, any hook — regardless of its numeric prefix — can call `announce_shell_tool` and have its entries included.
+Hook `95-write-shell-tools-registry.sh` is the Tier 1-owned gate. It runs after all extension hooks (10–79) have had the opportunity to call `announce_shell_tool`. The gate sets `_SHELL_TOOLS_SEALED="1"` to activate bidirectional guards, then writes `/run/.adda-shell-tools.jsonl`. Any call to `announce_shell_tool` after hook 95 is a fatal error; any call to `list_shell_tools` before hook 95 is also a fatal error.
 
-**Reading the registry:**
+**Reading and rendering the registry:**
 
-Tier 2 reads `/run/.adda-shell-tools.jsonl` to obtain the complete tool list and render it into agent-facing guidance.
+Hook `96-render-shell-tools.sh` (Tier 2) runs after the gate. It reads `/run/.adda-shell-tools.jsonl` and renders the registry into `/run/.adda-shell-tools.md`. `CLAUDE.md` @imports this file so agents receive live tool constraints inline — no manual update to `CLAUDE.md` is needed when the tool list changes.
 
 **Entry format:**
 

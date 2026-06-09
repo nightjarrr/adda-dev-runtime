@@ -214,19 +214,19 @@ describe("render", () => {
         expect(output).toBe(FALLBACK);
     });
 
-    test("tools only — returns heading, intro sentence, and tools table", () => {
+    test("tools only — returns intro sentence and tools table, no heading", () => {
         const output = render(singleTool, [], [], []);
-        expect(output).toContain("## Container shell tools");
+        expect(output).not.toContain("## Container shell tools");
         expect(output).toContain("Use the following tools — they are available in this container:");
         expect(output).toContain("| `rg`");
         expect(output).not.toContain("not available");
         expect(output).not.toContain("use bun");
     });
 
-    test("scripting alternatives present — includes updated heading section", () => {
+    test("scripting alternatives present — includes scripting alternatives section, no heading", () => {
         const sa = [{ name: "python", message: "use bun" }];
         const output = render(singleTool, sa, [], []);
-        expect(output).toContain("## Container shell tools");
+        expect(output).not.toContain("## Container shell tools");
         expect(output).toContain("| `rg`");
         expect(output).toContain(
             "**The following scripting runtimes are not available in this container — see the suggested alternative for each:**",
@@ -234,17 +234,17 @@ describe("render", () => {
         expect(output).toContain("- `python`: use bun");
     });
 
-    test("constrained present — includes updated heading section", () => {
+    test("constrained present — includes constrained tools section, no heading", () => {
         const cp = [{ name: "su", message: "privilege escalation is disabled by container security policy" }];
         const output = render(singleTool, [], cp, []);
-        expect(output).toContain("## Container shell tools");
+        expect(output).not.toContain("## Container shell tools");
         expect(output).toContain("**The following tools will not work in this container environment:**");
         expect(output).toContain("- `su`:");
     });
 
-    test("absent names — includes updated not-available line", () => {
+    test("absent names — includes not-available line, no heading", () => {
         const output = render(singleTool, [], [], ["docker"]);
-        expect(output).toContain("## Container shell tools");
+        expect(output).not.toContain("## Container shell tools");
         expect(output).toContain("**Not available** (calls will result in `command not found`): `docker`");
     });
 
@@ -255,11 +255,11 @@ describe("render", () => {
         expect(output).not.toContain("Not available");
     });
 
-    test("heading always present when at least one input is non-empty", () => {
-        expect(render(singleTool, [], [], [])).toContain("## Container shell tools");
-        expect(render([], [{ name: "python", message: "msg" }], [], [])).toContain("## Container shell tools");
-        expect(render([], [], [{ name: "su", message: "msg" }], [])).toContain("## Container shell tools");
-        expect(render([], [], [], ["docker"])).toContain("## Container shell tools");
+    test("heading never present regardless of inputs", () => {
+        expect(render(singleTool, [], [], [])).not.toContain("## Container shell tools");
+        expect(render([], [{ name: "python", message: "msg" }], [], [])).not.toContain("## Container shell tools");
+        expect(render([], [], [{ name: "su", message: "msg" }], [])).not.toContain("## Container shell tools");
+        expect(render([], [], [], ["docker"])).not.toContain("## Container shell tools");
     });
 
     test("intro sentence only rendered when tools are present", () => {
