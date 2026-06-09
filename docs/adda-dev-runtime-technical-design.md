@@ -520,7 +520,9 @@ Available helper functions (sourced from Tier 1):
 - `require_tool <cmd>` — fail with a clear message if the command is not found.
 - `section <title>` — print a formatted section header.
 - `success <msg>` — print a success line.
+- `warning <msg>` — print a warning line (non-fatal).
 - `die <msg>` — print an error and exit non-zero.
+- `announce_shell_tool <name> <cmd> <desc>` — register a CLI tool in the agent-visible shell tools registry; hooks call this to extend the registry before Tier 1 writes it.
 
 The `entrypoint.d/` directory is created by the Tier 1 Dockerfile and is always present. An empty directory is not an error.
 
