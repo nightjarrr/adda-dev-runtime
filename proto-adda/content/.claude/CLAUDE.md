@@ -71,6 +71,14 @@ gh issue view {issue-id} --comments
 
 Labels must contain the issue type: one of `feature`, `chore`, `docs`, or `bug`. Comments contain the latest state for ongoing work and must be read alongside the issue body.
 
+**Explore relevant sources.** Proactively identify and explore all relevant documents and code touched by the issue — regardless of whether they are explicitly referenced in the issue body. Do not rely solely on what the issue says.
+
+**Re-validate issue details against current state.** Issue details are directional, not authoritative — they can be outdated or contain honest mistakes. Use the codebase and project state as the source of truth, not the issue text.
+
+**Surface discrepancies.** If what you find diverges from what the issue describes, present the gap to PO as the starting point for discussion before proceeding to planning.
+
+**Surface improvements.** If the approach described in the issue looks suboptimal, present alternatives to PO as part of collaborative exploration.
+
 ### 2. Plan
 
 Call the EnterPlanMode tool directly to enter the planning mode. This in-session change should not be persisted in settings. **Discuss the approach with PO before writing — the "Discuss before you act" principle applies here: writing the plan is an act.** Then write an implementation plan with three sections:
