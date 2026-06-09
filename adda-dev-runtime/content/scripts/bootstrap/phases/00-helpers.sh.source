@@ -10,21 +10,59 @@
 # ----------------------------------------------------------------------
 # Output helpers
 # ----------------------------------------------------------------------
+
+# _in_hook — returns true when called from within the entrypoint hook loop.
+# The entrypoint sets _HOOKS_BOOTSTRAP_MODE=1 (not exported) before sourcing
+# hooks and unsets it afterwards; subshells and subprocess do not inherit it.
+_in_hook() { [[ -n "${_HOOKS_BOOTSTRAP_MODE:-}" ]]; }
+
+# hook_banner — prints the hook filename as a section header at 2-space indent.
+# Called by the entrypoint hook loop, not by hook authors directly.
+# Does not check _in_hook(); always renders at the fixed 2-space level.
+hook_banner() { printf '\n  \033[1;32m%s\033[0m\n' "$*"; }
+
 section() {
-    printf '\n\033[1;32m==> %s\033[0m\n' "$*"
+    if _in_hook; then
+        printf '    \033[0;37m->\033[0m %s\n' "$*"
+    else
+        printf '\n\033[1;32m==> %s\033[0m\n' "$*"
+    fi
 }
 
 die() {
-    printf '\033[1;31mError:\033[0m %s\n' "$*" >&2
+    if _in_hook; then
+        printf '      \033[1;31mError:\033[0m %s\n' "$*" >&2
+    else
+        printf '\033[1;31mError:\033[0m %s\n' "$*" >&2
+    fi
     exit 1
 }
 
 warning() {
-    printf '\033[1;33mWarning:\033[0m %s\n' "$*" >&2
+    if _in_hook; then
+        printf '      \033[1;33mWarning:\033[0m %s\n' "$*" >&2
+    else
+        printf '\033[1;33mWarning:\033[0m %s\n' "$*" >&2
+    fi
 }
 
 success() {
-    printf '\033[1;32m✓\033[0m %s\n' "$*"
+    if _in_hook; then
+        printf '      \033[1;32m✓\033[0m %s\n' "$*"
+    else
+        printf '\033[1;32m✓\033[0m %s\n' "$*"
+    fi
+}
+
+# info — print a plain informational line.
+# Use instead of bare echo in hooks and bootstrap scripts.
+# In hook mode, indents to 6 spaces to align with success/warning/die.
+info() {
+    if _in_hook; then
+        printf '      %s\n' "$*"
+    else
+        printf '%s\n' "$*"
+    fi
 }
 
 # ----------------------------------------------------------------------

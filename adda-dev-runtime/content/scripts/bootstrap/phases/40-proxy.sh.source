@@ -50,9 +50,9 @@ start_proxy_bridge() {
             export NO_PROXY="${NO_PROXY:-localhost,127.0.0.1,::1}"
             export no_proxy="${no_proxy:-localhost,127.0.0.1,::1}"
 
-            echo "Proxy socket: ${socket_path}"
-            echo "Proxy bridge: ${proxy_url}"
-            echo "socat log: ${log_file}"
+            info "Proxy socket: ${socket_path}"
+            info "Proxy bridge: ${proxy_url}"
+            info "socat log: ${log_file}"
             success "Network proxy bridge started."
             return 0
         fi

@@ -75,12 +75,12 @@ else
     _switch_pr="$(printf '%s' "${_switch_out}" | jq -r '.issue.pr')"
     if [[ "${_switch_resolution}" == "main" ]]; then
         success "Issue #${ISSUE_ID}: no linked branch yet; staying on main."
-        echo "Branch creation is the SDLC's spec phase responsibility."
+        info "Branch creation is the SDLC's spec phase responsibility."
     elif [[ -n "${_switch_pr}" ]]; then
-        echo "Issue #${ISSUE_ID}: resolved via open PR #${_switch_pr} (branch: ${_switch_branch})."
+        info "Issue #${ISSUE_ID}: resolved via open PR #${_switch_pr} (branch: ${_switch_branch})."
         success "Checked out branch ${_switch_branch} for Issue #${ISSUE_ID}."
     else
-        echo "Issue #${ISSUE_ID}: one linked branch (${_switch_branch}); checking out."
+        info "Issue #${ISSUE_ID}: one linked branch (${_switch_branch}); checking out."
         success "Checked out branch ${_switch_branch} for Issue #${ISSUE_ID}."
     fi
     unset ISSUE_ID

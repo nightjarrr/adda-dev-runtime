@@ -125,14 +125,17 @@ if [[ -d /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d ]]; then
     shopt -u nullglob
     if (( ${#hooks[@]} > 0 )); then
         section "Running bootstrap hooks"
+        _HOOKS_BOOTSTRAP_MODE=1
         for hook in "${hooks[@]}"; do
-            echo "Sourcing ${hook}"
+            hook_banner "$(basename "${hook}")"
             # shellcheck disable=SC1090
             # Why: hooks are discovered at runtime via glob over
             # /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/*.sh; the source
             # path is intentionally dynamic.
             source "${hook}"
         done
+        unset _HOOKS_BOOTSTRAP_MODE
+        printf '\n'
         success "Bootstrap hooks complete."
     fi
 fi
@@ -149,7 +152,7 @@ if [[ -f /workspace/.adda-init.sh ]]; then
     bash /workspace/.adda-init.sh
     success "Repo-level init hook complete."
 else
-    echo "No .adda-init.sh found in /workspace; skipping."
+    info "No .adda-init.sh found in /workspace; skipping."
 fi
 
 # ======================================================================
@@ -172,15 +175,15 @@ section "Bootstrap complete ($(( SECONDS - _bootstrap_start ))s)"
 _CI_ID="$(/usr/local/libexec/adda-dev-runtime/bin/current-issue get id 2>/dev/null)"
 if [[ -n "${_CI_ID}" ]]; then
     _CI_TITLE="$(/usr/local/libexec/adda-dev-runtime/bin/current-issue get title 2>/dev/null || echo '(unable to fetch)')"
-    echo "Issue: #${_CI_ID} — ${_CI_TITLE}."
+    info "Issue: #${_CI_ID} — ${_CI_TITLE}."
 fi
 unset _CI_ID _CI_TITLE
-echo "Branch: $(git rev-parse --abbrev-ref HEAD)"
+info "Branch: $(git rev-parse --abbrev-ref HEAD)"
 COMMITS_AHEAD="$(git rev-list --count origin/main..HEAD 2>/dev/null || echo 0)"
 if [[ "${COMMITS_AHEAD}" -gt 0 ]]; then
-    echo "Commits ahead of origin/main: ${COMMITS_AHEAD}."
+    info "Commits ahead of origin/main: ${COMMITS_AHEAD}."
 fi
-echo
+printf '\n'
 
 # ----------------------------------------------------------------------
 # Final steps:
@@ -199,7 +202,7 @@ git_trail() {
     if git -C /workspace rev-parse @{u} >/dev/null 2>&1; then
         git --no-pager -C /workspace log --oneline @{u}..HEAD
     else
-        echo "(branch not yet pushed to remote)"
+        info "(branch not yet pushed to remote)"
     fi
     read -r -s -n 1 -p $'\nPress any key to exit the container...' _
 }
@@ -218,7 +221,7 @@ cmd_status=0
 if [[ "$cmd_status" -ne 0 ]]; then
     warning "Command exited with status ${cmd_status}; dropping into interactive shell."
 else
-    echo "Command exited successfully; dropping into interactive shell."
+    info "Command exited successfully; dropping into interactive shell."
 fi
 
 bash
