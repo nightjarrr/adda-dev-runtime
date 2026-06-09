@@ -538,11 +538,15 @@ The `announce_shell_tool <name> <cmd> <desc>` helper registers a tool entry in J
 {"name":"rg","cmd":"rg <pattern> [path]","desc":"Fast text search — prefer over grep"}
 ```
 
-Tier 1 announces its own tools during the entrypoint run. `entrypoint.d/` hooks may call `announce_shell_tool` to extend the registry with tier-specific or project-specific tools. Hooks numbered 2–9 run before Tier 2's rendering hook (conventionally at 10), so their announcements are included when Tier 2 reads the registry.
+Tier 1 announces its own tools during the entrypoint run. `entrypoint.d/` hooks may call `announce_shell_tool` at any hook number to extend the registry with tier-specific or project-specific tools.
+
+**Writing the registry:**
+
+After all `entrypoint.d/` hooks have run, the Tier 1 entrypoint writes the accumulated registry to `/run/.adda-shell-tools.jsonl`. Because the write happens after the full hook chain completes, any hook — regardless of its numeric prefix — can call `announce_shell_tool` and have its entries included.
 
 **Reading the registry:**
 
-`list_shell_tools` prints the accumulated JSONL to stdout, one object per line. Tier 2 calls this after hooks have run to obtain the complete tool list.
+Tier 2 reads `/run/.adda-shell-tools.jsonl` to obtain the complete tool list and render it into agent-facing guidance.
 
 **Entry format:**
 
