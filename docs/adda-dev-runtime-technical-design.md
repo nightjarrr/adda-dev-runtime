@@ -526,6 +526,28 @@ Available helper functions (sourced from Tier 1):
 
 The `entrypoint.d/` directory is created by the Tier 1 Dockerfile and is always present. An empty directory is not an error.
 
+#### Shell tools registry
+
+Agents running inside the container have no inherent knowledge of what CLI tools are installed. The shell tools registry is a mechanism for accumulating this information during bootstrap so that Tier 2 can render it into agent-facing guidance — steering agents toward tools that are present and away from familiar-but-absent alternatives.
+
+**Announcing tools:**
+
+The `announce_shell_tool <name> <cmd> <desc>` helper registers a tool entry in JSONL format:
+
+```json
+{"name":"rg","cmd":"rg <pattern> [path]","desc":"Fast text search — prefer over grep"}
+```
+
+Tier 1 announces its own tools during the entrypoint run. `entrypoint.d/` hooks may call `announce_shell_tool` to extend the registry with tier-specific or project-specific tools. Hooks numbered 2–9 run before Tier 2's rendering hook (conventionally at 10), so their announcements are included when Tier 2 reads the registry.
+
+**Reading the registry:**
+
+`list_shell_tools` prints the accumulated JSONL to stdout, one object per line. Tier 2 calls this after hooks have run to obtain the complete tool list.
+
+**Entry format:**
+
+Each entry has three fields: `name` (tool identifier), `cmd` (canonical invocation syntax), and `desc` (one-line description, which may include "prefer over X" hints). Negative entries ("X is absent") are not used — the registry announces what is present; absence is implied.
+
 ### libexec layout
 
 Scripts and executables are installed under `/usr/local/libexec/adda-dev-runtime/` and split into two subdirectories by purpose.
