@@ -41,7 +41,7 @@ The Coder role is implemented as a dispatched subagent, responsible for code cha
 
 Proto-adda implements two skills from the ADDA SDLC skill catalog: `new-issue` (New Issue) and `ensure-github-labels` (Ensure GitHub Labels). The `quality-gates` executable in Tier 1 implements the ADDA Quality Gates skill and is invoked by Coder.
 
-In addition, proto-adda ships infrastructure skills that are not part of the SDLC design: `go` as the issue workflow entry point, `ci-gate` for CI monitoring coordination, and `adda-shell-tools` for shell tool awareness (see *Shell tool awareness* below). Further auxiliary skills may be added over time.
+In addition, proto-adda ships infrastructure skills that are not part of the SDLC design: `go` as the issue workflow entry point and `ci-gate` for CI monitoring coordination. Further auxiliary skills may be added over time.
 
 ### Agent permissions
 
@@ -83,15 +83,15 @@ The hook performs the following in order:
 
 ## Shell tool awareness
 
-The `adda-shell-tools` skill gives the PM agent a live, accurate picture of which tools are available in the container — without probing with `which` or making assumptions about what is installed.
+Agents receive an accurate picture of which tools are available in the container as always-present context — without probing with `which` or making assumptions about what is installed.
 
 The mechanism spans three components:
 
 1. **Tier 1 tool registry** — the Tier 1 entrypoint and any earlier `entrypoint.d/` hooks accumulate tool announcements via the `announce_shell_tool` helper. This builds a JSONL registry in memory during bootstrap.
 
-2. **Persistence** — the Tier 1 entrypoint writes the accumulated registry to `/run/.adda-shell-tools.jsonl` after all `entrypoint.d/` hooks complete.
+2. **Persistence** — hook `95-write-shell-tools-registry.sh` (Tier 1) seals the registry and writes it to `/run/.adda-shell-tools.jsonl`.
 
-3. **Rendering** — the `render-adda-shell-tools` executable reads `shell-tools.jsonl` and produces a formatted markdown table, including warnings about scripting runtimes that are absent (with Bun alternatives) and tools that are present but non-functional under container security policy. The `adda-shell-tools` skill invokes this executable and returns its output.
+3. **Rendering** — hook `96-render-shell-tools.sh` (Tier 2) runs after the gate. It reads `/run/.adda-shell-tools.jsonl` and renders the registry into `/run/.adda-shell-tools.md`, including warnings about scripting runtimes that are absent (with Bun alternatives) and tools that are present but non-functional under container security policy. `CLAUDE.md` @imports this file so agents receive live tool constraints as always-present context — no manual update to `CLAUDE.md` is needed when the tool list changes.
 
 ---
 

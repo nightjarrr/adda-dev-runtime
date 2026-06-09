@@ -81,7 +81,7 @@ Call the EnterPlanMode tool directly to enter the planning mode. This in-session
 
 **Work breakdown.** Ordered list of implementation steps. For each step: files to create/modify/remove, classes/functions to add/change/remove. Include test coverage plan and any risk areas.
 
-**Verification plan.** Before finalising the Work Breakdown, design a concrete verification approach and agree it with PO. Use `adda-shell-tools` to survey available tools first — tool availability shapes what's possible.
+**Verification plan.** Before finalising the Work Breakdown, design a concrete verification approach and agree it with PO. Tool availability is documented in the **Available CLI tools** section of this file.
 
 The verification section must give Coder executable instructions that exercise the new functionality from a realistic usage scenario, not just static checks. Draw on these techniques when designing those steps:
 
