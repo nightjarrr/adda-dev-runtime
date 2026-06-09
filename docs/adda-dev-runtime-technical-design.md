@@ -407,6 +407,14 @@ Docker provides managed files (`/etc/hosts`, `/etc/hostname`, `/etc/resolv.conf`
 
 ## Tier 1
 
+### Scripting runtime
+
+Bun is included in Tier 1 as the shared scripting runtime for infrastructure tools. Scripts that need structured argument parsing, typed logic, or external API calls are implemented as Bun TypeScript executables rather than shell scripts, providing a consistent scripting environment across all tiers without requiring higher-tier setup.
+
+Shell scripts remain in use for entrypoint glue and `entrypoint.d` hooks, which must participate directly in the entrypoint's shell environment.
+
+Bun executables are compiled to native binaries during the Docker image build. See *Image build and distribution* for build conventions.
+
 ### Entrypoint
 
 Container-side script (`entrypoint.sh`). Validates the runtime contract, starts the proxy bridge, bootstraps the repository, sources `entrypoint.d/` hooks, runs the Tier 3 init hook if present, and hands off to CMD.

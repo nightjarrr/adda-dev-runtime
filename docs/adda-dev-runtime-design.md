@@ -32,7 +32,7 @@ Nothing outside GitHub persists: no host source bind mount, no persistent AI har
 Three concentric boundaries protect the host and project from code running inside the development environment:
 
 1. **Container isolation** — the AI harness container has no host filesystem, process, device, display, container engine socket, or network namespace access beyond what the launcher explicitly grants.
-2. **Proxy-based network perimeter** — the AI harness container has no general network access. All intended outbound traffic goes through a launcher-managed network sidecar proxy that enforces a default-deny domain allow-list.
+2. **Proxy-based network perimeter** — the AI harness container has no general network access. All intended outbound traffic goes through a network proxy sidecar that enforces a default-deny domain allow-list. The proxy is a trusted perimeter component that runs outside the container — running enforcement inside the container would make it defeatable by the untrusted code it protects. The proxy is per-session and runs on the same host; it is not a shared host daemon and requires no external proxy infrastructure.
 3. **AI harness permission configuration** — enforces least privilege when granting permissions to AI actors: agents, skills, and tools.
 
 Two further protections bound the impact of credential exposure:
@@ -56,11 +56,11 @@ The ADDA Dev Runtime is composed of four distinct components. Understanding what
 
 ### Host system
 
-The machine on which the development environment runs. The only fully trusted environment. It carries the host keyring (secrets at rest) and the launcher program. The container engine runs here. The host system is never directly accessible from inside the AI harness container.
+The machine on which the development environment runs. The only fully trusted environment. It carries the host keyring (secrets at rest) and the launcher program. The container engine runs here. The host system is never directly accessible from inside the AI harness container. No development tooling — git, the GitHub CLI, language runtimes, or project-specific tools — is required on the host; all of that runs inside containers.
 
 ### Launcher
 
-A host-side program that creates and tears down a single development session. The launcher retrieves credentials from the host keyring, starts the network proxy sidecar, assembles and runs the AI harness container with its required security constraints, and cleans up on exit. It is the only component that can set session parameters. The launcher is a trusted perimeter component.
+A host-side program that creates and tears down a single development session. The launcher retrieves credentials from the host keyring, starts the network proxy sidecar, assembles and runs the AI harness container with its required security constraints, and cleans up on exit. The workflow is terminal-first; the launcher creates a plain isolated container with no IDE integration protocols or host-container IPC sockets. It is the only component that can set session parameters. The launcher is a trusted perimeter component.
 
 ### Network proxy sidecar
 
@@ -109,7 +109,7 @@ Residual risk: hostile content may influence changes on the current branch until
 
 A dependency may execute hostile code during install, test, build, or runtime. Two dependency classes are distinguished:
 
-- **Container/toolchain dependencies** — OS packages, shell tools, language managers, the AI harness, and other infrastructure baked into the image at build time. Not installed with elevated privileges at runtime.
+- **Container/toolchain dependencies** — OS packages, shell tools, language managers, the AI harness, and other infrastructure baked into the image at build time. Versions are pinned in image definitions; these dependencies are not installed at runtime.
 - **Project code dependencies** — dependencies declared by the repository after it is cloned. Installed at runtime from locked registries, under the unprivileged container user, with only the package-registry access the project requires.
 
 Residual risk: a malicious version already present in a reviewed lockfile can still execute inside the isolated container.
@@ -158,13 +158,11 @@ The AI harness container runs a layered stack of three tiers. Each tier has a di
 
 ### Tier 1 — infrastructure
 
-**What it is:** the hardened, isolated, ephemeral container base. Provides OS packages, core CLI tools, a shared scripting runtime, a runtime user, and the entrypoint with its hook mechanism.
+**What it is:** the hardened, isolated, ephemeral container base. Provides OS packages, core CLI tools, a runtime user, and the entrypoint with its hook mechanism.
 
 **Why it exists as an image:** Tier 1 is pure infrastructure. Packaging it as a container image gives every higher tier and every project a reproducible, version-pinned base with no host-side toolchain requirements.
 
 **What it does not include:** any AI harness, any AI harness configuration, or any project-specific tooling. Tier 1 is AI-harness-agnostic by design.
-
-**Shared scripting runtime:** a scripting runtime is included in Tier 1 as a deliberate architectural choice: infrastructure scripts across all tiers share a consistent runtime environment without requiring additional setup at higher tiers. The choice of specific runtime is an implementation detail documented in the technical design.
 
 ### Tier 2 — ADDA SDLC implementation
 
@@ -200,77 +198,9 @@ The Tier 2 agent configuration contains the SDLC workflow, roles, working princi
 
 ---
 
-## Explicit non-choices
+## Deferred questions
 
-### No VS Code Dev Containers extension
-
-The workflow is terminal-first. IDE integration and host-container IPC sockets are not part of this design.
-
-### No in-container network policy enforcement
-
-Network isolation is not the container's responsibility. The container has no network interface beyond loopback and holds no network administration privileges. The network proxy sidecar, running outside the container trust boundary, is the sole enforcement point for outbound network policy.
-
-### No host-wide daemon proxy
-
-The proxy is per-session runtime infrastructure. It starts with the session and stops when the session exits.
-
-### No network proxy inside the AI harness container
-
-The network proxy runs as a separate component outside the container trust boundary. Running it inside the AI harness container would collapse the security boundary between trusted and untrusted components.
-
-### No external off-host proxy requirement
-
-The perimeter proxy runs on the same host as the AI harness container. The design does not require a corporate or remote proxy service.
-
-### No general web-fetch egress from the AI harness container
-
-Broad web fetch/research is deferred to a separate design. The baseline container remains narrowly networked.
-
-### No host home directory mount
-
-The container has no view of host configuration files, keys, browser profiles, or personal state.
-
-### No SSH agent forwarding
-
-GitHub access is via HTTPS using a fine-grained GitHub Token scoped to the project repository.
-
-### No persistent AI harness config volume
-
-AI harness state is ephemeral. Credentials are injected at startup and not preserved as a host-mounted config directory.
-
-### No container engine socket inside the container
-
-Mounting the container engine socket inside the AI harness container would be equivalent to host escape.
-
-### No git worktrees on the host
-
-Each session clones into an isolated in-container workspace.
-
-### No save-on-exit
-
-Containers are not preserved on exit; uncommitted work is lost. The SDLC's commit-and-push discipline bounds this risk.
-
-### No multi-container per-subagent isolation
-
-Subagents share one container per feature. Per-role separation is enforced by AI harness permissions, not container boundaries.
-
-### No host-side `gh` or `git` dependency
-
-GitHub-aware operations happen inside the container.
-
-### No floating dependency versions
-
-All external dependencies are pinned. Floating versions let upstream changes enter the environment without review — this policy eliminates that risk. Pinning operates at three layers:
-
-1. **Application and tool versions** — exact versions are pinned in image definitions.
-2. **Base image** — base image versions are pinned to specific releases rather than rolling tags.
-3. **OS-level packages** — not pinned to specific package manager version strings; the base distribution's stability policy is the structural pin.
-
----
-
-## Deferred questions and features of the design
-
-The following are recognized but not part of the immediate baseline implementation:
+The following are recognized but not addressed by the current design:
 
 1. **Broad web retrieval plane** — define how user-approved direct URL fetch and research should work without opening general egress from the container.
 2. **Live allow-list management** — explore whether network proxy policy should be reloadable without sidecar restart, and whether a UI/control plane is justified.
