@@ -10,6 +10,30 @@ Throughout, `{owner}` and `{repo}` refer to the GitHub namespace and repository 
 
 ---
 
+## Technology choices
+
+The companion document [adda-sdlc.md](https://github.com/nightjarrr/molim/blob/main/docs/adda-sdlc.md) describes the ADDA SDLC in vendor-agnostic terms. This section grounds each abstract concept into the specific technology this implementation uses.
+
+| Concept | Technology |
+|---|---|
+| Container runtime | Docker Engine (or compatible OCI runtime); `docker run` orchestration |
+| Container base OS | Debian slim |
+| Network perimeter proxy | Envoy (`envoyproxy/envoy`) — per-session sidecar container |
+| Unix socket → TCP bridge | socat — inside the AI harness container |
+| Terminal emulator | Ghostty |
+| Session survivability | tmux |
+| Credential storage | GNOME Secret Service via `libsecret` (`secret-tool`) |
+| Source control and persistence layer | GitHub (Issues, PRs, branches, Actions) |
+| Container registry | GitHub Container Registry (GHCR) |
+| AI harness | Claude Code |
+| Tier 2 SDLC implementation | proto-adda |
+| In-container scripting runtime | Bun (TypeScript/JavaScript) |
+| In-container text editor | Micro (`$EDITOR`, `$VISUAL`) |
+| Git diff pager | delta |
+| Host platform | Linux (Ubuntu 24.04 tested) |
+
+---
+
 ## Design principles
 
 ### Ephemeral runtime, stateless agent, persistent GitHub
