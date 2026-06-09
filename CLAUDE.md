@@ -105,6 +105,7 @@ Tier 1 (adda-dev-runtime)
   adda-dev-runtime/src/bootstrap/<name>.ts                                     <libexec>/bootstrap/<name>
   adda-dev-runtime/content/scripts/runtime/<name>.sh.source                    <libexec>/bin/<name>.sh
   adda-dev-runtime/content/scripts/bootstrap/<name>.sh.source                  <libexec>/bootstrap/<name>.sh
+  adda-dev-runtime/content/scripts/bootstrap/entrypoint.d/<h>.sh.source        <libexec>/bootstrap/entrypoint.d/<h>.sh
 
 Tier 2 (proto-adda)
   proto-adda/src/runtime/<name>.ts                                              <libexec>/bin/<name>
@@ -127,11 +128,14 @@ Current artifacts:
 | `resolve-issue-branch` (Bun executable) | `adda-dev-runtime/src/runtime/resolve-issue-branch.ts` | `/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch` | — |
 | `ci-watch` (Bun executable) | `adda-dev-runtime/src/runtime/ci-watch.ts` | `/usr/local/libexec/adda-dev-runtime/bin/ci-watch` | — |
 | `quality-gates` (Bun executable) | `adda-dev-runtime/src/runtime/quality-gates.ts` | `/usr/local/libexec/adda-dev-runtime/bin/quality-gates` | — |
+| Tier 1 gate hook | `adda-dev-runtime/content/scripts/bootstrap/entrypoint.d/95-write-shell-tools-registry.sh.source` | `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/95-write-shell-tools-registry.sh` | — |
 | Tier 2 bootstrap hook | `proto-adda/content/scripts/bootstrap/entrypoint.d/10-claude-config.sh.source` | `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/10-claude-config.sh` | — |
+| Tier 2 render hook | `proto-adda/content/scripts/bootstrap/entrypoint.d/96-render-shell-tools.sh.source` | `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/96-render-shell-tools.sh` | — |
 | Claude config (CLAUDE.md, settings.json, agents/, skills/) | `proto-adda/content/.claude/` | `/usr/local/share/adda-dev-runtime/.claude/` | `~/.claude/` (ephemeral) |
 | `render-adda-shell-tools` (Bun executable) | `proto-adda/src/runtime/render-adda-shell-tools.ts` | `/usr/local/libexec/adda-dev-runtime/bin/render-adda-shell-tools` | — |
 | `prune-node-modules.sh` (build script) | `adda-dev-runtime/build/prune-node-modules.sh` | (build-stage only, not in final image) | — |
 | `current-issue` (Bun executable) | `adda-dev-runtime/src/runtime/current-issue.ts` | `/usr/local/libexec/adda-dev-runtime/bin/current-issue` | — |
+| Shell tools rendered markdown (runtime artifact) | produced by `96-render-shell-tools.sh` at bootstrap | `/run/.adda-shell-tools.md` | — |
 
 ## CI/build pipeline
 

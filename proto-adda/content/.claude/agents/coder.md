@@ -5,7 +5,6 @@ tools: Read, Edit, Write, Bash, Grep, Glob
 model: sonnet
 permissionMode: acceptEdits
 color: orange
-skills: [adda-shell-tools]
 ---
 
 # Coder

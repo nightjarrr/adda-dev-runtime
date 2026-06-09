@@ -12,7 +12,11 @@ This is a hardened, ephemeral container: no root access, read-only rootfs except
 
 ## Available CLI tools
 
-Use the `adda-shell-tools` skill to get a live table of registered CLI tools and warnings about commonly expected tools that are absent. Load it when you want to use a CLI tool and are unsure what's available.
+@/run/.adda-shell-tools.md
+
+## Session-specific guidance
+
+**Dispatching Explore agents.** When dispatching **Explore** agents, always include in the prompt: "Read `/run/.adda-shell-tools.md` first — it lists available CLI tools and tools to avoid in this container." Explore agents skip CLAUDE.md and @imports; all other agents receive tool constraints via the @import automatically.
 
 ## Roles
 
@@ -77,7 +81,7 @@ Call the EnterPlanMode tool directly to enter the planning mode. This in-session
 
 **Work breakdown.** Ordered list of implementation steps. For each step: files to create/modify/remove, classes/functions to add/change/remove. Include test coverage plan and any risk areas.
 
-**Verification plan.** Before finalising the Work Breakdown, design a concrete verification approach and agree it with PO. Use `adda-shell-tools` to survey available tools first — tool availability shapes what's possible.
+**Verification plan.** Before finalising the Work Breakdown, design a concrete verification approach and agree it with PO. Tool availability is documented in the **Available CLI tools** section of this file.
 
 The verification section must give Coder executable instructions that exercise the new functionality from a realistic usage scenario, not just static checks. Draw on these techniques when designing those steps:
 

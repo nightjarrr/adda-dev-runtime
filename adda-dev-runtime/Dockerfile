@@ -178,11 +178,13 @@ COPY adda-dev-runtime/content/scripts/bootstrap/ /usr/local/libexec/adda-dev-run
 RUN mkdir -p /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d \
     && for f in \
         /usr/local/libexec/adda-dev-runtime/bootstrap/*.sh.source \
-        /usr/local/libexec/adda-dev-runtime/bootstrap/phases/*.sh.source; do \
+        /usr/local/libexec/adda-dev-runtime/bootstrap/phases/*.sh.source \
+        /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/*.sh.source; do \
         mv "$f" "${f%.source}"; \
     done \
     && chmod +x /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.sh \
-                /usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh
+                /usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh \
+                /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/*.sh
 COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/
 COPY --from=bun-builder /build/node_modules/ /usr/local/libexec/adda-dev-runtime/node_modules/
 
