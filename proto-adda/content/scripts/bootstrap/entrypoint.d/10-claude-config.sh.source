@@ -33,12 +33,12 @@ case "${ADDA_DEV_LLM_BACKEND}" in
         ;;
 esac
 
+section "Configuring Claude environment"
+
 # Die if ~/.claude already exists and is non-empty
 if [[ -d "${HOME}/.claude" ]] && [[ -n "$(ls -A "${HOME}/.claude" 2>/dev/null)" ]]; then
     die "${HOME}/.claude already exists and is non-empty; Claude config cannot be initialized."
 fi
-
-section "Configuring Claude environment"
 mkdir -p "${HOME}/.claude"
 cp -r /usr/local/share/adda-dev-runtime/.claude/. "${HOME}/.claude/"
 success "Claude configuration initialized in ~/.claude."
