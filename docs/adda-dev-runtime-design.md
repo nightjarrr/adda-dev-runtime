@@ -60,11 +60,11 @@ The machine on which the development environment runs. The only fully trusted en
 
 ### Launcher
 
-A host-side program that creates and tears down a single development session. The launcher retrieves credentials from the host keyring, starts the network proxy sidecar, assembles and runs the AI harness container with its required security constraints, and cleans up on exit. The workflow is terminal-first; the launcher creates a plain isolated container with no IDE integration protocols or host-container IPC sockets. It is the only component that can set session parameters. The launcher is a trusted perimeter component.
+A host-side program that creates and tears down a single development session. The launcher retrieves credentials from the host keyring, starts the network proxy sidecar, assembles and runs the AI harness container with its required security constraints, and cleans up on exit. The workflow is terminal-first; the launcher creates a plain isolated container — not a Dev Container — with no IDE integration protocols or host-container IPC sockets. It is the only component that can set session parameters. The launcher is a trusted perimeter component.
 
 ### Network proxy sidecar
 
-A per-session network perimeter proxy. It runs as a separate component managed by the launcher — outside the AI harness container trust boundary — and enforces a default-deny domain allow-list on all outbound traffic from the session. The network proxy sidecar is a trusted perimeter component. One network proxy sidecar runs per session.
+A per-session network perimeter proxy. It runs as a separate component managed by the launcher — outside the AI harness container trust boundary — and enforces a default-deny domain allow-list on all outbound traffic from the session. The network proxy sidecar is a trusted perimeter component. Each session gets its own dedicated proxy instance; sessions do not share a proxy.
 
 ### AI harness container
 

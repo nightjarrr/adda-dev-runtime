@@ -8,6 +8,23 @@ Throughout, `{owner}` and `{repo}` refer to the GitHub namespace and repository 
 
 ---
 
+## Technology stack
+
+This section maps the technology-agnostic concepts from the conceptual design to the specific technologies used in this implementation.
+
+| Concept | Technology |
+|---|---|
+| AI harness container | Docker Engine |
+| Network proxy sidecar | Envoy |
+| Host terminal multiplexer | tmux |
+| Host terminal emulator | Ghostty |
+| Tier 1 scripting runtime | Bun |
+| Host secret storage | Secret Service (`secret-tool` / GNOME Keyring) |
+| Container image registry | GitHub Container Registry (GHCR) |
+| Project hosting, issues, PRs, CI/CD | GitHub + GitHub Actions |
+
+---
+
 ## Host prerequisites
 
 Linux only, tested on Ubuntu 24.04.
