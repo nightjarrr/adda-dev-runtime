@@ -125,6 +125,10 @@ Ghostty is the preferred terminal emulator. Increase host terminal scrollback if
 scrollback-limit = 100000000
 ```
 
+### Concurrency
+
+Multiple features may run concurrently. Each invocation gets its own AI harness container, Envoy sidecar, runtime directory, Unix socket, and tmux session. Sessions share no state with each other except through GitHub.
+
 ---
 
 ## Envoy sidecar
@@ -424,6 +428,14 @@ Docker provides managed files (`/etc/hosts`, `/etc/hostname`, `/etc/resolv.conf`
 
 ## Tier 1
 
+### TUI environment
+
+The AI harness is a TUI application. The container provides a real PTY (`docker run -it`), `TERM=xterm-256color` or compatible behavior, and a UTF-8 locale.
+
+Micro is installed as the default TUI editor (`EDITOR=micro`, `VISUAL=micro`). It is available for interactive file editing and is the fallback editor for CLI tools that open `$EDITOR` (e.g. `git commit`, `gh pr create`).
+
+delta is installed as the git diff pager. All `git diff`, `git show`, `git log -p`, and `git add -p` output is automatically routed through delta for syntax highlighting, line numbers, and hunk navigation (n/N).
+
 ### Scripting runtime
 
 Bun is included in Tier 1 as the shared scripting runtime for infrastructure tools. Scripts that need structured argument parsing, typed logic, or external API calls are implemented as Bun TypeScript executables rather than shell scripts, providing a consistent scripting environment across all tiers without requiring higher-tier setup.
@@ -690,6 +702,10 @@ A Tier 3 Dockerfile builds `FROM` the Tier 2 image in use. When present, it give
 - **libexec extensions** — add executables to `bin/` or scripts to `bootstrap/`.
 
 For TypeScript/Bun projects, no Dockerfile is needed; Bun is already in Tier 1.
+
+### Image build
+
+Optional. Present only when the project needs OS-level tooling not in Tier 1. Built `FROM` the Tier 2 image. Published per the project's own CI if needed; not published to this repository's GHCR namespace.
 
 ### Launcher target
 
