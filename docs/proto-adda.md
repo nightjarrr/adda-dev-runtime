@@ -4,7 +4,7 @@ proto-adda is the Claude Code–based Tier 2 implementation of the ADDA SDLC. It
 
 **"Proto"** reflects a deliberate, scoped simplification of the full ADDA SDLC design. The simplifications are intentional, not gaps to fill: proto-adda exists to provide a minimal viable workflow that is itself good enough to support agentic development of full ADDA implementations (DAWE and other future Tier 2s). Concretely: the Associate Architect role is collapsed into the Project Manager; the per-issue artifact structure (spec, tech design, implementation plan) is not produced; issue phases are simplified; and changelog handling is omitted. The core loop — triage, implement, review, merge — is covered.
 
-Companion to [`docs/adda-dev-runtime.md`](adda-dev-runtime.md), which covers the tier architecture, Tier 1 design, and shared build conventions.
+Companion to [`docs/adda-dev-runtime-design.md`](adda-dev-runtime-design.md) (conceptual design) and [`docs/adda-dev-runtime-technical-design.md`](adda-dev-runtime-technical-design.md) (Tier 1 design and shared build conventions).
 
 ---
 
@@ -18,7 +18,7 @@ Companion to [`docs/adda-dev-runtime.md`](adda-dev-runtime.md), which covers the
 
 **CMD:** `["claude"]` — overrides Tier 1's default `/bin/bash`, making the Claude Code process the primary session process. If Claude Code exits, the Tier 1 entrypoint drops to an interactive bash shell for inspection.
 
-Tags and distribution follow the same conventions as Tier 1 — `edge`, `latest`, `v{X.Y.Z}`, `{sha}`, `ci` — documented in the *Image build and distribution* section of `docs/adda-dev-runtime.md`.
+Tags and distribution follow the same conventions as Tier 1 — `edge`, `latest`, `v{X.Y.Z}`, `{sha}`, `ci` — documented in the *Image build and distribution* section of `docs/adda-dev-runtime-technical-design.md`.
 
 ---
 
@@ -97,7 +97,7 @@ The mechanism spans three components:
 
 ## Artifact mapping
 
-Source paths in the repo map to image destinations by the convention described in `docs/adda-dev-runtime.md`. Proto-adda artifacts:
+Source paths in the repo map to image destinations by the convention described in the *libexec layout* section of `docs/adda-dev-runtime-technical-design.md`. Proto-adda artifacts:
 
 | Repo source | Image destination |
 |---|---|

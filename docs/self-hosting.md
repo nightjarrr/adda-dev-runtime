@@ -2,7 +2,7 @@
 
 **Audience: the agent working inside the development container.**
 
-For the canonical tier model, see [`docs/adda-dev-runtime.md`](adda-dev-runtime.md).
+For the conceptual design, see [`docs/adda-dev-runtime-design.md`](adda-dev-runtime-design.md). For the technical implementation reference, see [`docs/adda-dev-runtime-technical-design.md`](adda-dev-runtime-technical-design.md).
 
 ---
 
@@ -50,4 +50,4 @@ The Tier 1 and Tier 2 source directories contain the repo's primary deliverables
 
 ## Relationship to canonical tier definitions
 
-The tier model (what Tier 1 and Tier 2 are, how they are layered, libexec structure, artifact routing) is documented in [`docs/adda-dev-runtime.md`](adda-dev-runtime.md). This document only explains how that model applies to the self-hosting situation specific to this repo. When the two conflict, `docs/adda-dev-runtime.md` is authoritative.
+The tier model (what Tier 1 and Tier 2 are, how they are layered) is documented in [`docs/adda-dev-runtime-design.md`](adda-dev-runtime-design.md). The libexec layout and artifact routing convention are documented in [`docs/adda-dev-runtime-technical-design.md`](adda-dev-runtime-technical-design.md). This document only explains how those models apply to the self-hosting situation specific to this repo. When the two conflict, the design and technical docs are authoritative.
