@@ -112,7 +112,6 @@ verify_filesystem_hardening() {
         "$HOME"
         "/workspace"
         "/tmp"
-        "/var/tmp"
         "/run"
     )
 

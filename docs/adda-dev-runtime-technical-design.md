@@ -401,7 +401,6 @@ The image must run as that user, or the entrypoint should warn that runtime UID/
 | `/home/${ADDA_DEV_USER}` | `0700` | yes | AI harness state, gh config, git config, runtime state, shell config. |
 | `/workspace` | `0700` | yes | Repository checkout, project writes, test/build output. |
 | `/tmp` | `0700` | yes | Temporary files; exec permitted for tools that create and run temp scripts. |
-| `/var/tmp` | `0700` | yes | Temporary files for tools that use `/var/tmp`. |
 | `/run` | `0700` | no | Runtime files and mounted proxy socket. |
 
 `$HOME` and `/workspace` must permit execution because language tooling may install executable interpreters, virtualenvs, or scripts there. `/run` should be `noexec`; it exists for runtime/socket files.
