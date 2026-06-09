@@ -135,8 +135,9 @@ Multiple features may run concurrently. Each invocation gets its own AI harness 
 
 Runs as a separate container managed by the launcher. Not inside the AI harness container. Per-session: one AI harness container gets one Envoy sidecar.
 
-Hardening flags:
+The Envoy sidecar is outside the AI harness container trust boundary but should still be minimized. Hardening flags:
 
+* exact image version and digest pinned in launcher configuration
 * `--rm -d`
 * `--cap-drop ALL`
 * `--security-opt no-new-privileges`
