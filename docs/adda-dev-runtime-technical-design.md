@@ -526,7 +526,10 @@ Available helper functions (sourced from Tier 1):
 - `success <msg>` — print a success line.
 - `warning <msg>` — print a warning line (non-fatal).
 - `die <msg>` — print an error and exit non-zero.
+- `info <msg>` — print an informational line; use instead of bare `echo` in hooks.
 - `announce_shell_tool <name> <cmd> <desc>` — register a CLI tool in the agent-visible shell tools registry; hooks numbered 10–94 call this to extend the registry before hook 95 seals it. Calling this after hook 95 is a fatal error.
+
+All plain-text output in bootstrap scripts and hooks must use `info()` instead of bare `echo`. `info()` is hook-mode aware: in normal mode it prints a plain line; in hook mode it indents to align with the other hook-mode helpers.
 
 The `entrypoint.d/` directory is created by the Tier 1 Dockerfile and is always present. An empty directory is not an error.
 
@@ -646,7 +649,8 @@ Built from `adda-dev-runtime/Dockerfile`. Published as `ghcr.io/{owner}/adda-dev
 ### `entrypoint.d` hook requirements
 
 A Tier 2 `entrypoint.d/` hook should:
-- Use Tier 1 helper functions (`require_env`, `require_tool`, `section`, `success`, `die`) for consistent output and failure handling.
+- Use Tier 1 helper functions (`require_env`, `require_tool`, `section`, `success`, `die`, `info`) for consistent output and failure handling.
+- Use `info()` instead of bare `echo` for any plain-text output.
 - Validate AI-harness-specific environment variables using `require_env`.
 - Validate that the AI harness binary is present using `require_tool`.
 - Initialise the AI harness configuration in `$HOME` so that the harness is ready when CMD runs.
