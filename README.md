@@ -4,7 +4,7 @@
 [![CI](https://github.com/nightjarrr/adda-dev-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/nightjarrr/adda-dev-runtime/actions/workflows/ci.yml)
 [![Release](https://github.com/nightjarrr/adda-dev-runtime/actions/workflows/release.yml/badge.svg)](https://github.com/nightjarrr/adda-dev-runtime/actions/workflows/release.yml)
 
-[ADDA SDLC](docs/adda-dev-runtime-design.md) is a structured agentic framework: an AI coding agent works inside a hardened, ephemeral container and persists all development state through GitHub.
+[ADDA SDLC](https://github.com/nightjarrr/molim/blob/main/docs/adda-sdlc.md) is a structured agentic framework: an AI coding agent works inside a hardened, ephemeral container and persists all development state through GitHub.
 
 ---
 
