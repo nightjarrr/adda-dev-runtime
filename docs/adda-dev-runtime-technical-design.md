@@ -133,17 +133,6 @@ See *Network* for Envoy's policy responsibilities.
 
 Bound to container loopback (`127.0.0.1:9901`). Not published to any host port — parallel Envoy sidecars coexist without port conflicts.
 
-Access via `docker exec` into the named Envoy container. The Envoy image does not include HTTP client tools; use bash's built-in TCP support (HTTP/1.1 required — Envoy rejects HTTP/1.0):
-
-```bash
-docker exec adda-dev-envoy-<RUN_ID> bash -c \
-  'exec 3<>/dev/tcp/127.0.0.1/9901
-   printf "GET /ready HTTP/1.1\r\nHost: localhost\r\n\r\n" >&3
-   cat <&3'
-```
-
-Replace `/ready` with `/stats`, `/listeners`, `/clusters`, or `/config_dump` for other diagnostic endpoints.
-
 The admin interface is for diagnostics only. It is not a policy editing UI and must not be exposed to untrusted networks.
 
 ---

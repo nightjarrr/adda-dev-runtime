@@ -156,6 +156,23 @@ scrollback-limit = 100000000
 
 ---
 
+## Diagnostics
+
+### Envoy proxy
+
+The Envoy sidecar exposes an admin interface on `127.0.0.1:9901` inside its container. It is not published to any host port. Access it via `docker exec` — the Envoy image has no HTTP client tools, so use bash's built-in TCP support (HTTP/1.1 required):
+
+```bash
+docker exec adda-dev-envoy-<RUN_ID> bash -c \
+  'exec 3<>/dev/tcp/127.0.0.1/9901
+   printf "GET /ready HTTP/1.1\r\nHost: localhost\r\n\r\n" >&3
+   cat <&3'
+```
+
+Replace `/ready` with `/stats`, `/listeners`, `/clusters`, or `/config_dump` for other diagnostic endpoints. The `RUN_ID` is printed by the launcher at startup.
+
+---
+
 ## Documentation
 
 | Document | Contents |
