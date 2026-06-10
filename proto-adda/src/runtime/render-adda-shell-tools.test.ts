@@ -429,7 +429,7 @@ describe("RenderAddaShellTools", () => {
         expect(code).toBe(0);
         const out = outLines.join("");
         const expectedWarning =
-            "Warning: /run/.adda-shell-tools.jsonl could not be read — the container may not have bootstrapped correctly. If you encounter unexpected tool availability issues, consider mentioning this to PO.";
+            "Warning: /run/adda/.adda-shell-tools.jsonl could not be read — the container may not have bootstrapped correctly. If you encounter unexpected tool availability issues, consider mentioning this to PO.";
         expect(out).toContain(expectedWarning);
     });
 
@@ -444,7 +444,7 @@ describe("RenderAddaShellTools", () => {
         expect(code).toBe(0);
         const out = outLines.join("");
         const expectedWarning =
-            "Warning: some entries in /run/.adda-shell-tools.jsonl were skipped due to malformed content. If tool availability seems incorrect, consider asking PO for guidance.";
+            "Warning: some entries in /run/adda/.adda-shell-tools.jsonl were skipped due to malformed content. If tool availability seems incorrect, consider asking PO for guidance.";
         expect(out).toContain(expectedWarning);
     });
 });

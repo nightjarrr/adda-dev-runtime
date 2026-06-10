@@ -139,7 +139,7 @@ export class RenderAddaShellTools extends ScriptBase<RenderAddaShellToolsDeps, E
     }
 
     protected async execute(_args: EmptyArgs): Promise<void> {
-        const shellToolsPath = "/run/.adda-shell-tools.jsonl";
+        const shellToolsPath = "/run/adda/.adda-shell-tools.jsonl";
 
         const warnings: string[] = [];
 
@@ -148,7 +148,7 @@ export class RenderAddaShellTools extends ScriptBase<RenderAddaShellToolsDeps, E
             raw = await this.deps.fileReader.readFile(shellToolsPath);
         } catch {
             const readFileWarning =
-                "Warning: /run/.adda-shell-tools.jsonl could not be read — the container may not have bootstrapped correctly. If you encounter unexpected tool availability issues, consider mentioning this to PO.";
+                "Warning: /run/adda/.adda-shell-tools.jsonl could not be read — the container may not have bootstrapped correctly. If you encounter unexpected tool availability issues, consider mentioning this to PO.";
             warnings.push(readFileWarning);
             raw = "";
         }
@@ -157,7 +157,7 @@ export class RenderAddaShellTools extends ScriptBase<RenderAddaShellToolsDeps, E
 
         if (skippedLines.length > 0) {
             const malformedWarning =
-                "Warning: some entries in /run/.adda-shell-tools.jsonl were skipped due to malformed content. If tool availability seems incorrect, consider asking PO for guidance.";
+                "Warning: some entries in /run/adda/.adda-shell-tools.jsonl were skipped due to malformed content. If tool availability seems incorrect, consider asking PO for guidance.";
             warnings.push(malformedWarning);
         }
 

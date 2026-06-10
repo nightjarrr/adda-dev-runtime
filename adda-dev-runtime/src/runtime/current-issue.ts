@@ -9,8 +9,8 @@ import { executeSync } from "./current-issue/sync";
 import type { Envelope, IssueState, IssueStateStore, ScriptOutput } from "./current-issue/types";
 import { IssueStateSchema } from "./current-issue/types";
 
-const STATE_PATH = "/run/.adda-current-issue";
-const STATE_TMP_PATH = "/run/.adda-current-issue.tmp";
+const STATE_PATH = "/run/adda/.adda-current-issue";
+const STATE_TMP_PATH = "/run/adda/.adda-current-issue.tmp";
 
 export type { IssueStateStore, ScriptOutput } from "./current-issue/types";
 

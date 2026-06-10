@@ -103,6 +103,10 @@ mark_bootstrap_complete() {
 }
 trap mark_bootstrap_complete EXIT
 
+section "Creating /run/adda runtime directory"
+mkdir -p /run/adda
+success "/run/adda runtime directory created."
+
 # shellcheck disable=SC1091
 # Why: phases/ files are co-located scripts discovered at runtime via
 # _PHASES_DIR; the source path is intentionally dynamic.

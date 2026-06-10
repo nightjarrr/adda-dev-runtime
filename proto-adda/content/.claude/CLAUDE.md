@@ -12,11 +12,11 @@ This is a hardened, ephemeral container: no root access, read-only rootfs except
 
 ## Available CLI tools
 
-@/run/.adda-shell-tools.md
+@/run/adda/.adda-shell-tools.md
 
 ## Session-specific guidance
 
-**Dispatching Explore agents.** When dispatching **Explore** agents, always include in the prompt: "Read `/run/.adda-shell-tools.md` first — it lists available CLI tools and tools to avoid in this container." Explore agents skip CLAUDE.md and @imports; all other agents receive tool constraints via the @import automatically.
+**Dispatching Explore agents.** When dispatching **Explore** agents, always include in the prompt: "Read `/run/adda/.adda-shell-tools.md` first — it lists available CLI tools and tools to avoid in this container." Explore agents skip CLAUDE.md and @imports; all other agents receive tool constraints via the @import automatically.
 
 ## Roles
 

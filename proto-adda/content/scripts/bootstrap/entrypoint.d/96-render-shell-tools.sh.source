@@ -3,11 +3,11 @@
 #   registry into agent-facing markdown.
 #
 # Sourced by: entrypoint.sh (as an entrypoint.d hook, after hook 95 has
-#   sealed the registry and written /run/.adda-shell-tools.jsonl).
+#   sealed the registry and written /run/adda/.adda-shell-tools.jsonl).
 # Sourcing context: runs in the entrypoint shell; all helper functions
 #   from 00-helpers.sh are available.
 #
-# Effect: writes /run/.adda-shell-tools.md — the rendered markdown
+# Effect: writes /run/adda/.adda-shell-tools.md — the rendered markdown
 #   content that CLAUDE.md @imports so agents receive live tool
 #   constraints inline. No modification to ~/.claude/CLAUDE.md is
 #   needed; the @import handles injection automatically.
@@ -15,5 +15,5 @@
 
 section "Rendering shell tools registry"
 
-/usr/local/libexec/adda-dev-runtime/bin/render-adda-shell-tools > /run/.adda-shell-tools.md
-success "Shell tools rendered to /run/.adda-shell-tools.md."
+/usr/local/libexec/adda-dev-runtime/bin/render-adda-shell-tools > /run/adda/.adda-shell-tools.md
+success "Shell tools rendered to /run/adda/.adda-shell-tools.md."

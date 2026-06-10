@@ -516,7 +516,7 @@ Hooks are named with a numeric prefix for explicit ordering (e.g. `10-name.sh`).
 
 **Hook number convention:**
 - **10–94**: Extension hooks — Tier 2 and Tier 3 Dockerfiles place `announce_shell_tool` calls and other setup here.
-- **95**: Tier 1-owned gate — seals the announcement list and writes `/run/.adda-shell-tools.jsonl`. Must not be overridden or reused.
+- **95**: Tier 1-owned gate — seals the announcement list and writes `/run/adda/.adda-shell-tools.jsonl`. Must not be overridden or reused.
 - **96–99**: Post-gate — the tool list is final. Tier 2/3 may render or process the registry but must not call `announce_shell_tool`.
 
 Available helper functions (sourced from Tier 1):
@@ -549,11 +549,11 @@ Tier 1 announces its own tools during the entrypoint run. `entrypoint.d/` hooks 
 
 **Writing the registry:**
 
-Hook `95-write-shell-tools-registry.sh` is the Tier 1-owned gate. It runs after all extension hooks (10–94) have had the opportunity to call `announce_shell_tool`. The gate sets `_SHELL_TOOLS_SEALED="1"` to activate bidirectional guards, then writes `/run/.adda-shell-tools.jsonl`. Any call to `announce_shell_tool` after hook 95 is a fatal error; any call to `list_shell_tools` before hook 95 is also a fatal error.
+Hook `95-write-shell-tools-registry.sh` is the Tier 1-owned gate. It runs after all extension hooks (10–94) have had the opportunity to call `announce_shell_tool`. The gate sets `_SHELL_TOOLS_SEALED="1"` to activate bidirectional guards, then writes `/run/adda/.adda-shell-tools.jsonl`. Any call to `announce_shell_tool` after hook 95 is a fatal error; any call to `list_shell_tools` before hook 95 is also a fatal error.
 
 **Reading the registry:**
 
-Tier 2 reads `/run/.adda-shell-tools.jsonl` to obtain the complete tool list and format it into agent-facing guidance.
+Tier 2 reads `/run/adda/.adda-shell-tools.jsonl` to obtain the complete tool list and format it into agent-facing guidance.
 
 **Entry format:**
 
