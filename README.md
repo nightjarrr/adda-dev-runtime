@@ -4,7 +4,7 @@
 [![CI](https://github.com/nightjarrr/adda-dev-runtime/actions/workflows/ci.yml/badge.svg)](https://github.com/nightjarrr/adda-dev-runtime/actions/workflows/ci.yml)
 [![Release](https://github.com/nightjarrr/adda-dev-runtime/actions/workflows/release.yml/badge.svg)](https://github.com/nightjarrr/adda-dev-runtime/actions/workflows/release.yml)
 
-A hardened, ephemeral container runtime for AI-assisted software development on Linux.
+ADDA is a structured agentic SDLC framework: an AI coding agent works inside a hardened, ephemeral container and persists all development state through GitHub — see [adda-dev-runtime-design.md](docs/adda-dev-runtime-design.md) for the full design.
 
 ---
 
