@@ -1,7 +1,7 @@
 ---
 name: new-issue
 description: Create a new GitHub issue in the correct initial triage state for this project's agentic SDLC. Applies one type label (feature, bug, chore, or docs) plus phase: triage. Use this skill whenever the user wants to log, track, record, or capture something as a GitHub issue — even if they don't use the word "issue". Triggered by phrases like "create a new issue", "let's create an issue", "track this as an issue", "open an issue for this", "file a bug", "let's file an issue", "add chore issue", "submit a docs issue".
-allowed-tools: Bash(gh issue create)
+allowed-tools: Write(/tmp/*), Bash(gh issue create)
 ---
 
 # New Issue (v2)
@@ -65,12 +65,22 @@ Then call `AskUserQuestion`:
 
 ### Step 4 — Create
 
-Use Bash tool to invoke `gh` CLI:
+**If body is empty**, pass it inline:
 
 ```bash
 gh issue create \
   --title "<title>" \
-  --body "<body, or empty string if none>" \
+  --body "" \
+  --label "<type>" \
+  --label "phase: triage"
+```
+
+**If body is non-empty**, write it to a temp file first using the Write tool (path: `/tmp/new-issue-body-<uuid>.md`, where `<uuid>` is a random 8-character hex string you generate), then reference it with `--body-file`:
+
+```bash
+gh issue create \
+  --title "<title>" \
+  --body-file "/tmp/new-issue-body-<uuid>.md" \
   --label "<type>" \
   --label "phase: triage"
 ```
@@ -170,8 +180,10 @@ Body:  Currently the repo is using versions pinning, and version update was last
 
 > selects: "Create now"
 
+Write body to `/tmp/new-issue-body-3c9f14ab.md`, then:
+
 ```bash
-gh issue create --title "Update pre-commit hook versions to latest stable" --body "Currently the repo is using versions pinning, and version update was last done in 2024. Need to run a refresh to current stable versions." --label "chore" --label "phase: triage"
+gh issue create --title "Update pre-commit hook versions to latest stable" --body-file "/tmp/new-issue-body-3c9f14ab.md" --label "chore" --label "phase: triage"
 ```
 Reply: "Created #73 — Update pre-commit hook versions to latest stable — https://github.com/owner/repo/issues/73 — labels `chore` and `phase: triage`."
 
@@ -226,8 +238,10 @@ Body:  The repo is pinned to versions from 2024 and we should refresh to current
 
 > selects: "Create now"
 
+Write body to `/tmp/new-issue-body-7e2d05f1.md`, then:
+
 ```bash
-gh issue create --title "Refresh pre-commit hook versions" --body "The repo is pinned to versions from 2024 and we should refresh to current." --label "chore" --label "phase: triage"
+gh issue create --title "Refresh pre-commit hook versions" --body-file "/tmp/new-issue-body-7e2d05f1.md" --label "chore" --label "phase: triage"
 ```
 Reply: "Created #74 — Refresh pre-commit hook versions — https://github.com/owner/repo/issues/74 — labels `chore` and `phase: triage`."
 
