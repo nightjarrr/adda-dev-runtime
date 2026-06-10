@@ -1,6 +1,5 @@
 import type { EnvDep, FileSysDep, ShellDep } from "@adda/lib";
 import { parseJson, ScriptZodValidationError } from "@adda/lib";
-import { z } from "zod";
 
 import { runRepoInitHook } from "./hook";
 import { resolveIssueBranch } from "./resolve";

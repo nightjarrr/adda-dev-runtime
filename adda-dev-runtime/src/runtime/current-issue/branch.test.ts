@@ -206,6 +206,7 @@ describe("executeBranchEnsure", () => {
         expect(ghDevelopCalls.length).toBe(1);
         expect(ghDevelopCalls[0]).toContain("chore/270-branch-lifecycle-tooling-for-sdlc-roles");
         expect(ghDevelopCalls[0]).toContain("270");
+        expect(ghDevelopCalls[0]).toContain("--checkout");
     });
 
     test("main + current is main, degenerate title (all Unicode) — emits success with action: created, warning present", async () => {
@@ -245,6 +246,23 @@ describe("executeBranchEnsure", () => {
         await expect(executeBranchEnsure(deps, store, output)).rejects.toThrow();
         expect(output.forwarded).toContain("gh error output");
         expect(output.failed.length).toBe(1);
+    });
+
+    test("git branch --show-current fails — forwards stderr and calls fail", async () => {
+        const { deps, output } = makeMockDeps(async (command) => {
+            if (command[0] === RESOLVE_BIN) {
+                return makeShellResult({ stdout: makeResolveResponse("feature_branch", "chore/270-my-branch") });
+            }
+            if (command[0] === "git" && command[1] === "branch") {
+                return makeShellResult({ stdout: "", stderr: "fatal: not a git repository", exitCode: 1 });
+            }
+            return makeShellResult();
+        });
+        const store = makeMockStore();
+        await expect(executeBranchEnsure(deps, store, output)).rejects.toThrow();
+        expect(output.forwarded).toContain("fatal: not a git repository");
+        expect(output.failed.length).toBe(1);
+        expect(output.failed[0]).toContain("git branch --show-current failed");
     });
 });
 

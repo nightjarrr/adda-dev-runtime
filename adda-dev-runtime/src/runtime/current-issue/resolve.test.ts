@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { Shell, ShellDep, ShellResult, StdioDep } from "../../lib/index";
+import type { Shell, ShellDep, ShellResult } from "../../lib/index";
 import { ScriptZodValidationError } from "../../lib/index";
 import type { ScriptOutput } from "./types";
 import { resolveIssueBranch } from "./resolve";
