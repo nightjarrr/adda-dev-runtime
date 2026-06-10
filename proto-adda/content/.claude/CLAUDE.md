@@ -58,7 +58,7 @@ Every implementation task — regardless of size — follows this workflow from 
 
 **After each commit & push, CI must be green before proceeding.** PM owns CI health: red CI caused by a `code_fix` issue is never surfaced to PO as an outcome — it is analyzed and fixed autonomously if possible. CI monitoring is handled via the `ci-gate` skill at steps 5a, 7, and 10.
 
-### 1. Issue identification
+### 1. Issue intake
 
 Run `/usr/local/libexec/adda-dev-runtime/bin/current-issue show` to read the current issue state, then confirm with PO. PO can provide a different number. If no issue exists yet, use the `/new-issue` skill to create one.
 
