@@ -22,6 +22,8 @@
       "Bash(tsc *)",
       "Bash(oxlint *)",
       "Bash(oxfmt *)",
+      "Bash(rg *)",
+      "Bash(fdfind *)",
       "Bash(jq *)",
       "Bash(gh run *)",
       "Bash(gh pr comment *)",
