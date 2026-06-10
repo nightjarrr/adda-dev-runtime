@@ -8,7 +8,7 @@
 #   - render-adda-shell-tools Bun executable
 #
 # Pinned versions:
-#   Claude Code:  2.1.112
+#   Claude Code:  2.1.170
 # ======================================================================
 
 ARG BUN_VERSION=1.3.14
@@ -42,7 +42,7 @@ USER root
 # BUN_INSTALL is set inline (not as a persistent ENV) so the global install
 # lands at /usr/local/bin/claude, which is already on PATH.
 # ----------------------------------------------------------------------
-ENV CLAUDE_CODE_VERSION=2.1.112
+ENV CLAUDE_CODE_VERSION=2.1.170
 RUN BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} \
     && rm -rf /usr/local/install/global/node_modules/@img/sharp-libvips-linuxmusl-x64 \
               /usr/local/install/global/node_modules/@img/sharp-linuxmusl-x64 \
