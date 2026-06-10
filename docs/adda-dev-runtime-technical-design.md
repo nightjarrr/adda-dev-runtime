@@ -107,24 +107,6 @@ The launcher creates a named host tmux session and re-enters itself inside that 
 
 The launcher seeds `~/.tmux.conf` from `scripts/adda-dev.tmux.conf` only when `~/.tmux.conf` is absent. Existing user tmux config is never overwritten.
 
-Recommended seed behavior: large scrollback; mouse mode enabled; slower mouse-wheel scrolling in copy mode; short escape-time for responsive TUIs; focus events enabled; true-color terminal features; clipboard/passthrough/title mutation disabled for safety; no `remain-on-exit failed` default.
-
-With tmux mouse mode enabled, normal terminal selection may require Shift-drag depending on terminal emulator.
-
-Common tmux actions:
-
-```text
-Ctrl-b d     detach from session
-Ctrl-b [     enter copy mode
-Ctrl-b x     kill pane
-```
-
-Ghostty is the preferred terminal emulator. Increase host terminal scrollback if desired:
-
-```text
-scrollback-limit = 100000000
-```
-
 ### Concurrency
 
 Multiple features may run concurrently. Each invocation gets its own AI harness container, Envoy sidecar, runtime directory, Unix socket, and tmux session. Sessions share no state with each other except through GitHub.
@@ -279,39 +261,6 @@ Both are stored in the host Secret Service keyring, retrieved by the launcher, a
 | DeepSeek API key | `adda-dev` | `deepseek` | `apikey` (default) |
 
 All entries use the `adda-dev` service namespace. `account` identifies the target system; `key` identifies the credential within that system, configured per-repo in `adda-dev.env` via `ADDA_DEV_KEYRING_GITHUB_KEY`, `ADDA_DEV_KEYRING_CLAUDE_KEY`, and `ADDA_DEV_KEYRING_DEEPSEEK_KEY`. Multiple GitHub repos can coexist in one keyring by using distinct key values (e.g. `acme-token`, `otherrepo-token`).
-
-### One-time bootstrap: Claude Code OAuth token
-
-Acquire the token using a throwaway container:
-
-```bash
-docker run --rm -it oven/bun:latest \
-  sh -c "BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code && claude setup-token"
-```
-
-Procedure:
-1. The container prints an authorization URL.
-2. Open it in the host browser.
-3. Authorize.
-4. Copy the authorization code back into the container.
-5. Claude Code exchanges the code for an OAuth token and displays it.
-6. Store the token in the host keyring:
-
-```bash
-secret-tool store --label='Claude Code OAuth' \
-  service adda-dev account claude key oauth
-```
-
-### One-time bootstrap: GitHub Token
-
-Generate a fine-grained Personal Access Token in GitHub and store it directly in the keyring:
-
-```bash
-secret-tool store --label='Claude Code GitHub Token ({repo})' \
-  service adda-dev account github key {repo}-token
-```
-
-Replace `{repo}` with the actual repository name. The `{repo}-token` value must match `ADDA_DEV_KEYRING_GITHUB_KEY` in that repo's `adda-dev.env`.
 
 ### Retrieval
 
