@@ -2,6 +2,7 @@ import type { parseArgs } from "node:util";
 import type { EnvDep, FileReaderDep, FileSysDep, FileWriterDep, ShellDep, ShellResult, StdioDep } from "@adda/lib";
 import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
 
+import { executeBranchEnsure, executeBranchVerify } from "./current-issue/branch";
 import { executeClear } from "./current-issue/clear";
 import { executeShow } from "./current-issue/show";
 import { executeSwitch } from "./current-issue/switch";
@@ -24,6 +25,7 @@ type CurrentIssueArgs =
     | { subcommand: "sync"; skipRepoInit: boolean }
     | { subcommand: "clear"; skipRepoInit: boolean }
     | { subcommand: "get"; field: string }
+    | { subcommand: "branch"; mode: "ensure" | "verify" }
     | { subcommand: "unknown"; name: string };
 
 // --- Local helpers for get ---
@@ -89,6 +91,8 @@ export class CurrentIssueScript
             allowPositionals: true,
             options: {
                 "skip-repo-init": { type: "boolean", default: false },
+                ensure: { type: "boolean", default: false },
+                verify: { type: "boolean", default: false },
             },
         };
     }
@@ -105,6 +109,15 @@ export class CurrentIssueScript
         const skipRepoInit = (parsed.values["skip-repo-init"] as boolean | undefined) ?? false;
         if (skipRepoInit && (subcommand === "show" || subcommand === "get")) {
             const error = `--skip-repo-init is not valid for '${subcommand}'`;
+            this.emit({ status: "error", issue: null, details: {}, error });
+            throw new ScriptArgsError(error);
+        }
+
+        const ensure = (parsed.values["ensure"] as boolean | undefined) ?? false;
+        const verify = (parsed.values["verify"] as boolean | undefined) ?? false;
+        if ((ensure || verify) && subcommand !== "branch") {
+            const flag = ensure ? "--ensure" : "--verify";
+            const error = `${flag} is not valid for '${subcommand}'`;
             this.emit({ status: "error", issue: null, details: {}, error });
             throw new ScriptArgsError(error);
         }
@@ -143,6 +156,25 @@ export class CurrentIssueScript
             return { subcommand: "get", field };
         }
 
+        if (subcommand === "branch") {
+            if (skipRepoInit) {
+                const error = "--skip-repo-init is not valid for 'branch'";
+                this.emit({ status: "error", issue: null, details: {}, error });
+                throw new ScriptArgsError(error);
+            }
+            if (ensure && verify) {
+                const error = "--ensure and --verify are mutually exclusive";
+                this.emit({ status: "error", issue: null, details: {}, error });
+                throw new ScriptArgsError(error);
+            }
+            if (!ensure && !verify) {
+                const error = "usage: current-issue branch --ensure | --verify";
+                this.emit({ status: "error", issue: null, details: {}, error });
+                throw new ScriptArgsError(error);
+            }
+            return { subcommand: "branch", mode: ensure ? "ensure" : "verify" };
+        }
+
         return { subcommand: "unknown", name: subcommand };
     }
 
@@ -164,6 +196,10 @@ export class CurrentIssueScript
                 try {
                     await executeShow(new SilentStore(this.deps), new GetScriptOutput(args.field, this.deps.stdio.stdout));
                 } catch {}
+                return;
+            case "branch":
+                if (args.mode === "ensure") await executeBranchEnsure(this.deps, this, this);
+                else await executeBranchVerify(this.deps, this, this);
                 return;
             default: {
                 const message = `unknown subcommand: ${args.name}`;

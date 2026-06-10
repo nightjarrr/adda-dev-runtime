@@ -1,19 +1,10 @@
 import type { EnvDep, FileSysDep, ShellDep } from "@adda/lib";
 import { parseJson, ScriptZodValidationError } from "@adda/lib";
-import { z } from "zod";
 
 import { runRepoInitHook } from "./hook";
+import { resolveIssueBranch } from "./resolve";
 import { GhIssueSchema } from "./types";
 import type { IssueState, IssueStateStore, ScriptOutput } from "./types";
-
-const RESOLVE_ISSUE_BRANCH_BIN = "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch";
-
-const ResolveIssueBranchOutputSchema = z.object({
-    status: z.string(),
-    branch: z.string(),
-    pr: z.string(),
-    details: z.string(),
-});
 
 function requireEnvVar(deps: EnvDep, name: string, output: ScriptOutput): string {
     const value = deps.env.get(name);
@@ -66,32 +57,7 @@ export async function executeSwitch(
     const phaseLabel = labels.find((l) => l.name.startsWith("phase:"))?.name ?? "";
 
     // Step 4: Resolve branch
-    const resolveResult = await deps.shell.run([RESOLVE_ISSUE_BRANCH_BIN, issueId], { strict: false });
-    if (resolveResult.exitCode !== 0) {
-        output.forwardStderr(resolveResult);
-        output.fail(`resolve-issue-branch failed for issue #${issueId}`);
-    }
-
-    let resolveRaw: unknown;
-    try {
-        resolveRaw = parseJson(resolveResult.stdout);
-    } catch {
-        output.fail(`invalid JSON from resolve-issue-branch for issue #${issueId}`);
-    }
-
-    const resolveParsed = ResolveIssueBranchOutputSchema.safeParse(resolveRaw);
-    if (!resolveParsed.success) {
-        const err = new ScriptZodValidationError("unexpected resolve-issue-branch output", resolveParsed.error, resolveRaw);
-        output.emit({ status: "error", issue: null, details: {}, error: err.short });
-        throw err;
-    }
-
-    const resolveData = resolveParsed.data;
-
-    if (resolveData.status === "ambiguous" || resolveData.status === "error") {
-        output.forwardStderr(resolveResult);
-        output.fail(`resolve-issue-branch returned '${resolveData.status}' for issue #${issueId}: ${resolveData.details}`);
-    }
+    const resolveData = await resolveIssueBranch(deps, issueId, output);
 
     // Step 5: Determine branch
     const branch = resolveData.status === "main" ? "main" : resolveData.branch;

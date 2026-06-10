@@ -811,7 +811,7 @@ describe("CurrentIssueScript", () => {
 
         test("state file present, clean tree, git checkout main fails — error envelope, exit 1, stderr forwarded", async () => {
             const deleteFileMock = mock(async (_path: string) => {});
-            const { deps, outLines, errLines } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") {
                         return makeShellResult({ stdout: "" });
