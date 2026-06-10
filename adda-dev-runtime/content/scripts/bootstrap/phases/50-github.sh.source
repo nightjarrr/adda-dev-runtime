@@ -58,7 +58,7 @@ success "Repository cloned."
 # ----------------------------------------------------------------------
 # Switch to the issue branch
 # current-issue switch resolves the branch, checks it out, and writes
-# the issue state to /run/.adda-current-issue. --skip-repo-init defers
+# the issue state to /run/adda/.adda-current-issue. --skip-repo-init defers
 # the repo-level init hook to the entrypoint's dedicated REPO INIT step.
 # ----------------------------------------------------------------------
 section "Switching to issue branch"

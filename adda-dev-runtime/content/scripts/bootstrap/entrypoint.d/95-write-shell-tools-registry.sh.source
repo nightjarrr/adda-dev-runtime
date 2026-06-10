@@ -9,7 +9,7 @@
 #
 # Effect: sets _SHELL_TOOLS_SEALED="1" to activate bidirectional guards,
 #   then writes the accumulated JSONL registry to
-#   /run/.adda-shell-tools.jsonl. Hooks numbered 96+ may read the
+#   /run/adda/.adda-shell-tools.jsonl. Hooks numbered 96+ may read the
 #   registry but must not call announce_shell_tool.
 # ======================================================================
 
@@ -20,6 +20,6 @@ _SHELL_TOOLS_SEALED="1"
 if [[ -z "${_ANNOUNCED_SHELL_TOOLS}" ]]; then
     warning "_ANNOUNCED_SHELL_TOOLS is empty — shell tool registry not written."
 else
-    list_shell_tools > /run/.adda-shell-tools.jsonl
-    success "Shell tool registry written to /run/.adda-shell-tools.jsonl."
+    list_shell_tools > /run/adda/.adda-shell-tools.jsonl
+    success "Shell tool registry written to /run/adda/.adda-shell-tools.jsonl."
 fi

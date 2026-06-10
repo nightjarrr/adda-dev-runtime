@@ -103,6 +103,8 @@ mark_bootstrap_complete() {
 }
 trap mark_bootstrap_complete EXIT
 
+mkdir -p /run/adda
+
 # shellcheck disable=SC1091
 # Why: phases/ files are co-located scripts discovered at runtime via
 # _PHASES_DIR; the source path is intentionally dynamic.

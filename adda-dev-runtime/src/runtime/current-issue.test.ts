@@ -846,7 +846,7 @@ describe("CurrentIssueScript", () => {
                     }
                     return makeShellResult();
                 },
-                fileSysFileExists: async (path: string) => (path === "/run/.adda-current-issue" ? true : false),
+                fileSysFileExists: async (path: string) => (path === "/run/adda/.adda-current-issue" ? true : false),
                 fileSysDeleteFile: deleteFileMock,
             });
 
@@ -867,12 +867,12 @@ describe("CurrentIssueScript", () => {
             expect(details.hook).toMatchObject({ status: "absent" });
 
             expect(deleteFileMock).toHaveBeenCalledTimes(1);
-            expect(deleteFileMock).toHaveBeenCalledWith("/run/.adda-current-issue");
+            expect(deleteFileMock).toHaveBeenCalledWith("/run/adda/.adda-current-issue");
         });
     });
 
     describe("clear — hook statuses", () => {
-        const STATE_PATH = "/run/.adda-current-issue";
+        const STATE_PATH = "/run/adda/.adda-current-issue";
         const ADDA_INIT_HOOK_PATH = "/workspace/.adda-init.sh";
 
         const defaultShellForClear = async (command: string[]): Promise<ShellResult> => {
@@ -1207,7 +1207,7 @@ describe("CurrentIssueScript", () => {
                 const script: IssueStateStore = new CurrentIssueScript(deps);
                 await script.deleteState();
                 expect(deleteFileMock).toHaveBeenCalledTimes(1);
-                expect(deleteFileMock).toHaveBeenCalledWith("/run/.adda-current-issue");
+                expect(deleteFileMock).toHaveBeenCalledWith("/run/adda/.adda-current-issue");
             });
 
             test("propagates error thrown by fileSys.deleteFile", async () => {

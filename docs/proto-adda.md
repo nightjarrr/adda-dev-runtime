@@ -89,9 +89,9 @@ The mechanism spans three components:
 
 1. **Tier 1 tool registry** — the Tier 1 entrypoint and any earlier `entrypoint.d/` hooks accumulate tool announcements via the `announce_shell_tool` helper. This builds a JSONL registry in memory during bootstrap.
 
-2. **Persistence** — hook `95-write-shell-tools-registry.sh` (Tier 1) seals the registry and writes it to `/run/.adda-shell-tools.jsonl`.
+2. **Persistence** — hook `95-write-shell-tools-registry.sh` (Tier 1) seals the registry and writes it to `/run/adda/.adda-shell-tools.jsonl`.
 
-3. **Rendering** — hook `96-render-shell-tools.sh` (Tier 2) runs after the gate. It reads `/run/.adda-shell-tools.jsonl` and renders the registry into `/run/.adda-shell-tools.md`, including warnings about scripting runtimes that are absent (with Bun alternatives) and tools that are present but non-functional under container security policy. `CLAUDE.md` @imports this file so agents receive live tool constraints as always-present context — no manual update to `CLAUDE.md` is needed when the tool list changes.
+3. **Rendering** — hook `96-render-shell-tools.sh` (Tier 2) runs after the gate. It reads `/run/adda/.adda-shell-tools.jsonl` and renders the registry into `/run/adda/.adda-shell-tools.md`, including warnings about scripting runtimes that are absent (with Bun alternatives) and tools that are present but non-functional under container security policy. `CLAUDE.md` @imports this file so agents receive live tool constraints as always-present context — no manual update to `CLAUDE.md` is needed when the tool list changes.
 
 ---
 
