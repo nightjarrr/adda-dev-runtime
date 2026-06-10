@@ -107,24 +107,6 @@ The launcher creates a named host tmux session and re-enters itself inside that 
 
 The launcher seeds `~/.tmux.conf` from `scripts/adda-dev.tmux.conf` only when `~/.tmux.conf` is absent. Existing user tmux config is never overwritten.
 
-Recommended seed behavior: large scrollback; mouse mode enabled; slower mouse-wheel scrolling in copy mode; short escape-time for responsive TUIs; focus events enabled; true-color terminal features; clipboard/passthrough/title mutation disabled for safety; no `remain-on-exit failed` default.
-
-With tmux mouse mode enabled, normal terminal selection may require Shift-drag depending on terminal emulator.
-
-Common tmux actions:
-
-```text
-Ctrl-b d     detach from session
-Ctrl-b [     enter copy mode
-Ctrl-b x     kill pane
-```
-
-Ghostty is the preferred terminal emulator. Increase host terminal scrollback if desired:
-
-```text
-scrollback-limit = 100000000
-```
-
 ### Concurrency
 
 Multiple features may run concurrently. Each invocation gets its own AI harness container, Envoy sidecar, runtime directory, Unix socket, and tmux session. Sessions share no state with each other except through GitHub.
@@ -150,17 +132,6 @@ See *Network* for Envoy's policy responsibilities.
 ### Admin interface
 
 Bound to container loopback (`127.0.0.1:9901`). Not published to any host port — parallel Envoy sidecars coexist without port conflicts.
-
-Access via `docker exec` into the named Envoy container. The Envoy image does not include HTTP client tools; use bash's built-in TCP support (HTTP/1.1 required — Envoy rejects HTTP/1.0):
-
-```bash
-docker exec adda-dev-envoy-<RUN_ID> bash -c \
-  'exec 3<>/dev/tcp/127.0.0.1/9901
-   printf "GET /ready HTTP/1.1\r\nHost: localhost\r\n\r\n" >&3
-   cat <&3'
-```
-
-Replace `/ready` with `/stats`, `/listeners`, `/clusters`, or `/config_dump` for other diagnostic endpoints.
 
 The admin interface is for diagnostics only. It is not a policy editing UI and must not be exposed to untrusted networks.
 
@@ -279,39 +250,6 @@ Both are stored in the host Secret Service keyring, retrieved by the launcher, a
 | DeepSeek API key | `adda-dev` | `deepseek` | `apikey` (default) |
 
 All entries use the `adda-dev` service namespace. `account` identifies the target system; `key` identifies the credential within that system, configured per-repo in `adda-dev.env` via `ADDA_DEV_KEYRING_GITHUB_KEY`, `ADDA_DEV_KEYRING_CLAUDE_KEY`, and `ADDA_DEV_KEYRING_DEEPSEEK_KEY`. Multiple GitHub repos can coexist in one keyring by using distinct key values (e.g. `acme-token`, `otherrepo-token`).
-
-### One-time bootstrap: Claude Code OAuth token
-
-Acquire the token using a throwaway container:
-
-```bash
-docker run --rm -it oven/bun:latest \
-  sh -c "BUN_INSTALL=/usr/local bun install -g @anthropic-ai/claude-code && claude setup-token"
-```
-
-Procedure:
-1. The container prints an authorization URL.
-2. Open it in the host browser.
-3. Authorize.
-4. Copy the authorization code back into the container.
-5. Claude Code exchanges the code for an OAuth token and displays it.
-6. Store the token in the host keyring:
-
-```bash
-secret-tool store --label='Claude Code OAuth' \
-  service adda-dev account claude key oauth
-```
-
-### One-time bootstrap: GitHub Token
-
-Generate a fine-grained Personal Access Token in GitHub and store it directly in the keyring:
-
-```bash
-secret-tool store --label='Claude Code GitHub Token ({repo})' \
-  service adda-dev account github key {repo}-token
-```
-
-Replace `{repo}` with the actual repository name. The `{repo}-token` value must match `ADDA_DEV_KEYRING_GITHUB_KEY` in that repo's `adda-dev.env`.
 
 ### Retrieval
 
@@ -573,26 +511,23 @@ Contains executables the agent may invoke during a session.
 
 #### Artifact routing table
 
-Shell scripts (`.sh.source`) carry no exec bit in the repo; the Dockerfile renames them (strips `.source`) and sets the exec bit. Bun executables are compiled from `.ts` source in a multi-stage build.
-
 `<libexec>` expands to `/usr/local/libexec/adda-dev-runtime`:
 
 ```
-Source                                                                         Destination
-──────────────────────────────────────────────────────────────────────────────────────────────────────
-Tier 1 (adda-dev-runtime)
-  adda-dev-runtime/content/scripts/bootstrap/entrypoint.sh.source             <libexec>/bootstrap/entrypoint.sh
-  adda-dev-runtime/src/runtime/<name>.ts                                       <libexec>/bin/<name>
-  adda-dev-runtime/src/bootstrap/<name>.ts                                     <libexec>/bootstrap/<name>
-  adda-dev-runtime/content/scripts/runtime/<name>.sh.source                    <libexec>/bin/<name>.sh
-  adda-dev-runtime/content/scripts/bootstrap/<name>.sh.source                  <libexec>/bootstrap/<name>.sh
+Tier 1
+  <libexec>/bootstrap/entrypoint.sh
+  <libexec>/bootstrap/entrypoint.d/<h>.sh
+  <libexec>/bootstrap/<name>
+  <libexec>/bootstrap/<name>.sh
+  <libexec>/bin/<name>
+  <libexec>/bin/<name>.sh
 
-Tier 2 (proto-adda)
-  proto-adda/src/runtime/<name>.ts                                              <libexec>/bin/<name>
-  proto-adda/src/bootstrap/<name>.ts                                            <libexec>/bootstrap/<name>
-  proto-adda/content/scripts/runtime/<name>.sh.source                           <libexec>/bin/<name>.sh
-  proto-adda/content/scripts/bootstrap/<name>.sh.source                         <libexec>/bootstrap/<name>.sh
-  proto-adda/content/scripts/bootstrap/entrypoint.d/<h>.sh.source               <libexec>/bootstrap/entrypoint.d/<h>.sh
+Tier 2
+  <libexec>/bootstrap/entrypoint.d/<h>.sh
+  <libexec>/bootstrap/<name>
+  <libexec>/bootstrap/<name>.sh
+  <libexec>/bin/<name>
+  <libexec>/bin/<name>.sh
 ```
 
 ### Image build and distribution
@@ -662,8 +597,6 @@ A Tier 2 implementation may add executables to `/usr/local/libexec/adda-dev-runt
 ### Image build
 
 Built `FROM` a Tier 1 image. Published under its own name (e.g. `ghcr.io/{owner}/proto-adda-dev-runtime`). Each Tier 2 implementation publishes independently using the same tag conventions as Tier 1.
-
-See `docs/proto-adda.md` for proto-adda image specifics.
 
 ---
 
