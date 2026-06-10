@@ -511,26 +511,23 @@ Contains executables the agent may invoke during a session.
 
 #### Artifact routing table
 
-Shell scripts (`.sh.source`) carry no exec bit in the repo; the Dockerfile renames them (strips `.source`) and sets the exec bit. Bun executables are compiled from `.ts` source in a multi-stage build.
-
 `<libexec>` expands to `/usr/local/libexec/adda-dev-runtime`:
 
 ```
-Source                                                                         Destination
-──────────────────────────────────────────────────────────────────────────────────────────────────────
-Tier 1 (adda-dev-runtime)
-  adda-dev-runtime/content/scripts/bootstrap/entrypoint.sh.source             <libexec>/bootstrap/entrypoint.sh
-  adda-dev-runtime/src/runtime/<name>.ts                                       <libexec>/bin/<name>
-  adda-dev-runtime/src/bootstrap/<name>.ts                                     <libexec>/bootstrap/<name>
-  adda-dev-runtime/content/scripts/runtime/<name>.sh.source                    <libexec>/bin/<name>.sh
-  adda-dev-runtime/content/scripts/bootstrap/<name>.sh.source                  <libexec>/bootstrap/<name>.sh
+Tier 1
+  <libexec>/bootstrap/entrypoint.sh
+  <libexec>/bootstrap/entrypoint.d/<h>.sh
+  <libexec>/bootstrap/<name>
+  <libexec>/bootstrap/<name>.sh
+  <libexec>/bin/<name>
+  <libexec>/bin/<name>.sh
 
-Tier 2 (proto-adda)
-  proto-adda/src/runtime/<name>.ts                                              <libexec>/bin/<name>
-  proto-adda/src/bootstrap/<name>.ts                                            <libexec>/bootstrap/<name>
-  proto-adda/content/scripts/runtime/<name>.sh.source                           <libexec>/bin/<name>.sh
-  proto-adda/content/scripts/bootstrap/<name>.sh.source                         <libexec>/bootstrap/<name>.sh
-  proto-adda/content/scripts/bootstrap/entrypoint.d/<h>.sh.source               <libexec>/bootstrap/entrypoint.d/<h>.sh
+Tier 2
+  <libexec>/bootstrap/entrypoint.d/<h>.sh
+  <libexec>/bootstrap/<name>
+  <libexec>/bootstrap/<name>.sh
+  <libexec>/bin/<name>
+  <libexec>/bin/<name>.sh
 ```
 
 ### Image build and distribution
@@ -600,8 +597,6 @@ A Tier 2 implementation may add executables to `/usr/local/libexec/adda-dev-runt
 ### Image build
 
 Built `FROM` a Tier 1 image. Published under its own name (e.g. `ghcr.io/{owner}/proto-adda-dev-runtime`). Each Tier 2 implementation publishes independently using the same tag conventions as Tier 1.
-
-See `docs/proto-adda.md` for proto-adda image specifics.
 
 ---
 
