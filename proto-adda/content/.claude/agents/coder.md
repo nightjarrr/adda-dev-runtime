@@ -36,7 +36,7 @@ If the issue type is `docs`: pause and escalate (Type 3) before editing any file
 
 Before any edit:
 
-1. Verify you are on the correct feature branch: `/usr/local/libexec/adda-dev-runtime/bin/current-issue branch --verify`. If the command exits non-zero, stop and escalate (Type 3 — Ambiguity).
+1. Verify you are on the correct feature branch: `/usr/local/libexec/adda-dev-runtime/bin/current-issue branch --verify`. If the command exits non-zero, stop and escalate (Type 3 — Ambiguity), including the command output in the escalation details.
 2. Confirm the working tree is clean: `git status --short`. If it is not, determine whether every dirty file is part of the current dispatch or the origin is unknown to you. If there are unknown dirty changes, stop and escalate (Type 3) rather than editing, staging, or committing them.
 
 Then read, in order:

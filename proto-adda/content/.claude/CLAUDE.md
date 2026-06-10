@@ -122,7 +122,7 @@ Branch names follow the pattern `{type}/{issue-id}-{slug}` — for example: `fea
 ```
 /usr/local/libexec/adda-dev-runtime/bin/current-issue branch --ensure
 ```
-This command is idempotent: it creates and links the feature branch if none exists yet, or no-ops if already on the correct branch. The branch name is derived automatically from the current issue as `{type}/{issue-id}-{slug}`.
+This command is idempotent: if no linked branch exists yet it creates one, links it to the issue, and checks out the local workspace onto it in a single operation; if already on the correct branch it is a no-op. The branch name is derived automatically from the current issue as `{type}/{issue-id}-{slug}`. If the command exits non-zero, stop and ask PO — do not proceed to Coder dispatch.
 
 On existing branch, always verify the working tree is clean before dispatching Coder or making repository file modifications. If there are unrelated dirty changes, stop and ask PO.
 
