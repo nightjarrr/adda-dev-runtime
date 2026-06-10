@@ -58,7 +58,7 @@ Every implementation task — regardless of size — follows this workflow from 
 
 **After each commit & push, CI must be green before proceeding.** PM owns CI health: red CI caused by a `code_fix` issue is never surfaced to PO as an outcome — it is analyzed and fixed autonomously if possible. CI monitoring is handled via the `ci-gate` skill at steps 5a, 7, and 10.
 
-### 1. Issue identification
+### 1. Issue intake
 
 Run `/usr/local/libexec/adda-dev-runtime/bin/current-issue show` to read the current issue state, then confirm with PO. PO can provide a different number. If no issue exists yet, use the `/new-issue` skill to create one.
 
@@ -70,6 +70,14 @@ gh issue view {issue-id} --comments
 ```
 
 Labels must contain the issue type: one of `feature`, `chore`, `docs`, or `bug`. Comments contain the latest state for ongoing work and must be read alongside the issue body.
+
+**Explore relevant sources.** Proactively identify and explore all relevant documents and code touched by the issue — regardless of whether they are explicitly referenced in the issue body. Do not rely solely on what the issue says.
+
+**Re-validate issue details against current state.** Issue details are directional, not authoritative — they can be outdated or contain honest mistakes. Use the codebase and project state as the source of truth, not the issue text.
+
+**Surface discrepancies.** If what you find diverges from what the issue describes, present the gap to PO as the starting point for discussion before proceeding to planning.
+
+**Surface improvements.** If the approach described in the issue looks suboptimal, present alternatives to PO as part of collaborative exploration.
 
 ### 2. Plan
 
