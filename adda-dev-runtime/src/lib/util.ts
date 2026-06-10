@@ -8,3 +8,10 @@ export function parseJson(raw: string): unknown {
         throw e;
     }
 }
+
+export function slugify(title: string): string {
+    return title
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-+|-+$/g, "");
+}

@@ -118,15 +118,11 @@ gh issue comment {issue-id} --body-file {path-to-plan-file}
 
 Branch names follow the pattern `{type}/{issue-id}-{slug}` — for example: `feature/42-avif-support`, `chore/37-add-claude-md`, `docs/51-timeout-handling`.
 
-**Before modifying any repository files**, check the current branch. If it is `main`, create the feature branch first: 
+**Before modifying any repository files**, ensure the feature branch exists and is checked out:
 ```
-gh issue develop {issue-id} -n {branch-name}
+/usr/local/libexec/adda-dev-runtime/bin/current-issue branch --ensure
 ```
-
-If already on a feature branch linked to the current issue, no further action needed. If not sure whether the current branch is the proper branch for the current issue, check it with `resolve-issue-branch` script:
-```
-/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch {issue-id}
-```
+This command is idempotent: it creates and links the feature branch if none exists yet, or no-ops if already on the correct branch. The branch name is derived automatically from the current issue as `{type}/{issue-id}-{slug}`.
 
 On existing branch, always verify the working tree is clean before dispatching Coder or making repository file modifications. If there are unrelated dirty changes, stop and ask PO.
 

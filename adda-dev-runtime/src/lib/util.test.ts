@@ -1,6 +1,6 @@
 import { describe, expect, spyOn, test } from "bun:test";
 import { ScriptError } from "./errors";
-import { parseJson } from "./util";
+import { parseJson, slugify } from "./util";
 
 describe("parseJson", () => {
     test("valid JSON string returns parsed value", () => {
@@ -76,5 +76,39 @@ describe("parseJson", () => {
         expect(caught).toBe(typeError);
         expect(caught).toBeInstanceOf(TypeError);
         expect(caught).not.toBeInstanceOf(ScriptError);
+    });
+});
+
+describe("slugify", () => {
+    test("normal title with spaces becomes hyphenated lowercase", () => {
+        expect(slugify("Branch lifecycle tooling for SDLC roles")).toBe("branch-lifecycle-tooling-for-sdlc-roles");
+    });
+
+    test("special chars are collapsed to a single hyphen", () => {
+        expect(slugify("feat: add #new/feature!")).toBe("feat-add-new-feature");
+    });
+
+    test("leading special chars are stripped", () => {
+        expect(slugify("---hello world")).toBe("hello-world");
+    });
+
+    test("trailing special chars are stripped", () => {
+        expect(slugify("hello world---")).toBe("hello-world");
+    });
+
+    test("consecutive special chars collapse to single hyphen", () => {
+        expect(slugify("hello   ///   world")).toBe("hello-world");
+    });
+
+    test("all non-alphanumeric input returns empty string", () => {
+        expect(slugify("😀🎉✨")).toBe("");
+    });
+
+    test("already slug-like input is unchanged", () => {
+        expect(slugify("hello-world")).toBe("hello-world");
+    });
+
+    test("numeric-only title is preserved", () => {
+        expect(slugify("12345")).toBe("12345");
     });
 });
