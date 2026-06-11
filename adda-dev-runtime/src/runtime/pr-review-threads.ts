@@ -22,6 +22,26 @@ import {
     ScriptError,
     ScriptZodValidationError,
 } from "@adda/lib";
+
+// Reason codes used in error envelopes
+const REASON_MISSING_ENV = "missing_env";
+const REASON_INVALID_CONFIG = "invalid_config";
+const REASON_GRAPHQL_ERROR = "graphql_error";
+const REASON_INTERNAL_ERROR = "internal_error";
+
+/**
+ * Classify an unhandled error into a short reason code for the structured envelope.
+ * Errors that are already explicitly handled (and have envelopeEmitted = true) should
+ * not reach this function, but it is kept general for safety.
+ */
+function classifyError(err: unknown): string {
+    if (err instanceof ConfigError) return REASON_INVALID_CONFIG;
+    if (err instanceof Error) {
+        if (err.message.startsWith("required environment variable")) return REASON_MISSING_ENV;
+        if (err.message.startsWith("GraphQL API call failed")) return REASON_GRAPHQL_ERROR;
+    }
+    return REASON_INTERNAL_ERROR;
+}
 import { PR_THREADS_QUERY, PrThreadsPageSchema, THREAD_NODE_QUERY, ThreadNodeQuerySchema } from "./pr-review-threads/graphql";
 import type { CommentNode, ThreadNode } from "./pr-review-threads/graphql";
 import {
@@ -48,6 +68,9 @@ const DEFAULT_SCAN_CEILING = 1000;
 const DEFAULT_MAX_UNRESOLVED = 50;
 
 export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrReviewThreadsArgs> {
+    /** Set to true once any error envelope has been written to stdout. */
+    private envelopeEmitted = false;
+
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return {
             allowPositionals: true,
@@ -62,6 +85,9 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
     protected validateArgs(parsed: ReturnType<typeof parseArgs>): PrReviewThreadsArgs {
         const mode = parsed.positionals[0];
         if (!mode) {
+            this.emitKeylessError(
+                "mode is required: pr <pr-number> [--include-resolved] [--max-unresolved <n>]  or  thread <thread-id>",
+            );
             throw new ScriptArgsError(
                 "mode is required: pr <pr-number> [--include-resolved] [--max-unresolved <n>]  or  thread <thread-id>",
             );
@@ -69,17 +95,24 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
 
         if (mode === "pr") {
             const prArg = parsed.positionals[1];
-            if (!prArg) throw new ScriptArgsError("pr mode requires a PR number as the second argument");
+            if (!prArg) {
+                this.emitKeylessError("pr mode requires a PR number as the second argument");
+                throw new ScriptArgsError("pr mode requires a PR number as the second argument");
+            }
             const prNumber = Number(prArg);
-            if (!Number.isInteger(prNumber) || prNumber <= 0)
+            if (!Number.isInteger(prNumber) || prNumber <= 0) {
+                this.emitKeylessError(`invalid PR number '${prArg}': must be a positive integer`);
                 throw new ScriptArgsError(`invalid PR number '${prArg}': must be a positive integer`);
+            }
 
             const maxUnresolvedArg = parsed.values["max-unresolved"] as string | undefined;
             let maxUnresolved = DEFAULT_MAX_UNRESOLVED;
             if (maxUnresolvedArg !== undefined) {
                 maxUnresolved = Number(maxUnresolvedArg);
-                if (!Number.isInteger(maxUnresolved) || maxUnresolved <= 0)
+                if (!Number.isInteger(maxUnresolved) || maxUnresolved <= 0) {
+                    this.emitKeylessError(`invalid --max-unresolved '${maxUnresolvedArg}': must be a positive integer`);
                     throw new ScriptArgsError(`invalid --max-unresolved '${maxUnresolvedArg}': must be a positive integer`);
+                }
             }
 
             return {
@@ -91,16 +124,24 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
         }
 
         if (mode === "thread") {
-            if (parsed.values["include-resolved"] !== undefined)
+            if (parsed.values["include-resolved"] !== undefined) {
+                this.emitKeylessError("--include-resolved is not valid for 'thread'");
                 throw new ScriptArgsError("--include-resolved is not valid for 'thread'");
-            if (parsed.values["max-unresolved"] !== undefined)
+            }
+            if (parsed.values["max-unresolved"] !== undefined) {
+                this.emitKeylessError("--max-unresolved is not valid for 'thread'");
                 throw new ScriptArgsError("--max-unresolved is not valid for 'thread'");
+            }
 
             const threadId = parsed.positionals[1];
-            if (!threadId) throw new ScriptArgsError("thread mode requires a thread id as the second argument");
+            if (!threadId) {
+                this.emitKeylessError("thread mode requires a thread id as the second argument");
+                throw new ScriptArgsError("thread mode requires a thread id as the second argument");
+            }
             return { mode: "thread", threadId };
         }
 
+        this.emitKeylessError(`unknown mode '${mode}': expected 'pr' or 'thread'`);
         throw new ScriptArgsError(`unknown mode '${mode}': expected 'pr' or 'thread'`);
     }
 
@@ -149,6 +190,18 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
     // --- pr mode ---
 
     private async runPr(args: Extract<PrReviewThreadsArgs, { mode: "pr" }>): Promise<void> {
+        try {
+            await this.runPrInner(args);
+        } catch (err) {
+            if (!this.envelopeEmitted) {
+                const message = err instanceof Error ? err.message : String(err);
+                this.emitModeError("pr", classifyError(err), message);
+            }
+            throw err;
+        }
+    }
+
+    private async runPrInner(args: Extract<PrReviewThreadsArgs, { mode: "pr" }>): Promise<void> {
         const ceiling = this.readCeiling();
         const { owner, repo } = this.requireOwnerRepo();
 
@@ -159,11 +212,11 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
             throw new ScriptZodValidationError("unexpected PR threads response", firstParsed.error, firstRaw);
 
         if (firstParsed.data.data.repository === null) {
-            this.emitError(`repository ${owner}/${repo} not found`, { mode: "pr", pr: args.prNumber });
+            this.emitModeError("pr", "repo_not_found", `repository ${owner}/${repo} not found`);
             throw new ScriptError(`repository ${owner}/${repo} not found`);
         }
         if (firstParsed.data.data.repository.pullRequest === null) {
-            this.emitError(`PR #${args.prNumber} not found in ${owner}/${repo}`, { mode: "pr", pr: args.prNumber });
+            this.emitModeError("pr", "pr_not_found", `PR #${args.prNumber} not found in ${owner}/${repo}`);
             throw new ScriptError(`PR #${args.prNumber} not found in ${owner}/${repo}`);
         }
 
@@ -249,6 +302,18 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
     // --- thread mode ---
 
     private async runThread(args: Extract<PrReviewThreadsArgs, { mode: "thread" }>): Promise<void> {
+        try {
+            await this.runThreadInner(args);
+        } catch (err) {
+            if (!this.envelopeEmitted) {
+                const message = err instanceof Error ? err.message : String(err);
+                this.emitModeError("thread", classifyError(err), message);
+            }
+            throw err;
+        }
+    }
+
+    private async runThreadInner(args: Extract<PrReviewThreadsArgs, { mode: "thread" }>): Promise<void> {
         const ceiling = this.readCeiling();
 
         // Fetch first page
@@ -259,14 +324,15 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
 
         const node = firstParsed.data.data.node;
         if (node === null) {
-            this.emitError(`thread '${args.threadId}' not found`, { mode: "thread", threadId: args.threadId });
+            this.emitModeError("thread", "thread_not_found", `thread '${args.threadId}' not found`);
             throw new ScriptError(`thread '${args.threadId}' not found`);
         }
         if (node.__typename !== "PullRequestReviewThread") {
-            this.emitError(`node '${args.threadId}' is not a PullRequestReviewThread (got ${node.__typename})`, {
-                mode: "thread",
-                threadId: args.threadId,
-            });
+            this.emitModeError(
+                "thread",
+                "not_a_thread",
+                `node '${args.threadId}' is not a PullRequestReviewThread (got ${node.__typename})`,
+            );
             throw new ScriptError(`node '${args.threadId}' is not a PullRequestReviewThread`);
         }
 
@@ -361,14 +427,32 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
         this.deps.stdio.stdout.write(`${JSON.stringify(envelope)}\n`);
     }
 
-    private emitError(message: string, context: { mode: "pr"; pr: number } | { mode: "thread"; threadId: string }): void {
+    /**
+     * Emit a keyless structured error envelope (for pre-dispatch / arg validation errors).
+     * Shape: { "status": "error", "error": "<message>" }
+     */
+    private emitKeylessError(message: string): void {
+        const envelope: { status: "error"; error: string } = { status: "error", error: message };
+        this.deps.stdio.stdout.write(`${JSON.stringify(envelope)}\n`);
+        this.envelopeEmitted = true;
+    }
+
+    /**
+     * Emit a mode-keyed structured error envelope.
+     * Shape for pr:     { "status": "error", "error": "<message>", "pr":     { "reason": "<code>", … } }
+     * Shape for thread: { "status": "error", "error": "<message>", "thread": { "reason": "<code>", … } }
+     */
+    private emitModeError(mode: "pr", reason: string, message: string): void;
+    private emitModeError(mode: "thread", reason: string, message: string): void;
+    private emitModeError(mode: "pr" | "thread", reason: string, message: string): void {
         let envelope: Envelope;
-        if (context.mode === "pr") {
-            envelope = { status: "error", error: message, pr: { reason: message } };
+        if (mode === "pr") {
+            envelope = { status: "error", error: message, pr: { reason } };
         } else {
-            envelope = { status: "error", error: message, thread: { reason: message } };
+            envelope = { status: "error", error: message, thread: { reason } };
         }
         this.deps.stdio.stdout.write(`${JSON.stringify(envelope)}\n`);
+        this.envelopeEmitted = true;
     }
 
     private emitScanLimitExceeded(
@@ -377,15 +461,17 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
         commentCount: number | undefined,
         ceiling: number,
     ): void {
+        const reason = "scan_limit_exceeded";
         let envelope: Envelope;
         if (mode === "pr") {
-            const reason = "scan_limit_exceeded";
-            envelope = { status: "error", error: reason, pr: { reason, total, ceiling } };
+            const message = `scan limit exceeded: ${total} threads > ceiling ${ceiling}`;
+            envelope = { status: "error", error: message, pr: { reason, total, ceiling } };
         } else {
-            const reason = "scan_limit_exceeded";
-            envelope = { status: "error", error: reason, thread: { reason, commentCount, ceiling } };
+            const message = `scan limit exceeded: ${commentCount} comments > ceiling ${ceiling}`;
+            envelope = { status: "error", error: message, thread: { reason, commentCount, ceiling } };
         }
         this.deps.stdio.stdout.write(`${JSON.stringify(envelope)}\n`);
+        this.envelopeEmitted = true;
     }
 }
 

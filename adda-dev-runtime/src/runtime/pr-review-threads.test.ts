@@ -259,16 +259,25 @@ describe("PrReviewThreadsScript", () => {
     // Argument validation / dispatch
     // ---------------------------------------------------------------
     describe("argument validation", () => {
-        test("no args — exits 2", async () => {
-            const { deps } = makeMockDeps();
+        test("no args — exits 2, structured envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps();
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts"]);
             expect(code).toBe(2);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect(out.error).toBeString();
+            expect(out).not.toHaveProperty("pr");
+            expect(out).not.toHaveProperty("thread");
         });
 
-        test("unknown mode — exits 2", async () => {
-            const { deps } = makeMockDeps();
+        test("unknown mode — exits 2, structured envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps();
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "review"]);
             expect(code).toBe(2);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect(out).not.toHaveProperty("pr");
+            expect(out).not.toHaveProperty("thread");
         });
 
         test("unknown option flag — exits 2", async () => {
@@ -277,16 +286,22 @@ describe("PrReviewThreadsScript", () => {
             expect(code).toBe(2);
         });
 
-        test("pr without pr-number — exits 2", async () => {
-            const { deps } = makeMockDeps();
+        test("pr without pr-number — exits 2, structured envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps();
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr"]);
             expect(code).toBe(2);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect(out).not.toHaveProperty("pr");
+            expect(out).not.toHaveProperty("thread");
         });
 
-        test("pr with non-integer number — exits 2", async () => {
-            const { deps } = makeMockDeps();
+        test("pr with non-integer number — exits 2, structured envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps();
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "abc"]);
             expect(code).toBe(2);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
         });
 
         test("pr with float number — exits 2", async () => {
@@ -301,8 +316,8 @@ describe("PrReviewThreadsScript", () => {
             expect(code).toBe(2);
         });
 
-        test("pr with invalid --max-unresolved — exits 2", async () => {
-            const { deps } = makeMockDeps();
+        test("pr with invalid --max-unresolved — exits 2, structured envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps();
             const code = await new PrReviewThreadsScript(deps).run([
                 "bun",
                 "pr-review-threads.ts",
@@ -312,16 +327,22 @@ describe("PrReviewThreadsScript", () => {
                 "abc",
             ]);
             expect(code).toBe(2);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
         });
 
-        test("thread without id — exits 2", async () => {
-            const { deps } = makeMockDeps();
+        test("thread without id — exits 2, structured envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps();
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread"]);
             expect(code).toBe(2);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect(out).not.toHaveProperty("pr");
+            expect(out).not.toHaveProperty("thread");
         });
 
-        test("thread with --include-resolved — exits 2 (ScriptArgsError)", async () => {
-            const { deps } = makeMockDeps();
+        test("thread with --include-resolved — exits 2, structured envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps();
             const code = await new PrReviewThreadsScript(deps).run([
                 "bun",
                 "pr-review-threads.ts",
@@ -330,10 +351,12 @@ describe("PrReviewThreadsScript", () => {
                 "--include-resolved",
             ]);
             expect(code).toBe(2);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
         });
 
-        test("thread with --max-unresolved — exits 2 (ScriptArgsError)", async () => {
-            const { deps } = makeMockDeps();
+        test("thread with --max-unresolved — exits 2, structured envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps();
             const code = await new PrReviewThreadsScript(deps).run([
                 "bun",
                 "pr-review-threads.ts",
@@ -343,6 +366,8 @@ describe("PrReviewThreadsScript", () => {
                 "5",
             ]);
             expect(code).toBe(2);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
         });
     });
 
@@ -350,18 +375,26 @@ describe("PrReviewThreadsScript", () => {
     // Environment
     // ---------------------------------------------------------------
     describe("environment", () => {
-        test("pr mode: missing GITHUB_OWNER — exits 1", async () => {
-            const { deps, errLines } = makeMockDeps({ envVars: { GITHUB_REPO: "repo" } });
+        test("pr mode: missing GITHUB_OWNER — exits 1, missing_env envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps({ envVars: { GITHUB_REPO: "repo" } });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
-            expect(errLines.join("")).toContain("GITHUB_OWNER");
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("missing_env");
+            expect(out.error).toBeString();
+            expect(out.error as string).toContain("GITHUB_OWNER");
         });
 
-        test("pr mode: missing GITHUB_REPO — exits 1", async () => {
-            const { deps, errLines } = makeMockDeps({ envVars: { GITHUB_OWNER: "owner" } });
+        test("pr mode: missing GITHUB_REPO — exits 1, missing_env envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps({ envVars: { GITHUB_OWNER: "owner" } });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
-            expect(errLines.join("")).toContain("GITHUB_REPO");
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("missing_env");
+            expect(out.error).toBeString();
+            expect(out.error as string).toContain("GITHUB_REPO");
         });
 
         test("thread mode: works without GITHUB_OWNER/GITHUB_REPO", async () => {
@@ -384,20 +417,87 @@ describe("PrReviewThreadsScript", () => {
             expect(out.pr?.reason).toBe("scan_limit_exceeded");
         });
 
-        test("invalid ADDA_DEV_PR_REVIEW_SCAN_CEILING — exits 2 (ConfigError)", async () => {
-            const { deps } = makeMockDeps({
+        test("invalid ADDA_DEV_PR_REVIEW_SCAN_CEILING — exits 2, invalid_config envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps({
                 envVars: { GITHUB_OWNER: "o", GITHUB_REPO: "r", ADDA_DEV_PR_REVIEW_SCAN_CEILING: "abc" },
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(2);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("invalid_config");
         });
 
-        test("ADDA_DEV_PR_REVIEW_SCAN_CEILING=0 — exits 2 (ConfigError)", async () => {
-            const { deps } = makeMockDeps({
+        test("ADDA_DEV_PR_REVIEW_SCAN_CEILING=0 — exits 2, invalid_config envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps({
                 envVars: { GITHUB_OWNER: "o", GITHUB_REPO: "r", ADDA_DEV_PR_REVIEW_SCAN_CEILING: "0" },
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(2);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("invalid_config");
+        });
+
+        test("thread mode: invalid ceiling — exits 2, invalid_config envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps({
+                envVars: { ADDA_DEV_PR_REVIEW_SCAN_CEILING: "bad" },
+                runQueue: [],
+            });
+            const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
+            expect(code).toBe(2);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect((out["thread"] as Record<string, unknown>)?.reason).toBe("invalid_config");
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // pr mode: graphql failure
+    // ---------------------------------------------------------------
+    describe("pr mode: graphql failure", () => {
+        test("graphql returns non-zero exit — exits 1, graphql_error envelope on stdout, no file", async () => {
+            const { deps, outLines, renamedFiles } = makeMockDeps({
+                runQueue: [makeShellResult("", 1, "Could not resolve to a PullRequest with the number of 999999")],
+            });
+            const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "999999"]);
+            expect(code).toBe(1);
+            expect(renamedFiles).toHaveLength(0);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            const pr = out["pr"] as Record<string, unknown>;
+            expect(pr?.reason).toBe("graphql_error");
+        });
+
+        test("graphql failure on pagination page — exits 1, graphql_error envelope on stdout", async () => {
+            const page1 = makePrThreadsResponse([makeThread()], 2, true, "cursor1");
+            const { deps, outLines, renamedFiles } = makeMockDeps({
+                runQueue: [makeShellResult(page1), makeShellResult("", 1, "GraphQL error on page 2")],
+            });
+            const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
+            expect(code).toBe(1);
+            expect(renamedFiles).toHaveLength(0);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("graphql_error");
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // thread mode: graphql failure
+    // ---------------------------------------------------------------
+    describe("thread mode: graphql failure", () => {
+        test("graphql returns non-zero exit — exits 1, graphql_error envelope on stdout, no file", async () => {
+            const { deps, outLines, renamedFiles } = makeMockDeps({
+                envVars: {},
+                runQueue: [makeShellResult("", 1, "Could not resolve to a node")],
+            });
+            const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
+            expect(code).toBe(1);
+            expect(renamedFiles).toHaveLength(0);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect((out["thread"] as Record<string, unknown>)?.reason).toBe("graphql_error");
         });
     });
 
@@ -650,22 +750,28 @@ describe("PrReviewThreadsScript", () => {
     // pr mode: domain nulls
     // ---------------------------------------------------------------
     describe("pr mode: domain nulls", () => {
-        test("repository not found — exits 1, no file", async () => {
-            const { deps, renamedFiles } = makeMockDeps({
+        test("repository not found — exits 1, no file, repo_not_found reason", async () => {
+            const { deps, outLines, renamedFiles } = makeMockDeps({
                 runQueue: [makeShellResult(makeRepoNotFound())],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
             expect(renamedFiles).toHaveLength(0);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("repo_not_found");
         });
 
-        test("PR not found — exits 1, no file", async () => {
-            const { deps, renamedFiles } = makeMockDeps({
+        test("PR not found — exits 1, no file, pr_not_found reason", async () => {
+            const { deps, outLines, renamedFiles } = makeMockDeps({
                 runQueue: [makeShellResult(makePrNotFound())],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
             expect(renamedFiles).toHaveLength(0);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("pr_not_found");
         });
     });
 
@@ -765,11 +871,14 @@ describe("PrReviewThreadsScript", () => {
             expect(pr).toHaveProperty("reason");
         });
 
-        test("pre-dispatch error omits both pr and thread keys", async () => {
-            const { deps, errLines } = makeMockDeps();
+        test("pre-dispatch error emits structured envelope on stdout (no pr/thread key)", async () => {
+            const { deps, outLines } = makeMockDeps();
             await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts"]);
-            // ScriptArgsError → ScriptBase writes to stderr, no stdout envelope
-            expect(errLines.join("")).toContain("Error:");
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect(out).toHaveProperty("error");
+            expect(out).not.toHaveProperty("pr");
+            expect(out).not.toHaveProperty("thread");
         });
     });
 
@@ -877,17 +986,20 @@ describe("PrReviewThreadsScript", () => {
     // thread mode: domain errors
     // ---------------------------------------------------------------
     describe("thread mode: domain errors", () => {
-        test("node not found (null) — exits 1, no file", async () => {
-            const { deps, renamedFiles } = makeMockDeps({
+        test("node not found (null) — exits 1, no file, thread_not_found reason", async () => {
+            const { deps, outLines, renamedFiles } = makeMockDeps({
                 envVars: {},
                 runQueue: [makeShellResult(makeThreadNodeNotFound())],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
             expect(code).toBe(1);
             expect(renamedFiles).toHaveLength(0);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect((out["thread"] as Record<string, unknown>)?.reason).toBe("thread_not_found");
         });
 
-        test("node is not a PullRequestReviewThread — exits 1, no file", async () => {
+        test("node is not a PullRequestReviewThread — exits 1, no file, not_a_thread reason", async () => {
             const { deps, outLines, renamedFiles } = makeMockDeps({
                 envVars: {},
                 runQueue: [makeShellResult(makeThreadNodeResponse({ typename: "Issue" }))],
@@ -895,8 +1007,9 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
             expect(code).toBe(1);
             expect(renamedFiles).toHaveLength(0);
-            const out = getStdoutJson(outLines) as { status: string; thread?: { reason: string } };
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("error");
+            expect((out["thread"] as Record<string, unknown>)?.reason).toBe("not_a_thread");
         });
     });
 
@@ -916,6 +1029,35 @@ describe("PrReviewThreadsScript", () => {
             expect(out).not.toHaveProperty("pr");
             expect(out).not.toHaveProperty("result");
             expect(out).not.toHaveProperty("mode");
+        });
+    });
+
+    // ---------------------------------------------------------------
+    // double-emit guard: existing envelope is not overwritten by catch
+    // ---------------------------------------------------------------
+    describe("double-emit guard", () => {
+        test("explicit emitModeError is not overwritten by catch-all — single envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps({
+                runQueue: [makeShellResult(makeRepoNotFound())],
+            });
+            await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
+            // Exactly one JSON object should be written; joining and parsing must not throw
+            const combined = outLines.join("").trim();
+            expect(() => JSON.parse(combined)).not.toThrow();
+            const out = JSON.parse(combined) as Record<string, unknown>;
+            expect(out.status).toBe("error");
+            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("repo_not_found");
+        });
+
+        test("pr graphql error — single envelope on stdout", async () => {
+            const { deps, outLines } = makeMockDeps({
+                runQueue: [makeShellResult("", 1, "GraphQL failed")],
+            });
+            await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
+            const combined = outLines.join("").trim();
+            expect(() => JSON.parse(combined)).not.toThrow();
+            const out = JSON.parse(combined) as Record<string, unknown>;
+            expect(out.status).toBe("error");
         });
     });
 });
