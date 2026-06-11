@@ -61,6 +61,7 @@ function makeMockDeps(options: MockDepsOptions = {}): {
             return `/tmp/${prefix}-test-uuid-${tmpCounter}${suffix}`;
         }),
         makeTempDir: mock(() => "/tmp/test-dir"),
+        tmpDir: mock(() => "/tmp"),
     };
 
     const mockSleep: Sleep = {

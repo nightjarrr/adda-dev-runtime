@@ -108,6 +108,7 @@ function makeMockDeps(options: MockDepsOptions = {}): {
     const mockTmp: Tmp = {
         tempFilePath: mock((): string => FAKE_RESULT_PATH),
         makeTempDir: mock((): string => "/tmp/fake-dir"),
+        tmpDir: mock((): string => "/tmp"),
     };
 
     const deps: QualityGatesDeps = {

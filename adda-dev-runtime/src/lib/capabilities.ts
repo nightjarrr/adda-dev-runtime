@@ -67,6 +67,7 @@ export interface EnvDep {
 export interface Tmp {
     tempFilePath(prefix?: string, suffix?: string): string;
     makeTempDir(prefix?: string): string;
+    tmpDir(): string;
 }
 
 export interface TmpDep {
@@ -138,6 +139,10 @@ export class BunTmp implements Tmp {
 
     makeTempDir(prefix = "tmp"): string {
         return mkdtempSync(`${tmpdir()}/${prefix}-`);
+    }
+
+    tmpDir(): string {
+        return tmpdir();
     }
 }
 
