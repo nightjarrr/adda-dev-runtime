@@ -168,11 +168,12 @@ When the PR is opened, watch PR checks using the `ci-gate` skill. Step 7 is not 
 
 PO might leave comments in the PR (general or attached to diff lines in specific files) or provide feedback directly in the conversation. Make sure you have an explicit answer from the PO whether the PR is approved or requires a **delta plan iteration**.
 
-Fetch the PR comments using the commands:
+Fetch the PR's general conversation and its review threads:
 ```
 gh pr view {pr-number} --comments
-gh api repos/{owner}/{repo}/pulls/{pr-number}/comments
+/usr/local/libexec/adda-dev-runtime/bin/pr-review-threads pr {pr-number}
 ```
+`gh pr view --comments` returns the general PR conversation. `pr-review-threads pr {pr-number}` returns the **unresolved review threads** — with resolution state and thread grouping — as a JSON envelope on stdout; read `.pr.resultsFile` from the envelope and `jq` that file for the thread bodies, locations, and diff context.
 
 If PO is satisfied with the outcome, the next step is on PO: **merge the PR**. Active PM work pauses until PO manually merges. If PO reports the merge, proceed to step 10.
 
