@@ -8,40 +8,6 @@ export const FILE_PREFIX_PR = "pr-review-threads-pr";
 export const FILE_PREFIX_THREAD = "pr-review-threads-thread";
 
 /**
- * Returns the last line of a diff hunk (with +/-/space prefix kept),
- * or null if the hunk is empty or falsy.
- */
-export function extractTargetLine(hunk: string | null | undefined): string | null {
-    if (!hunk) return null;
-    const lines = hunk.split("\n");
-    for (let i = lines.length - 1; i >= 0; i--) {
-        const line = lines[i];
-        if (line !== undefined && line.trim() !== "") return line;
-    }
-    return null;
-}
-
-/**
- * Returns a preview of the last `tail` lines of a hunk, with the @@ header
- * line dropped. Prefixes the result with "…" when lines were dropped.
- * Returns null if the hunk is empty or falsy.
- */
-export function buildHunkPreview(hunk: string | null | undefined, tail = HUNK_PREVIEW_LINES): string | null {
-    if (!hunk) return null;
-    const lines = hunk.split("\n");
-    // Drop the @@ header line (first line)
-    const body = lines.slice(1);
-    // Drop trailing empty lines
-    while (body.length > 0 && body[body.length - 1]?.trim() === "") {
-        body.pop();
-    }
-    if (body.length === 0) return null;
-    if (body.length <= tail) return body.join("\n");
-    const clipped = body.slice(body.length - tail);
-    return `…\n${clipped.join("\n")}`;
-}
-
-/**
  * Sorts threads by (path, line ?? originalLine ?? 0).
  */
 export function sortThreads(threads: ThreadNode[]): ThreadNode[] {

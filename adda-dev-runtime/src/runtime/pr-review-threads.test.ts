@@ -1065,64 +1065,11 @@ describe("PrReviewThreadsScript", () => {
 // ---------------------------------------------------------------
 // Pure helper unit tests
 // ---------------------------------------------------------------
-import { buildHunkPreview, extractTargetLine, hunkToFields, sortThreads, toThreadObject } from "./pr-review-threads/helpers";
+import { hunkToFields, sortThreads, toThreadObject } from "./pr-review-threads/helpers";
 import type { ThreadNode } from "./pr-review-threads/graphql";
 import { Output } from "./pr-review-threads/output";
 import { paginate } from "./pr-review-threads/fetch";
 import { PR_THREADS_QUERY, PrThreadsPageSchema } from "./pr-review-threads/graphql";
-
-describe("extractTargetLine", () => {
-    test("returns last non-empty line of hunk", () => {
-        const hunk = "@@ -1,3 +1,4 @@\n line1\n-old\n+new";
-        expect(extractTargetLine(hunk)).toBe("+new");
-    });
-
-    test("ignores trailing empty lines", () => {
-        const hunk = "@@ -1,3 +1,4 @@\n line1\n+new\n";
-        expect(extractTargetLine(hunk)).toBe("+new");
-    });
-
-    test("returns null for null input", () => {
-        expect(extractTargetLine(null)).toBeNull();
-    });
-
-    test("returns null for empty string", () => {
-        expect(extractTargetLine("")).toBeNull();
-    });
-});
-
-describe("buildHunkPreview", () => {
-    test("drops @@ header and returns body", () => {
-        const hunk = "@@ -1,3 +1,3 @@\n line1\n-old\n+new";
-        const preview = buildHunkPreview(hunk);
-        expect(preview).not.toContain("@@");
-        expect(preview).toContain("+new");
-        expect(preview).toContain(" line1");
-    });
-
-    test("body longer than tail — prefixed with '…' and clipped", () => {
-        const lines = ["@@ -1,10 +1,10 @@", " a", " b", " c", " d", " e", " f", " g", " h", " i", " j"];
-        const hunk = lines.join("\n");
-        const preview = buildHunkPreview(hunk, 3);
-        expect(preview).toMatch(/^…/);
-        expect(preview).toContain(" h\n i\n j");
-    });
-
-    test("body shorter than tail — no ellipsis prefix", () => {
-        const hunk = "@@ -1,2 +1,2 @@\n line1\n+new";
-        const preview = buildHunkPreview(hunk, 7);
-        expect(preview).not.toContain("…");
-    });
-
-    test("returns null for null hunk", () => {
-        expect(buildHunkPreview(null)).toBeNull();
-    });
-
-    test("returns null when body is empty after removing trailing lines", () => {
-        const hunk = "@@ -1,0 +1,0 @@\n";
-        expect(buildHunkPreview(hunk)).toBeNull();
-    });
-});
 
 describe("sortThreads", () => {
     test("sorts by path, then by line", () => {
@@ -1222,11 +1169,29 @@ describe("hunkToFields", () => {
         expect(hunkPreview).toContain("+new");
     });
 
-    test("targetLine and hunkPreview match extractTargetLine/buildHunkPreview for same input", () => {
-        const hunk = "@@ -1,4 +1,5 @@\n a\n b\n-c\n+d\n+e";
+    test("body within tail — hunkPreview has no ellipsis prefix, contains all body lines", () => {
+        const hunk = "@@ -1,2 +1,2 @@\n line1\n+new";
+        const { targetLine, hunkPreview } = hunkToFields(hunk, 7);
+        expect(targetLine).toBe("+new");
+        expect(hunkPreview).not.toContain("…");
+        expect(hunkPreview).toContain(" line1");
+        expect(hunkPreview).toContain("+new");
+    });
+
+    test("body longer than tail — hunkPreview prefixed with '…' and clipped", () => {
+        const lines = ["@@ -1,10 +1,10 @@", " a", " b", " c", " d", " e", " f", " g", " h", " i", " j"];
+        const hunk = lines.join("\n");
+        const { targetLine, hunkPreview } = hunkToFields(hunk, 3);
+        expect(targetLine).toBe(" j");
+        expect(hunkPreview).toMatch(/^…/);
+        expect(hunkPreview).toContain(" h\n i\n j");
+    });
+
+    test("header-only hunk (body empty after trailing-line drop) — hunkPreview null, targetLine from header", () => {
+        const hunk = "@@ -1,0 +1,0 @@\n";
         const { targetLine, hunkPreview } = hunkToFields(hunk);
-        expect(targetLine).toBe(extractTargetLine(hunk));
-        expect(hunkPreview).toBe(buildHunkPreview(hunk));
+        expect(targetLine).toBe("@@ -1,0 +1,0 @@");
+        expect(hunkPreview).toBeNull();
     });
 
     test("returns nulls for null input", () => {
