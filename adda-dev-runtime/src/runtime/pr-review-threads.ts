@@ -13,7 +13,7 @@
 //   file:   detail file at /tmp/pr-review-threads-{pr|thread}-…-<epoch-ms>.json
 import type { parseArgs } from "node:util";
 import type { EnvDep, FileWriterDep, FileSysDep, ShellDep, StdioDep, TmpDep } from "@adda/lib";
-import { defaultDeps, ScriptArgsError, ScriptBase } from "@adda/lib";
+import { defaultDeps, ScriptBase } from "@adda/lib";
 
 import { Output } from "./pr-review-threads/output";
 import { runPr } from "./pr-review-threads/pr";
@@ -25,6 +25,8 @@ const DEFAULT_MAX_UNRESOLVED = 50;
 type PrReviewThreadsDeps = ShellDep & EnvDep & StdioDep & TmpDep & FileWriterDep & FileSysDep;
 
 export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrReviewThreadsArgs> {
+    private readonly output = new Output(this.deps);
+
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return {
             allowPositionals: true,
@@ -37,15 +39,9 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
     }
 
     protected validateArgs(parsed: ReturnType<typeof parseArgs>): PrReviewThreadsArgs {
-        // Output is created here so keyless errors can be emitted before dispatch
-        const output = this.makeOutput();
-
         const mode = parsed.positionals[0];
         if (!mode) {
-            output.emitKeylessError(
-                "mode is required: pr <pr-number> [--include-resolved] [--max-unresolved <n>]  or  thread <thread-id>",
-            );
-            throw new ScriptArgsError(
+            this.output.failKeyless(
                 "mode is required: pr <pr-number> [--include-resolved] [--max-unresolved <n>]  or  thread <thread-id>",
             );
         }
@@ -53,13 +49,11 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
         if (mode === "pr") {
             const prArg = parsed.positionals[1];
             if (!prArg) {
-                output.emitKeylessError("pr mode requires a PR number as the second argument");
-                throw new ScriptArgsError("pr mode requires a PR number as the second argument");
+                this.output.failKeyless("pr mode requires a PR number as the second argument");
             }
             const prNumber = Number(prArg);
             if (!Number.isInteger(prNumber) || prNumber <= 0) {
-                output.emitKeylessError(`invalid PR number '${prArg}': must be a positive integer`);
-                throw new ScriptArgsError(`invalid PR number '${prArg}': must be a positive integer`);
+                this.output.failKeyless(`invalid PR number '${prArg}': must be a positive integer`);
             }
 
             const maxUnresolvedArg = parsed.values["max-unresolved"] as string | undefined;
@@ -67,8 +61,7 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
             if (maxUnresolvedArg !== undefined) {
                 maxUnresolved = Number(maxUnresolvedArg);
                 if (!Number.isInteger(maxUnresolved) || maxUnresolved <= 0) {
-                    output.emitKeylessError(`invalid --max-unresolved '${maxUnresolvedArg}': must be a positive integer`);
-                    throw new ScriptArgsError(`invalid --max-unresolved '${maxUnresolvedArg}': must be a positive integer`);
+                    this.output.failKeyless(`invalid --max-unresolved '${maxUnresolvedArg}': must be a positive integer`);
                 }
             }
 
@@ -82,37 +75,28 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
 
         if (mode === "thread") {
             if (parsed.values["include-resolved"] !== undefined) {
-                output.emitKeylessError("--include-resolved is not valid for 'thread'");
-                throw new ScriptArgsError("--include-resolved is not valid for 'thread'");
+                this.output.failKeyless("--include-resolved is not valid for 'thread'");
             }
             if (parsed.values["max-unresolved"] !== undefined) {
-                output.emitKeylessError("--max-unresolved is not valid for 'thread'");
-                throw new ScriptArgsError("--max-unresolved is not valid for 'thread'");
+                this.output.failKeyless("--max-unresolved is not valid for 'thread'");
             }
 
             const threadId = parsed.positionals[1];
             if (!threadId) {
-                output.emitKeylessError("thread mode requires a thread id as the second argument");
-                throw new ScriptArgsError("thread mode requires a thread id as the second argument");
+                this.output.failKeyless("thread mode requires a thread id as the second argument");
             }
             return { mode: "thread", threadId };
         }
 
-        output.emitKeylessError(`unknown mode '${mode}': expected 'pr' or 'thread'`);
-        throw new ScriptArgsError(`unknown mode '${mode}': expected 'pr' or 'thread'`);
+        return this.output.failKeyless(`unknown mode '${mode}': expected 'pr' or 'thread'`);
     }
 
     protected async execute(args: PrReviewThreadsArgs): Promise<void> {
-        const output = this.makeOutput();
         if (args.mode === "pr") {
-            await runPr(this.deps, args, output);
+            await runPr(this.deps, args, this.output);
         } else {
-            await runThread(this.deps, args, output);
+            await runThread(this.deps, args, this.output);
         }
-    }
-
-    private makeOutput(): Output {
-        return new Output(this.deps);
     }
 }
 

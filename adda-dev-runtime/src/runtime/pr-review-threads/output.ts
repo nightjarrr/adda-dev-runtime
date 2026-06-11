@@ -1,47 +1,26 @@
-// Output helpers for pr-review-threads: envelope emission, error classification, detail file write.
+// Output helpers for pr-review-threads: envelope emission, detail file write.
 import type { FileWriterDep, FileSysDep, StdioDep, TmpDep } from "@adda/lib";
-import { ConfigError } from "@adda/lib";
+import { ScriptArgsError } from "@adda/lib";
+import { PrThreadsError } from "./errors";
 import type { Envelope } from "./types";
-
-// --- Reason codes ---
-
-const REASON_MISSING_ENV = "missing_env";
-const REASON_INVALID_CONFIG = "invalid_config";
-const REASON_GRAPHQL_ERROR = "graphql_error";
-const REASON_INTERNAL_ERROR = "internal_error";
-
-/**
- * Classify an unhandled error into a short reason code for the structured envelope.
- */
-export function classifyError(err: unknown): string {
-    if (err instanceof ConfigError) return REASON_INVALID_CONFIG;
-    if (err instanceof Error) {
-        if (err.message.startsWith("required environment variable")) return REASON_MISSING_ENV;
-        if (err.message.startsWith("GraphQL API call failed")) return REASON_GRAPHQL_ERROR;
-    }
-    return REASON_INTERNAL_ERROR;
-}
 
 type OutputDeps = StdioDep & TmpDep & FileWriterDep & FileSysDep;
 
-/**
- * Owns all envelope emission for a single pr-review-threads invocation.
- *
- * The `envelopeEmitted` guard ensures exactly one envelope is written to stdout
- * even when an error is both explicitly handled and caught by the outer catch.
- */
 export class Output {
-    private envelopeEmitted = false;
-
     constructor(private readonly deps: OutputDeps) {}
-
-    get hasEmitted(): boolean {
-        return this.envelopeEmitted;
-    }
 
     emitSuccess(envelope: Envelope): void {
         this.deps.stdio.stdout.write(`${JSON.stringify(envelope)}\n`);
-        this.envelopeEmitted = true;
+    }
+
+    /**
+     * Emit a keyless structured error envelope and throw ScriptArgsError in one call.
+     * Shape: { "status": "error", "error": "<message>" }
+     * Mirrors current-issue's fail() pattern.
+     */
+    failKeyless(message: string): never {
+        this.emitKeylessError(message);
+        throw new ScriptArgsError(message);
     }
 
     /**
@@ -51,47 +30,29 @@ export class Output {
     emitKeylessError(message: string): void {
         const envelope: { status: "error"; error: string } = { status: "error", error: message };
         this.deps.stdio.stdout.write(`${JSON.stringify(envelope)}\n`);
-        this.envelopeEmitted = true;
     }
 
     /**
      * Emit a mode-keyed structured error envelope.
-     * Shape for pr:     { "status": "error", "error": "<message>", "pr":     { "reason": "<code>", … } }
-     * Shape for thread: { "status": "error", "error": "<message>", "thread": { "reason": "<code>", … } }
+     *
+     * If err is a PrThreadsError, reads err.reason and err.payload directly.
+     * Any other error is treated as internal_error.
+     *
+     * Shape for pr:     { "status": "error", "error": "<message>", "pr":     { "reason": "<code>", …payload } }
+     * Shape for thread: { "status": "error", "error": "<message>", "thread": { "reason": "<code>", …payload } }
      */
-    emitModeError(mode: "pr", reason: string, message: string): void;
-    emitModeError(mode: "thread", reason: string, message: string): void;
-    emitModeError(mode: "pr" | "thread", reason: string, message: string): void {
-        let envelope: Envelope;
-        if (mode === "pr") {
-            envelope = { status: "error", error: message, pr: { reason } };
-        } else {
-            envelope = { status: "error", error: message, thread: { reason } };
-        }
-        this.deps.stdio.stdout.write(`${JSON.stringify(envelope)}\n`);
-        this.envelopeEmitted = true;
-    }
+    emitError(mode: "pr" | "thread", err: unknown): void {
+        const message = err instanceof Error ? err.message : String(err);
+        const reason = err instanceof PrThreadsError ? err.reason : "internal_error";
+        const payload = err instanceof PrThreadsError ? err.payload : {};
 
-    emitScanLimitExceeded(
-        mode: "pr" | "thread",
-        total: number | undefined,
-        commentCount: number | undefined,
-        ceiling: number,
-    ): void {
         let envelope: Envelope;
         if (mode === "pr") {
-            const message = `scan limit exceeded: ${total} threads > ceiling ${ceiling}`;
-            envelope = { status: "error", error: message, pr: { reason: "scan_limit_exceeded", total, ceiling } };
+            envelope = { status: "error", error: message, pr: { reason, ...payload } };
         } else {
-            const message = `scan limit exceeded: ${commentCount} comments > ceiling ${ceiling}`;
-            envelope = {
-                status: "error",
-                error: message,
-                thread: { reason: "scan_limit_exceeded", commentCount, ceiling },
-            };
+            envelope = { status: "error", error: message, thread: { reason, ...payload } };
         }
         this.deps.stdio.stdout.write(`${JSON.stringify(envelope)}\n`);
-        this.envelopeEmitted = true;
     }
 
     /**
@@ -105,5 +66,20 @@ export class Output {
         await this.deps.fileWriter.writeFile(tmpPath, JSON.stringify(content, null, 2));
         await this.deps.fileSys.renameFile(tmpPath, finalPath);
         return finalPath;
+    }
+}
+
+/**
+ * Shared wrapper: the single runtime-error emit point.
+ *
+ * Calls inner(), catches any error, emits the mode-keyed error envelope,
+ * and re-throws. runPrInner / runThreadInner stay separate (wrapper-only merge).
+ */
+export async function runMode(mode: "pr" | "thread", output: Output, inner: () => Promise<void>): Promise<void> {
+    try {
+        await inner();
+    } catch (err) {
+        output.emitError(mode, err);
+        throw err;
     }
 }

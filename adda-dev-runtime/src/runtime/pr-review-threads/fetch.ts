@@ -1,7 +1,8 @@
 // Fetch helpers for pr-review-threads: graphql caller, generic paginate, env helpers.
-import type { EnvDep, ShellDep } from "@adda/lib";
-import { ConfigError, parseJson, ScriptError, ScriptZodValidationError } from "@adda/lib";
+import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
+import { parseJson, ScriptError, ScriptZodValidationError } from "@adda/lib";
 import type { z } from "zod";
+import { PrThreadsError } from "./errors";
 
 const DEFAULT_SCAN_CEILING = 1000;
 
@@ -9,10 +10,11 @@ const DEFAULT_SCAN_CEILING = 1000;
 
 /**
  * Calls the GitHub GraphQL API with the given query and variables.
- * Throws ScriptError on non-zero exit from gh.
+ * Forwards gh's stderr to the script's stderr on failure (diagnostics).
+ * Throws PrThreadsError("graphql_error") on non-zero exit from gh.
  */
 export async function graphql(
-    deps: ShellDep,
+    deps: ShellDep & StdioDep,
     variables: Record<string, string | number | null>,
     query: string,
 ): Promise<unknown> {
@@ -23,7 +25,10 @@ export async function graphql(
     }
     const result = await deps.shell.run(args, { strict: false });
     if (result.exitCode !== 0) {
-        throw new ScriptError(`GraphQL API call failed: ${result.stderr.trim() || result.stdout.trim()}`);
+        if (result.stderr) {
+            deps.stdio.stderr.write(result.stderr);
+        }
+        throw new PrThreadsError("graphql_error", "GitHub GraphQL request failed");
     }
     return parseJson(result.stdout);
 }
@@ -48,7 +53,7 @@ export async function graphql(
  * Returns all nodes from all pages (first + subsequent).
  */
 export async function paginate<TNode, TSchema extends z.ZodTypeAny>(
-    deps: ShellDep,
+    deps: ShellDep & StdioDep,
     firstNodes: TNode[],
     firstPageInfo: { hasNextPage: boolean; endCursor: string | null },
     variables: Record<string, string | number | null>,
@@ -84,14 +89,19 @@ export function readCeiling(deps: EnvDep): number {
     if (raw === undefined) return DEFAULT_SCAN_CEILING;
     const n = Number(raw);
     if (!Number.isInteger(n) || n <= 0)
-        throw new ConfigError(`ADDA_DEV_PR_REVIEW_SCAN_CEILING must be a positive integer, got '${raw}'`);
+        throw new PrThreadsError(
+            "invalid_config",
+            `ADDA_DEV_PR_REVIEW_SCAN_CEILING must be a positive integer, got '${raw}'`,
+            {},
+            2,
+        );
     return n;
 }
 
 export function requireOwnerRepo(deps: EnvDep): { owner: string; repo: string } {
     const owner = deps.env.get("GITHUB_OWNER");
-    if (!owner) throw new ScriptError("required environment variable 'GITHUB_OWNER' is not set");
+    if (!owner) throw new PrThreadsError("missing_env", "required environment variable 'GITHUB_OWNER' is not set");
     const repo = deps.env.get("GITHUB_REPO");
-    if (!repo) throw new ScriptError("required environment variable 'GITHUB_REPO' is not set");
+    if (!repo) throw new PrThreadsError("missing_env", "required environment variable 'GITHUB_REPO' is not set");
     return { owner, repo };
 }

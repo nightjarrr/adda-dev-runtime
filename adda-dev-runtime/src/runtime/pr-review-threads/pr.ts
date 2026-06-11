@@ -1,10 +1,11 @@
 // pr mode handler for pr-review-threads.
 import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
-import { ScriptError, ScriptZodValidationError } from "@adda/lib";
+import { ScriptZodValidationError } from "@adda/lib";
 import { PR_THREADS_QUERY, PrThreadsPageSchema } from "./graphql";
 import type { ThreadNode } from "./graphql";
 import { COMMENT_PREVIEW_DEPTH, FILE_PREFIX_PR, sortThreads, toThreadObject } from "./helpers";
-import { classifyError, Output } from "./output";
+import { Output, runMode } from "./output";
+import { PrThreadsError } from "./errors";
 import { graphql, paginate, readCeiling, requireOwnerRepo } from "./fetch";
 import type { PrDetailFile, PrFileHeader, PrReviewThreadsArgs, ThreadObject } from "./types";
 
@@ -15,15 +16,7 @@ type PrDeps = ShellDep & EnvDep & StdioDep;
  * builds the detail file, and emits the success envelope.
  */
 export async function runPr(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mode: "pr" }>, output: Output): Promise<void> {
-    try {
-        await runPrInner(deps, args, output);
-    } catch (err) {
-        if (!output.hasEmitted) {
-            const message = err instanceof Error ? err.message : String(err);
-            output.emitModeError("pr", classifyError(err), message);
-        }
-        throw err;
-    }
+    await runMode("pr", output, () => runPrInner(deps, args, output));
 }
 
 async function runPrInner(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mode: "pr" }>, output: Output): Promise<void> {
@@ -36,20 +29,20 @@ async function runPrInner(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mod
     if (!firstParsed.success) throw new ScriptZodValidationError("unexpected PR threads response", firstParsed.error, firstRaw);
 
     if (firstParsed.data.data.repository === null) {
-        output.emitModeError("pr", "repo_not_found", `repository ${owner}/${repo} not found`);
-        throw new ScriptError(`repository ${owner}/${repo} not found`);
+        throw new PrThreadsError("repo_not_found", `repository ${owner}/${repo} not found`);
     }
     if (firstParsed.data.data.repository.pullRequest === null) {
-        output.emitModeError("pr", "pr_not_found", `PR #${args.prNumber} not found in ${owner}/${repo}`);
-        throw new ScriptError(`PR #${args.prNumber} not found in ${owner}/${repo}`);
+        throw new PrThreadsError("pr_not_found", `PR #${args.prNumber} not found in ${owner}/${repo}`);
     }
 
     const firstPage = firstParsed.data.data.repository.pullRequest.reviewThreads;
     const total = firstPage.totalCount;
 
     if (total > ceiling) {
-        output.emitScanLimitExceeded("pr", total, undefined, ceiling);
-        throw new ScriptError(`scan limit exceeded: ${total} threads > ceiling ${ceiling}`, 1);
+        throw new PrThreadsError("scan_limit_exceeded", `scan limit exceeded: ${total} threads > ceiling ${ceiling}`, {
+            total,
+            ceiling,
+        });
     }
 
     // Collect all pages using shared paginator

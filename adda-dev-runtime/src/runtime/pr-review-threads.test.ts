@@ -13,6 +13,7 @@ import type {
     Tmp,
     TmpDep,
 } from "../lib/index";
+import { ScriptArgsError } from "../lib/index";
 import { PrReviewThreadsScript } from "./pr-review-threads";
 
 type PrReviewThreadsDeps = ShellDep & EnvDep & StdioDep & TmpDep & FileWriterDep & FileSysDep;
@@ -457,7 +458,7 @@ describe("PrReviewThreadsScript", () => {
     // ---------------------------------------------------------------
     describe("pr mode: graphql failure", () => {
         test("graphql returns non-zero exit — exits 1, graphql_error envelope on stdout, no file", async () => {
-            const { deps, outLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines, errLines, renamedFiles } = makeMockDeps({
                 runQueue: [makeShellResult("", 1, "Could not resolve to a PullRequest with the number of 999999")],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "999999"]);
@@ -467,6 +468,8 @@ describe("PrReviewThreadsScript", () => {
             expect(out.status).toBe("error");
             const pr = out["pr"] as Record<string, unknown>;
             expect(pr?.reason).toBe("graphql_error");
+            // gh's stderr must be forwarded to the script's stderr
+            expect(errLines.join("")).toContain("Could not resolve to a PullRequest with the number of 999999");
         });
 
         test("graphql failure on pagination page — exits 1, graphql_error envelope on stdout", async () => {
@@ -488,7 +491,7 @@ describe("PrReviewThreadsScript", () => {
     // ---------------------------------------------------------------
     describe("thread mode: graphql failure", () => {
         test("graphql returns non-zero exit — exits 1, graphql_error envelope on stdout, no file", async () => {
-            const { deps, outLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines, errLines, renamedFiles } = makeMockDeps({
                 envVars: {},
                 runQueue: [makeShellResult("", 1, "Could not resolve to a node")],
             });
@@ -498,6 +501,8 @@ describe("PrReviewThreadsScript", () => {
             const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("error");
             expect((out["thread"] as Record<string, unknown>)?.reason).toBe("graphql_error");
+            // gh's stderr must be forwarded to the script's stderr
+            expect(errLines.join("")).toContain("Could not resolve to a node");
         });
     });
 
@@ -1033,10 +1038,10 @@ describe("PrReviewThreadsScript", () => {
     });
 
     // ---------------------------------------------------------------
-    // double-emit guard: existing envelope is not overwritten by catch
+    // single-envelope invariant: only one JSON object written per invocation
     // ---------------------------------------------------------------
-    describe("double-emit guard", () => {
-        test("explicit emitModeError is not overwritten by catch-all — single envelope on stdout", async () => {
+    describe("single-envelope invariant", () => {
+        test("repo_not_found — single envelope on stdout", async () => {
             const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makeRepoNotFound())],
             });
@@ -1067,7 +1072,8 @@ describe("PrReviewThreadsScript", () => {
 // ---------------------------------------------------------------
 import { hunkToFields, sortThreads, toThreadObject } from "./pr-review-threads/helpers";
 import type { ThreadNode } from "./pr-review-threads/graphql";
-import { Output } from "./pr-review-threads/output";
+import { Output, runMode } from "./pr-review-threads/output";
+import { PrThreadsError } from "./pr-review-threads/errors";
 import { paginate } from "./pr-review-threads/fetch";
 import { PR_THREADS_QUERY, PrThreadsPageSchema } from "./pr-review-threads/graphql";
 
@@ -1235,11 +1241,13 @@ type OutputDeps = StdioDep & TmpDep & FileWriterDep & FileSysDep;
 
 function makeOutputDeps(): {
     outLines: string[];
+    errLines: string[];
     deps: OutputDeps;
     writtenFiles: Map<string, string>;
     renamedFiles: Array<{ from: string; to: string }>;
 } {
     const outLines: string[] = [];
+    const errLines: string[] = [];
     const writtenFiles = new Map<string, string>();
     const renamedFiles: Array<{ from: string; to: string }> = [];
     const deps: OutputDeps = {
@@ -1250,7 +1258,11 @@ function makeOutputDeps(): {
                     outLines.push(t);
                 }),
             },
-            stderr: { write: mock(() => {}) },
+            stderr: {
+                write: mock((t: string) => {
+                    errLines.push(t);
+                }),
+            },
         },
         tmp: {
             tmpDir: mock(() => "/tmp"),
@@ -1270,21 +1282,14 @@ function makeOutputDeps(): {
             fileExists: mock(async () => false),
         },
     };
-    return { outLines, deps, writtenFiles, renamedFiles };
+    return { outLines, errLines, deps, writtenFiles, renamedFiles };
 }
 
 describe("Output", () => {
-    test("hasEmitted is false initially", () => {
-        const { deps } = makeOutputDeps();
-        const output = new Output(deps);
-        expect(output.hasEmitted).toBe(false);
-    });
-
-    test("emitKeylessError writes keyless envelope and sets hasEmitted", () => {
+    test("emitKeylessError writes keyless envelope", () => {
         const { deps, outLines } = makeOutputDeps();
         const output = new Output(deps);
         output.emitKeylessError("something went wrong");
-        expect(output.hasEmitted).toBe(true);
         const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
         expect(envelope.status).toBe("error");
         expect(envelope.error).toBe("something went wrong");
@@ -1292,42 +1297,69 @@ describe("Output", () => {
         expect(envelope).not.toHaveProperty("thread");
     });
 
-    test("emitModeError (pr) writes pr-keyed envelope and sets hasEmitted", () => {
+    test("failKeyless emits keyless envelope and throws ScriptArgsError", () => {
         const { deps, outLines } = makeOutputDeps();
         const output = new Output(deps);
-        output.emitModeError("pr", "repo_not_found", "repo not found");
-        expect(output.hasEmitted).toBe(true);
+        expect(() => output.failKeyless("bad args")).toThrow(ScriptArgsError);
+        const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
+        expect(envelope.status).toBe("error");
+        expect(envelope.error).toBe("bad args");
+        expect(envelope).not.toHaveProperty("pr");
+        expect(envelope).not.toHaveProperty("thread");
+    });
+
+    test("emitError with PrThreadsError (pr) writes pr-keyed envelope with reason and payload", () => {
+        const { deps, outLines } = makeOutputDeps();
+        const output = new Output(deps);
+        const err = new PrThreadsError("repo_not_found", "repo not found");
+        output.emitError("pr", err);
         const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
         expect(envelope.status).toBe("error");
         expect(envelope.error).toBe("repo not found");
         expect((envelope["pr"] as Record<string, unknown>)?.reason).toBe("repo_not_found");
     });
 
-    test("emitModeError (thread) writes thread-keyed envelope", () => {
+    test("emitError with PrThreadsError (thread) writes thread-keyed envelope", () => {
         const { deps, outLines } = makeOutputDeps();
         const output = new Output(deps);
-        output.emitModeError("thread", "thread_not_found", "not found");
+        const err = new PrThreadsError("thread_not_found", "not found");
+        output.emitError("thread", err);
         const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
         expect(envelope).toHaveProperty("thread");
         expect((envelope["thread"] as Record<string, unknown>)?.reason).toBe("thread_not_found");
     });
 
-    test("emitScanLimitExceeded (pr) writes pr-keyed envelope with total and ceiling", () => {
+    test("emitError with PrThreadsError carrying payload — payload merged into mode object", () => {
         const { deps, outLines } = makeOutputDeps();
         const output = new Output(deps);
-        output.emitScanLimitExceeded("pr", 1500, undefined, 1000);
+        const err = new PrThreadsError("scan_limit_exceeded", "scan limit exceeded: 1500 threads > ceiling 1000", {
+            total: 1500,
+            ceiling: 1000,
+        });
+        output.emitError("pr", err);
         const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
-        expect(envelope.status).toBe("error");
         const pr = envelope["pr"] as Record<string, unknown>;
         expect(pr?.reason).toBe("scan_limit_exceeded");
         expect(pr?.total).toBe(1500);
         expect(pr?.ceiling).toBe(1000);
     });
 
-    test("emitScanLimitExceeded (thread) writes thread-keyed envelope with commentCount", () => {
+    test("emitError with non-PrThreadsError — emits internal_error reason", () => {
         const { deps, outLines } = makeOutputDeps();
         const output = new Output(deps);
-        output.emitScanLimitExceeded("thread", undefined, 2000, 1000);
+        output.emitError("pr", new Error("something unexpected"));
+        const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
+        expect((envelope["pr"] as Record<string, unknown>)?.reason).toBe("internal_error");
+    });
+
+    test("emitError with thread commentCount payload", () => {
+        const { deps, outLines } = makeOutputDeps();
+        const output = new Output(deps);
+        const err = new PrThreadsError("scan_limit_exceeded", "scan limit exceeded: 2000 comments > ceiling 1000", {
+            commentCount: 2000,
+            ceiling: 1000,
+        });
+        output.emitError("thread", err);
         const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
         const thread = envelope["thread"] as Record<string, unknown>;
         expect(thread?.reason).toBe("scan_limit_exceeded");
@@ -1335,11 +1367,10 @@ describe("Output", () => {
         expect(thread?.ceiling).toBe(1000);
     });
 
-    test("emitSuccess writes success envelope and sets hasEmitted", () => {
+    test("emitSuccess writes success envelope", () => {
         const { deps, outLines } = makeOutputDeps();
         const output = new Output(deps);
         output.emitSuccess({ status: "success", error: "", pr: { reason: "ok" } });
-        expect(output.hasEmitted).toBe(true);
         const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
         expect(envelope.status).toBe("success");
     });
@@ -1355,23 +1386,91 @@ describe("Output", () => {
 });
 
 // ---------------------------------------------------------------
+// runMode unit tests
+// ---------------------------------------------------------------
+
+describe("runMode", () => {
+    test("runMode resolves when inner resolves — no emit", async () => {
+        const { deps, outLines } = makeOutputDeps();
+        const output = new Output(deps);
+        await runMode("pr", output, async () => {});
+        expect(outLines).toHaveLength(0);
+    });
+
+    test("runMode emits mode-keyed error and re-throws on PrThreadsError", async () => {
+        const { deps, outLines } = makeOutputDeps();
+        const output = new Output(deps);
+        const err = new PrThreadsError("repo_not_found", "repo not found");
+        await expect(
+            runMode("pr", output, async () => {
+                throw err;
+            }),
+        ).rejects.toThrow("repo not found");
+        const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
+        expect(envelope.status).toBe("error");
+        expect((envelope["pr"] as Record<string, unknown>)?.reason).toBe("repo_not_found");
+    });
+
+    test("runMode emits internal_error and re-throws on generic Error", async () => {
+        const { deps, outLines } = makeOutputDeps();
+        const output = new Output(deps);
+        await expect(
+            runMode("thread", output, async () => {
+                throw new Error("boom");
+            }),
+        ).rejects.toThrow("boom");
+        const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
+        expect((envelope["thread"] as Record<string, unknown>)?.reason).toBe("internal_error");
+    });
+});
+
+// ---------------------------------------------------------------
+// PrThreadsError unit tests
+// ---------------------------------------------------------------
+
+describe("PrThreadsError", () => {
+    test("carries reason, payload, and default exitCode 1", () => {
+        const err = new PrThreadsError("missing_env", "GITHUB_OWNER not set");
+        expect(err.reason).toBe("missing_env");
+        expect(err.payload).toEqual({});
+        expect(err.exitCode).toBe(1);
+        expect(err instanceof Error).toBe(true);
+    });
+
+    test("carries custom payload", () => {
+        const err = new PrThreadsError("scan_limit_exceeded", "limit hit", { total: 100, ceiling: 50 });
+        expect(err.payload).toEqual({ total: 100, ceiling: 50 });
+    });
+
+    test("invalid_config uses exitCode 2", () => {
+        const err = new PrThreadsError("invalid_config", "bad ceiling", {}, 2);
+        expect(err.exitCode).toBe(2);
+    });
+});
+
+// ---------------------------------------------------------------
 // paginate unit tests
 // ---------------------------------------------------------------
 
 describe("paginate", () => {
-    function makeShellDeps(runQueue: Array<{ stdout: string; exitCode?: number }>): ShellDep {
+    function makeShellDeps(runQueue: Array<{ stdout: string; exitCode?: number; stderr?: string }>): ShellDep & StdioDep {
         const queue = [...runQueue];
         return {
             shell: {
                 run: mock(async (_command: string[], opts?: { strict?: boolean }) => {
-                    const next = queue.shift() ?? { stdout: "{}", exitCode: 0 };
+                    const next = queue.shift() ?? { stdout: "{}", exitCode: 0, stderr: "" };
                     const exitCode = next.exitCode ?? 0;
                     if ((opts?.strict ?? true) && exitCode !== 0) {
                         throw new Error(`shell error (exit ${exitCode})`);
                     }
-                    return { stdout: next.stdout, stderr: "", exitCode };
+                    return { stdout: next.stdout, stderr: next.stderr ?? "", exitCode };
                 }),
                 runSh: mock(async () => ({ stdout: "", stderr: "", exitCode: 0 })),
+            },
+            stdio: {
+                stdin: { text: mock(async () => "") },
+                stdout: { write: mock(() => {}) },
+                stderr: { write: mock(() => {}) },
             },
         };
     }

@@ -1,14 +1,15 @@
 // thread mode handler for pr-review-threads.
-import type { EnvDep, ShellDep } from "@adda/lib";
+import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
 import { ScriptError, ScriptZodValidationError } from "@adda/lib";
 import { THREAD_NODE_QUERY, ThreadNodeQuerySchema } from "./graphql";
 import type { CommentNode } from "./graphql";
 import { FILE_PREFIX_THREAD, toThreadObjectFull } from "./helpers";
-import { classifyError, Output } from "./output";
+import { Output, runMode } from "./output";
+import { PrThreadsError } from "./errors";
 import { graphql, paginate, readCeiling } from "./fetch";
 import type { PrReviewThreadsArgs, ThreadDetailFile, ThreadFileHeader } from "./types";
 
-type ThreadDeps = ShellDep & EnvDep;
+type ThreadDeps = ShellDep & EnvDep & StdioDep;
 
 /**
  * Handles thread mode: fetches a single review thread and all its comments,
@@ -19,15 +20,7 @@ export async function runThread(
     args: Extract<PrReviewThreadsArgs, { mode: "thread" }>,
     output: Output,
 ): Promise<void> {
-    try {
-        await runThreadInner(deps, args, output);
-    } catch (err) {
-        if (!output.hasEmitted) {
-            const message = err instanceof Error ? err.message : String(err);
-            output.emitModeError("thread", classifyError(err), message);
-        }
-        throw err;
-    }
+    await runMode("thread", output, () => runThreadInner(deps, args, output));
 }
 
 async function runThreadInner(
@@ -45,16 +38,13 @@ async function runThreadInner(
 
     const node = firstParsed.data.data.node;
     if (node === null) {
-        output.emitModeError("thread", "thread_not_found", `thread '${args.threadId}' not found`);
-        throw new ScriptError(`thread '${args.threadId}' not found`);
+        throw new PrThreadsError("thread_not_found", `thread '${args.threadId}' not found`);
     }
     if (node.__typename !== "PullRequestReviewThread") {
-        output.emitModeError(
-            "thread",
+        throw new PrThreadsError(
             "not_a_thread",
             `node '${args.threadId}' is not a PullRequestReviewThread (got ${node.__typename})`,
         );
-        throw new ScriptError(`node '${args.threadId}' is not a PullRequestReviewThread`);
     }
 
     const comments = node.comments;
@@ -64,8 +54,10 @@ async function runThreadInner(
 
     const commentCount = comments.totalCount;
     if (commentCount > ceiling) {
-        output.emitScanLimitExceeded("thread", undefined, commentCount, ceiling);
-        throw new ScriptError(`scan limit exceeded: ${commentCount} comments > ceiling ${ceiling}`, 1);
+        throw new PrThreadsError("scan_limit_exceeded", `scan limit exceeded: ${commentCount} comments > ceiling ${ceiling}`, {
+            commentCount,
+            ceiling,
+        });
     }
 
     if (
