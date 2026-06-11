@@ -168,11 +168,28 @@ When the PR is opened, watch PR checks using the `ci-gate` skill. Step 7 is not 
 
 PO might leave comments in the PR (general or attached to diff lines in specific files) or provide feedback directly in the conversation. Make sure you have an explicit answer from the PO whether the PR is approved or requires a **delta plan iteration**.
 
-Fetch the PR comments using the commands:
+Fetch the PR's general conversation and its review threads:
 ```
 gh pr view {pr-number} --comments
-gh api repos/{owner}/{repo}/pulls/{pr-number}/comments
+/usr/local/libexec/adda-dev-runtime/bin/pr-review-threads pr {pr-number}
 ```
+`gh pr view --comments` returns the general PR conversation. `pr-review-threads pr {pr-number}` returns the **unresolved review threads** (resolution state + thread grouping) as a JSON envelope on stdout, and writes the full detail to a file.
+
+**On success** (`status: "success"`, exit 0) the envelope carries a `pr` payload; read `.pr.resultsFile` and `jq` the file for detail:
+```json
+{ "status": "success", "error": "",
+  "pr": { "number": 306, "total": 12, "unresolved": 3, "resolved": 9,
+          "returnedUnresolved": 3, "moreUnresolvedAvailable": false, "maxUnresolved": 50,
+          "resultsFile": "/tmp/pr-review-threads-pr-306-<ts>.json" } }
+```
+- `unresolved` is the true count; `returnedUnresolved` is how many are in the file (the unresolved set is windowed at `maxUnresolved`). If `moreUnresolvedAvailable` is `true`, the remainder surfaces on a later run once addressed threads are resolved.
+- Detail file shape: `{ pr:{…header…}, threads:[ {id, path, line, isOutdated, targetLine, hunkPreview, comments:[{author, body, url, createdAt}]} ], hunks:{ id → full diff hunk } }`. Slice it, e.g. `jq '[.threads[] | {id, path, line, isOutdated, body: .comments[0].body}]' <file>`; pull a full hunk only when needed via `jq '.hunks["<id>"]' <file>`. A thread flagged `commentsTruncated:true` has more comments than the inline preview — fetch them all with `pr-review-threads thread <id>`.
+
+**On error** (`status: "error"`, non-zero exit, **no file written**) the envelope carries `error` plus a `reason` code under the mode key:
+```json
+{ "status": "error", "error": "PR #999 not found in owner/repo", "pr": { "reason": "pr_not_found" } }
+```
+Branch on `reason`: `pr_not_found` / `repo_not_found` / `missing_env` / `invalid_config` are operator/config errors — fix and retry. `scan_limit_exceeded` (carries `total` + `ceiling`) means the PR has more review threads than the safe ceiling (`ADDA_DEV_PR_REVIEW_SCAN_CEILING`) — treat as anomalous and surface to PO rather than raising the ceiling blindly. Never read `resultsFile` on a non-zero exit — no file is written on the error path.
 
 If PO is satisfied with the outcome, the next step is on PO: **merge the PR**. Active PM work pauses until PO manually merges. If PO reports the merge, proceed to step 10.
 

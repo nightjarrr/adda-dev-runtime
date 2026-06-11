@@ -135,6 +135,7 @@ Current artifacts:
 | `render-adda-shell-tools` (Bun executable) | `proto-adda/src/runtime/render-adda-shell-tools.ts` | `/usr/local/libexec/adda-dev-runtime/bin/render-adda-shell-tools` | — |
 | `prune-node-modules.sh` (build script) | `adda-dev-runtime/build/prune-node-modules.sh` | (build-stage only, not in final image) | — |
 | `current-issue` (Bun executable) | `adda-dev-runtime/src/runtime/current-issue.ts` | `/usr/local/libexec/adda-dev-runtime/bin/current-issue` | — |
+| `pr-review-threads` (Bun executable) | `adda-dev-runtime/src/runtime/pr-review-threads.ts` | `/usr/local/libexec/adda-dev-runtime/bin/pr-review-threads` | — |
 | Shell tools rendered markdown (runtime artifact) | produced by `96-render-shell-tools.sh` at bootstrap | `/run/adda/.adda-shell-tools.md` | — |
 
 ## CI/build pipeline

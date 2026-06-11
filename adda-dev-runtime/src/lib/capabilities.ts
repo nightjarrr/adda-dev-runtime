@@ -67,6 +67,7 @@ export interface EnvDep {
 export interface Tmp {
     tempFilePath(prefix?: string, suffix?: string): string;
     makeTempDir(prefix?: string): string;
+    tmpDir(): string;
 }
 
 export interface TmpDep {
@@ -133,11 +134,15 @@ export class BunEnv implements Env {
 
 export class BunTmp implements Tmp {
     tempFilePath(prefix = "tmp", suffix = ""): string {
-        return `${tmpdir()}/${prefix}-${crypto.randomUUID()}${suffix}`;
+        return `${this.tmpDir()}/${prefix}-${crypto.randomUUID()}${suffix}`;
     }
 
     makeTempDir(prefix = "tmp"): string {
-        return mkdtempSync(`${tmpdir()}/${prefix}-`);
+        return mkdtempSync(`${this.tmpDir()}/${prefix}-`);
+    }
+
+    tmpDir(): string {
+        return tmpdir();
     }
 }
 

@@ -233,6 +233,18 @@ describe("BunTmp", () => {
         });
     });
 
+    describe("tmpDir", () => {
+        test("returns the os temp directory path", () => {
+            const tmp = new BunTmp();
+            expect(tmp.tmpDir()).toBe(tmpdir());
+        });
+
+        test("returns a non-empty string", () => {
+            const tmp = new BunTmp();
+            expect(tmp.tmpDir().length).toBeGreaterThan(0);
+        });
+    });
+
     describe("makeTempDir", () => {
         test("creates a directory under os.tmpdir()", async () => {
             const tmp = new BunTmp();
