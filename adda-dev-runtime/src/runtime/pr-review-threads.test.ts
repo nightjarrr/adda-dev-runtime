@@ -1065,8 +1065,11 @@ describe("PrReviewThreadsScript", () => {
 // ---------------------------------------------------------------
 // Pure helper unit tests
 // ---------------------------------------------------------------
-import { buildHunkPreview, extractTargetLine, sortThreads, toThreadObject } from "./pr-review-threads/helpers";
+import { buildHunkPreview, extractTargetLine, hunkToFields, sortThreads, toThreadObject } from "./pr-review-threads/helpers";
 import type { ThreadNode } from "./pr-review-threads/graphql";
+import { Output } from "./pr-review-threads/output";
+import { paginate } from "./pr-review-threads/fetch";
+import { PR_THREADS_QUERY, PrThreadsPageSchema } from "./pr-review-threads/graphql";
 
 describe("extractTargetLine", () => {
     test("returns last non-empty line of hunk", () => {
@@ -1203,5 +1206,307 @@ describe("toThreadObject", () => {
         const obj = toThreadObject(node);
         expect(obj.commentsTruncated).toBe(true);
         expect(obj.commentCount).toBe(10);
+    });
+});
+
+// ---------------------------------------------------------------
+// hunkToFields unit tests
+// ---------------------------------------------------------------
+
+describe("hunkToFields", () => {
+    test("returns targetLine and hunkPreview for a normal hunk", () => {
+        const hunk = "@@ -1,3 +1,4 @@\n line1\n-old\n+new";
+        const { targetLine, hunkPreview } = hunkToFields(hunk);
+        expect(targetLine).toBe("+new");
+        expect(hunkPreview).not.toContain("@@");
+        expect(hunkPreview).toContain("+new");
+    });
+
+    test("targetLine and hunkPreview match extractTargetLine/buildHunkPreview for same input", () => {
+        const hunk = "@@ -1,4 +1,5 @@\n a\n b\n-c\n+d\n+e";
+        const { targetLine, hunkPreview } = hunkToFields(hunk);
+        expect(targetLine).toBe(extractTargetLine(hunk));
+        expect(hunkPreview).toBe(buildHunkPreview(hunk));
+    });
+
+    test("returns nulls for null input", () => {
+        const { targetLine, hunkPreview } = hunkToFields(null);
+        expect(targetLine).toBeNull();
+        expect(hunkPreview).toBeNull();
+    });
+
+    test("returns nulls for empty string", () => {
+        const { targetLine, hunkPreview } = hunkToFields("");
+        expect(targetLine).toBeNull();
+        expect(hunkPreview).toBeNull();
+    });
+
+    test("hunkPreview is null when body is empty after dropping trailing lines", () => {
+        const hunk = "@@ -1,0 +1,0 @@\n";
+        const { hunkPreview } = hunkToFields(hunk);
+        expect(hunkPreview).toBeNull();
+    });
+
+    test("hunkPreview is prefixed with '…' when body exceeds tail", () => {
+        const lines = ["@@ -1,10 +1,10 @@", " a", " b", " c", " d", " e", " f", " g", " h", " i", " j"];
+        const hunk = lines.join("\n");
+        const { hunkPreview } = hunkToFields(hunk, 3);
+        expect(hunkPreview).toMatch(/^…/);
+        expect(hunkPreview).toContain(" h\n i\n j");
+    });
+
+    test("targetLine ignores trailing empty lines", () => {
+        const hunk = "@@ -1,2 +1,3 @@\n line\n+new\n";
+        const { targetLine } = hunkToFields(hunk);
+        expect(targetLine).toBe("+new");
+    });
+});
+
+// ---------------------------------------------------------------
+// Output unit tests
+// ---------------------------------------------------------------
+
+type OutputDeps = StdioDep & TmpDep & FileWriterDep & FileSysDep;
+
+function makeOutputDeps(): {
+    outLines: string[];
+    deps: OutputDeps;
+    writtenFiles: Map<string, string>;
+    renamedFiles: Array<{ from: string; to: string }>;
+} {
+    const outLines: string[] = [];
+    const writtenFiles = new Map<string, string>();
+    const renamedFiles: Array<{ from: string; to: string }> = [];
+    const deps: OutputDeps = {
+        stdio: {
+            stdin: { text: mock(async () => "") },
+            stdout: {
+                write: mock((t: string) => {
+                    outLines.push(t);
+                }),
+            },
+            stderr: { write: mock(() => {}) },
+        },
+        tmp: {
+            tmpDir: mock(() => "/tmp"),
+            tempFilePath: mock((p = "tmp", s = "") => `/tmp/${p}-uuid${s}`),
+            makeTempDir: mock(() => "/tmp/dir"),
+        },
+        fileWriter: {
+            writeFile: mock(async (path: string, content: string): Promise<void> => {
+                writtenFiles.set(path, content);
+            }),
+        },
+        fileSys: {
+            renameFile: mock(async (from: string, to: string): Promise<void> => {
+                renamedFiles.push({ from, to });
+            }),
+            deleteFile: mock(async () => {}),
+            fileExists: mock(async () => false),
+        },
+    };
+    return { outLines, deps, writtenFiles, renamedFiles };
+}
+
+describe("Output", () => {
+    test("hasEmitted is false initially", () => {
+        const { deps } = makeOutputDeps();
+        const output = new Output(deps);
+        expect(output.hasEmitted).toBe(false);
+    });
+
+    test("emitKeylessError writes keyless envelope and sets hasEmitted", () => {
+        const { deps, outLines } = makeOutputDeps();
+        const output = new Output(deps);
+        output.emitKeylessError("something went wrong");
+        expect(output.hasEmitted).toBe(true);
+        const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
+        expect(envelope.status).toBe("error");
+        expect(envelope.error).toBe("something went wrong");
+        expect(envelope).not.toHaveProperty("pr");
+        expect(envelope).not.toHaveProperty("thread");
+    });
+
+    test("emitModeError (pr) writes pr-keyed envelope and sets hasEmitted", () => {
+        const { deps, outLines } = makeOutputDeps();
+        const output = new Output(deps);
+        output.emitModeError("pr", "repo_not_found", "repo not found");
+        expect(output.hasEmitted).toBe(true);
+        const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
+        expect(envelope.status).toBe("error");
+        expect(envelope.error).toBe("repo not found");
+        expect((envelope["pr"] as Record<string, unknown>)?.reason).toBe("repo_not_found");
+    });
+
+    test("emitModeError (thread) writes thread-keyed envelope", () => {
+        const { deps, outLines } = makeOutputDeps();
+        const output = new Output(deps);
+        output.emitModeError("thread", "thread_not_found", "not found");
+        const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
+        expect(envelope).toHaveProperty("thread");
+        expect((envelope["thread"] as Record<string, unknown>)?.reason).toBe("thread_not_found");
+    });
+
+    test("emitScanLimitExceeded (pr) writes pr-keyed envelope with total and ceiling", () => {
+        const { deps, outLines } = makeOutputDeps();
+        const output = new Output(deps);
+        output.emitScanLimitExceeded("pr", 1500, undefined, 1000);
+        const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
+        expect(envelope.status).toBe("error");
+        const pr = envelope["pr"] as Record<string, unknown>;
+        expect(pr?.reason).toBe("scan_limit_exceeded");
+        expect(pr?.total).toBe(1500);
+        expect(pr?.ceiling).toBe(1000);
+    });
+
+    test("emitScanLimitExceeded (thread) writes thread-keyed envelope with commentCount", () => {
+        const { deps, outLines } = makeOutputDeps();
+        const output = new Output(deps);
+        output.emitScanLimitExceeded("thread", undefined, 2000, 1000);
+        const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
+        const thread = envelope["thread"] as Record<string, unknown>;
+        expect(thread?.reason).toBe("scan_limit_exceeded");
+        expect(thread?.commentCount).toBe(2000);
+        expect(thread?.ceiling).toBe(1000);
+    });
+
+    test("emitSuccess writes success envelope and sets hasEmitted", () => {
+        const { deps, outLines } = makeOutputDeps();
+        const output = new Output(deps);
+        output.emitSuccess({ status: "success", error: "", pr: { reason: "ok" } });
+        expect(output.hasEmitted).toBe(true);
+        const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
+        expect(envelope.status).toBe("success");
+    });
+
+    test("writeDetailFile writes then renames, returns final path", async () => {
+        const { deps, writtenFiles, renamedFiles } = makeOutputDeps();
+        const output = new Output(deps);
+        const path = await output.writeDetailFile("pr-review-threads-pr-42", { foo: "bar" });
+        expect(writtenFiles.size).toBe(1);
+        expect(renamedFiles).toHaveLength(1);
+        expect(path).toMatch(/\/tmp\/pr-review-threads-pr-42-\d+\.json$/);
+    });
+});
+
+// ---------------------------------------------------------------
+// paginate unit tests
+// ---------------------------------------------------------------
+
+describe("paginate", () => {
+    function makeShellDeps(runQueue: Array<{ stdout: string; exitCode?: number }>): ShellDep {
+        const queue = [...runQueue];
+        return {
+            shell: {
+                run: mock(async (_command: string[], opts?: { strict?: boolean }) => {
+                    const next = queue.shift() ?? { stdout: "{}", exitCode: 0 };
+                    const exitCode = next.exitCode ?? 0;
+                    if ((opts?.strict ?? true) && exitCode !== 0) {
+                        throw new Error(`shell error (exit ${exitCode})`);
+                    }
+                    return { stdout: next.stdout, stderr: "", exitCode };
+                }),
+                runSh: mock(async () => ({ stdout: "", stderr: "", exitCode: 0 })),
+            },
+        };
+    }
+
+    function makeThreadNode(id: string): ThreadNode {
+        return {
+            id,
+            isResolved: false,
+            isOutdated: false,
+            path: "f.ts",
+            line: 1,
+            startLine: null,
+            originalLine: 1,
+            diffSide: "RIGHT",
+            comments: { totalCount: 0, pageInfo: { hasNextPage: false }, nodes: [] },
+        };
+    }
+
+    function makePrPage(ids: string[], hasNextPage: boolean, endCursor: string | null = null): string {
+        return JSON.stringify({
+            data: {
+                repository: {
+                    pullRequest: {
+                        reviewThreads: {
+                            totalCount: ids.length,
+                            pageInfo: { hasNextPage, endCursor },
+                            nodes: ids.map(makeThreadNode),
+                        },
+                    },
+                },
+            },
+        });
+    }
+
+    function extractPrPage(parsed: {
+        data: {
+            repository: {
+                pullRequest: {
+                    reviewThreads: { nodes: ThreadNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } };
+                } | null;
+            } | null;
+        };
+    }): { nodes: ThreadNode[]; pageInfo: { hasNextPage: boolean; endCursor: string | null } } | null {
+        return parsed.data.repository?.pullRequest?.reviewThreads ?? null;
+    }
+
+    test("single page — returns first nodes without fetching more", async () => {
+        const deps = makeShellDeps([]);
+        const firstNodes = [makeThreadNode("PRRT_1")];
+        const firstPageInfo = { hasNextPage: false, endCursor: null };
+        const result = await paginate(
+            deps,
+            firstNodes,
+            firstPageInfo,
+            { owner: "o", repo: "r", number: 1 },
+            PR_THREADS_QUERY,
+            PrThreadsPageSchema,
+            extractPrPage,
+            "error",
+        );
+        expect(result).toHaveLength(1);
+        expect(result[0]!.id).toBe("PRRT_1");
+    });
+
+    test("two pages — accumulates nodes from both pages", async () => {
+        const page2 = makePrPage(["PRRT_2"], false);
+        const deps = makeShellDeps([{ stdout: page2 }]);
+        const firstNodes = [makeThreadNode("PRRT_1")];
+        const firstPageInfo = { hasNextPage: true, endCursor: "cursor1" };
+        const result = await paginate(
+            deps,
+            firstNodes,
+            firstPageInfo,
+            { owner: "o", repo: "r", number: 1 },
+            PR_THREADS_QUERY,
+            PrThreadsPageSchema,
+            extractPrPage,
+            "error",
+        );
+        expect(result).toHaveLength(2);
+        expect(result[0]!.id).toBe("PRRT_1");
+        expect(result[1]!.id).toBe("PRRT_2");
+    });
+
+    test("extractPage returning null triggers ScriptError", async () => {
+        const page2 = JSON.stringify({ data: { repository: null } });
+        const deps = makeShellDeps([{ stdout: page2, exitCode: 0 }]);
+        const firstNodes = [makeThreadNode("PRRT_1")];
+        const firstPageInfo = { hasNextPage: true, endCursor: "cursor1" };
+        await expect(
+            paginate(
+                deps,
+                firstNodes,
+                firstPageInfo,
+                { owner: "o", repo: "r", number: 1 },
+                PR_THREADS_QUERY,
+                PrThreadsPageSchema,
+                extractPrPage,
+                "error",
+            ),
+        ).rejects.toThrow("unexpected null page during pagination");
     });
 });

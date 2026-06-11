@@ -62,12 +62,55 @@ function toComment(c: CommentNode): ThreadComment {
 }
 
 /**
+ * Splits a diff hunk into lines once and derives both the target line and
+ * the hunk preview in a single pass.
+ *
+ * - targetLine: last non-empty line of the hunk (with +/-/space prefix).
+ * - hunkPreview: @@ header dropped, last `tail` body lines kept; prefixed
+ *   with "…" when lines were dropped. Null when the hunk body is empty.
+ */
+export function hunkToFields(
+    hunk: string | null | undefined,
+    tail = HUNK_PREVIEW_LINES,
+): { targetLine: string | null; hunkPreview: string | null } {
+    if (!hunk) return { targetLine: null, hunkPreview: null };
+    const lines = hunk.split("\n");
+
+    // targetLine: last non-empty line
+    let targetLine: string | null = null;
+    for (let i = lines.length - 1; i >= 0; i--) {
+        const line = lines[i];
+        if (line !== undefined && line.trim() !== "") {
+            targetLine = line;
+            break;
+        }
+    }
+
+    // hunkPreview: drop @@ header (first line), drop trailing empty lines, clip to tail
+    const body = lines.slice(1);
+    while (body.length > 0 && body[body.length - 1]?.trim() === "") {
+        body.pop();
+    }
+    let hunkPreview: string | null;
+    if (body.length === 0) {
+        hunkPreview = null;
+    } else if (body.length <= tail) {
+        hunkPreview = body.join("\n");
+    } else {
+        hunkPreview = `…\n${body.slice(body.length - tail).join("\n")}`;
+    }
+
+    return { targetLine, hunkPreview };
+}
+
+/**
  * Maps a ThreadNode to a ThreadObject for inclusion in the detail file.
  * Adds commentsTruncated + commentCount when comments were capped by preview depth.
  */
 export function toThreadObject(node: ThreadNode): ThreadObject {
     const hunk = node.comments.nodes[0]?.diffHunk ?? null;
     const truncated = node.comments.totalCount > COMMENT_PREVIEW_DEPTH || node.comments.pageInfo.hasNextPage;
+    const { targetLine, hunkPreview } = hunkToFields(hunk);
     const obj: ThreadObject = {
         id: node.id,
         path: node.path,
@@ -77,8 +120,8 @@ export function toThreadObject(node: ThreadNode): ThreadObject {
         isResolved: node.isResolved,
         isOutdated: node.isOutdated,
         diffSide: node.diffSide,
-        targetLine: extractTargetLine(hunk),
-        hunkPreview: buildHunkPreview(hunk),
+        targetLine,
+        hunkPreview,
         comments: node.comments.nodes.map(toComment),
     };
     if (truncated) {
@@ -106,6 +149,7 @@ export function toThreadObjectFull(
     comments: CommentNode[],
 ): ThreadObject {
     const hunk = comments[0]?.diffHunk ?? null;
+    const { targetLine, hunkPreview } = hunkToFields(hunk);
     return {
         id: node.id,
         path: node.path,
@@ -115,8 +159,8 @@ export function toThreadObjectFull(
         isResolved: node.isResolved,
         isOutdated: node.isOutdated,
         diffSide: node.diffSide,
-        targetLine: extractTargetLine(hunk),
-        hunkPreview: buildHunkPreview(hunk),
+        targetLine,
+        hunkPreview,
         comments: comments.map(toComment),
     };
 }

@@ -134,11 +134,11 @@ export class BunEnv implements Env {
 
 export class BunTmp implements Tmp {
     tempFilePath(prefix = "tmp", suffix = ""): string {
-        return `${tmpdir()}/${prefix}-${crypto.randomUUID()}${suffix}`;
+        return `${this.tmpDir()}/${prefix}-${crypto.randomUUID()}${suffix}`;
     }
 
     makeTempDir(prefix = "tmp"): string {
-        return mkdtempSync(`${tmpdir()}/${prefix}-`);
+        return mkdtempSync(`${this.tmpDir()}/${prefix}-`);
     }
 
     tmpDir(): string {
