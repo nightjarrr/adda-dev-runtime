@@ -13,7 +13,7 @@ import type {
     Tmp,
     TmpDep,
 } from "../lib/index";
-import { ScriptArgsError } from "../lib/index";
+import { ConfigError, ScriptArgsError } from "../lib/index";
 import { PrReviewThreadsScript } from "./pr-review-threads";
 
 type PrReviewThreadsDeps = ShellDep & EnvDep & StdioDep & TmpDep & FileWriterDep & FileSysDep;
@@ -1344,6 +1344,24 @@ describe("Output", () => {
         expect(pr?.ceiling).toBe(1000);
     });
 
+    test("emitError with ConfigError — emits invalid_config reason with empty payload", () => {
+        const { deps, outLines } = makeOutputDeps();
+        const output = new Output(deps);
+        output.emitError("pr", new ConfigError("ADDA_DEV_PR_REVIEW_SCAN_CEILING must be a positive integer, got 'abc'"));
+        const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
+        const pr = envelope["pr"] as Record<string, unknown>;
+        expect(pr?.reason).toBe("invalid_config");
+        expect(Object.keys(pr!).filter((k) => k !== "reason")).toHaveLength(0);
+    });
+
+    test("emitError with ConfigError (thread mode) — emits invalid_config reason", () => {
+        const { deps, outLines } = makeOutputDeps();
+        const output = new Output(deps);
+        output.emitError("thread", new ConfigError("ADDA_DEV_PR_REVIEW_SCAN_CEILING must be a positive integer, got 'bad'"));
+        const envelope = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
+        expect((envelope["thread"] as Record<string, unknown>)?.reason).toBe("invalid_config");
+    });
+
     test("emitError with non-PrThreadsError — emits internal_error reason", () => {
         const { deps, outLines } = makeOutputDeps();
         const output = new Output(deps);
@@ -1442,8 +1460,8 @@ describe("PrThreadsError", () => {
         expect(err.payload).toEqual({ total: 100, ceiling: 50 });
     });
 
-    test("invalid_config uses exitCode 2", () => {
-        const err = new PrThreadsError("invalid_config", "bad ceiling", {}, 2);
+    test("invalid_config is signalled via ConfigError (exitCode 2), not PrThreadsError", () => {
+        const err = new ConfigError("ADDA_DEV_PR_REVIEW_SCAN_CEILING must be a positive integer, got 'abc'");
         expect(err.exitCode).toBe(2);
     });
 });

@@ -1,6 +1,6 @@
 // Output helpers for pr-review-threads: envelope emission, detail file write.
 import type { FileWriterDep, FileSysDep, StdioDep, TmpDep } from "@adda/lib";
-import { ScriptArgsError } from "@adda/lib";
+import { ConfigError, ScriptArgsError } from "@adda/lib";
 import { PrThreadsError } from "./errors";
 import type { Envelope } from "./types";
 
@@ -43,8 +43,18 @@ export class Output {
      */
     emitError(mode: "pr" | "thread", err: unknown): void {
         const message = err instanceof Error ? err.message : String(err);
-        const reason = err instanceof PrThreadsError ? err.reason : "internal_error";
-        const payload = err instanceof PrThreadsError ? err.payload : {};
+        let reason: string;
+        let payload: Record<string, unknown>;
+        if (err instanceof PrThreadsError) {
+            reason = err.reason;
+            payload = err.payload;
+        } else if (err instanceof ConfigError) {
+            reason = "invalid_config";
+            payload = {};
+        } else {
+            reason = "internal_error";
+            payload = {};
+        }
 
         let envelope: Envelope;
         if (mode === "pr") {

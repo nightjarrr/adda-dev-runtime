@@ -1,6 +1,6 @@
 // Fetch helpers for pr-review-threads: graphql caller, generic paginate, env helpers.
 import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
-import { parseJson, ScriptError, ScriptZodValidationError } from "@adda/lib";
+import { ConfigError, parseJson, ScriptError, ScriptZodValidationError } from "@adda/lib";
 import type { z } from "zod";
 import { PrThreadsError } from "./errors";
 
@@ -89,12 +89,7 @@ export function readCeiling(deps: EnvDep): number {
     if (raw === undefined) return DEFAULT_SCAN_CEILING;
     const n = Number(raw);
     if (!Number.isInteger(n) || n <= 0)
-        throw new PrThreadsError(
-            "invalid_config",
-            `ADDA_DEV_PR_REVIEW_SCAN_CEILING must be a positive integer, got '${raw}'`,
-            {},
-            2,
-        );
+        throw new ConfigError(`ADDA_DEV_PR_REVIEW_SCAN_CEILING must be a positive integer, got '${raw}'`);
     return n;
 }
 
