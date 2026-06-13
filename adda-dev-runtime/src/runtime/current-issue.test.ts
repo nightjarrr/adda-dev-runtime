@@ -41,8 +41,7 @@ interface MockDepsOptions {
     shellRun?: (command: string[]) => Promise<ShellResult>;
     envVars?: Record<string, string>;
     fileReaderReadFile?: (path: string) => Promise<string>;
-    fileWriterWriteFile?: (path: string, content: string) => Promise<void>;
-    fileWriterAtomicWriteFile?: (pathPattern: string, content: string) => Promise<string>;
+    fileWriterWriteFile?: (pathPattern: string, content: string) => Promise<string>;
     fileSysDeleteFile?: (path: string) => Promise<void>;
     fileSysFileExists?: (path: string) => Promise<boolean>;
 }
@@ -99,9 +98,8 @@ function makeMockDeps(options: MockDepsOptions = {}): {
     };
 
     const mockFileWriter: FileWriter = {
-        writeFile: mock(options.fileWriterWriteFile ?? (async (_path: string, _content: string) => {})),
-        atomicWriteFile: mock(
-            options.fileWriterAtomicWriteFile ?? (async (_pathPattern: string, _content: string) => "/tmp/mock-state.json"),
+        writeFile: mock(
+            options.fileWriterWriteFile ?? (async (_pathPattern: string, _content: string) => "/tmp/mock-state.json"),
         ),
     };
 
@@ -229,7 +227,7 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("error");
-            expect(deps.fileWriter.atomicWriteFile).not.toHaveBeenCalled();
+            expect(deps.fileWriter.writeFile).not.toHaveBeenCalled();
         });
     });
 
@@ -417,7 +415,7 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("error");
-            expect(deps.fileWriter.atomicWriteFile).not.toHaveBeenCalled();
+            expect(deps.fileWriter.writeFile).not.toHaveBeenCalled();
         });
     });
 

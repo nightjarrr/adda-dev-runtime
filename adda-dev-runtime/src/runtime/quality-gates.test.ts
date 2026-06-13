@@ -9,12 +9,10 @@ import type {
     ShellDep,
     ShellResult,
     StdioDep,
-    Tmp,
-    TmpDep,
 } from "../lib/index";
 import { QualityGatesScript } from "./quality-gates";
 
-type QualityGatesDeps = ShellDep & FileReaderDep & FileWriterDep & TmpDep & StdioDep;
+type QualityGatesDeps = ShellDep & FileReaderDep & FileWriterDep & StdioDep;
 
 // --- Mock helpers ---
 
@@ -100,23 +98,16 @@ function makeMockDeps(options: MockDepsOptions = {}): {
     };
 
     const mockFileWriter: FileWriter = {
-        writeFile: mock(async (path: string, content: string): Promise<void> => {
-            writtenFiles.set(path, content);
+        writeFile: mock(async (_pathPattern: string, content: string): Promise<string> => {
+            writtenFiles.set(FAKE_RESULT_PATH, content);
+            return FAKE_RESULT_PATH;
         }),
-        atomicWriteFile: mock(async (_pathPattern: string, _content: string): Promise<string> => FAKE_RESULT_PATH),
-    };
-
-    const mockTmp: Tmp = {
-        tempFilePath: mock((): string => FAKE_RESULT_PATH),
-        makeTempDir: mock((): string => "/tmp/fake-dir"),
-        tmpDir: mock((): string => "/tmp"),
     };
 
     const deps: QualityGatesDeps = {
         shell: mockShell,
         fileReader: mockFileReader,
         fileWriter: mockFileWriter,
-        tmp: mockTmp,
         stdio: {
             stdin: { text: mock(async () => "") },
             stdout: {

@@ -14,8 +14,6 @@ export type {
     SleepDep,
     Stdio,
     StdioDep,
-    Tmp,
-    TmpDep,
 } from "./capabilities";
 
 export { defaultDeps } from "./capabilities";
@@ -30,4 +28,4 @@ export {
 } from "./errors";
 export type { EmptyArgs } from "./ScriptBase";
 export { ScriptBase } from "./ScriptBase";
-export { parseJson, slugify } from "./util";
+export { expandPath, parseJson, slugify } from "./util";

@@ -68,8 +68,7 @@ function makeMockDeps(options: MockDepsOptions = {}): MockDepsResult {
             },
         },
         fileWriter: {
-            writeFile: mock(async (_p: string, _c: string) => {}),
-            atomicWriteFile: mock(async (_pattern: string, _content: string) => "/tmp/mock-result.json"),
+            writeFile: mock(async (_pattern: string, _content: string) => "/tmp/mock-result.json"),
         },
     };
 
@@ -81,13 +80,13 @@ function getStdoutJson(outLines: string[]): unknown {
 }
 
 /**
- * Extracts the content passed to atomicWriteFile mock as parsed JSON.
- * Since atomicWriteFile is mocked and does not write to disk, assertions about
+ * Extracts the content passed to writeFile mock as parsed JSON.
+ * Since writeFile is mocked and does not write to disk, assertions about
  * file content use the captured call arguments instead.
  */
 function getMockFileContent(deps: PrReviewThreadsDeps): unknown {
-    const atomicWriteFileMock = deps.fileWriter.atomicWriteFile as ReturnType<typeof mock>;
-    const calls = atomicWriteFileMock.mock.calls;
+    const writeFileMock = deps.fileWriter.writeFile as ReturnType<typeof mock>;
+    const calls = writeFileMock.mock.calls;
     if (calls.length === 0) return null;
     const lastCall = calls[calls.length - 1]!;
     const content = lastCall[1] as string;
@@ -482,7 +481,7 @@ describe("PrReviewThreadsScript", () => {
     // pr mode: basic success
     // ---------------------------------------------------------------
     describe("pr mode: basic success", () => {
-        test("empty PR — exit 0, atomicWriteFile called for pr, empty threads array", async () => {
+        test("empty PR — exit 0, writeFile called for pr, empty threads array", async () => {
             const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makePrThreadsResponse([]))],
             });
@@ -498,7 +497,7 @@ describe("PrReviewThreadsScript", () => {
             expect(out.pr.unresolved).toBe(0);
             expect(out.pr.returnedUnresolved).toBe(0);
             expect(out.pr.resultsFile).toBe("/tmp/mock-result.json");
-            expect(deps.fileWriter.atomicWriteFile).toHaveBeenCalledWith(
+            expect(deps.fileWriter.writeFile).toHaveBeenCalledWith(
                 expect.stringContaining("pr-review-threads-pr-303"),
                 expect.any(String),
             );
@@ -537,7 +536,7 @@ describe("PrReviewThreadsScript", () => {
             const out = getStdoutJson(outLines) as { pr: { unresolved: number; resolved: number; resultsFile: string } };
             expect(out.pr.unresolved).toBe(0);
             expect(out.pr.resolved).toBe(1);
-            expect(deps.fileWriter.atomicWriteFile).toHaveBeenCalledWith(
+            expect(deps.fileWriter.writeFile).toHaveBeenCalledWith(
                 expect.stringContaining("pr-review-threads-pr-"),
                 expect.any(String),
             );
@@ -732,7 +731,7 @@ describe("PrReviewThreadsScript", () => {
             expect(out.pr?.reason).toBe("scan_limit_exceeded");
             expect(out.pr?.total).toBe(10);
             expect(out.pr?.ceiling).toBe(5);
-            expect(deps.fileWriter.atomicWriteFile).not.toHaveBeenCalled();
+            expect(deps.fileWriter.writeFile).not.toHaveBeenCalled();
         });
 
         test("threads totalCount <= ceiling — succeeds", async () => {
@@ -742,7 +741,7 @@ describe("PrReviewThreadsScript", () => {
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(0);
-            expect(deps.fileWriter.atomicWriteFile).toHaveBeenCalledWith(
+            expect(deps.fileWriter.writeFile).toHaveBeenCalledWith(
                 expect.stringContaining("pr-review-threads-pr-"),
                 expect.any(String),
             );
@@ -763,7 +762,7 @@ describe("PrReviewThreadsScript", () => {
             expect(out.status).toBe("error");
             expect((out["pr"] as Record<string, unknown>)?.reason).toBe("repo_not_found");
             expect(out["pr"] as Record<string, unknown>).not.toHaveProperty("resultsFile");
-            expect(deps.fileWriter.atomicWriteFile).not.toHaveBeenCalled();
+            expect(deps.fileWriter.writeFile).not.toHaveBeenCalled();
         });
 
         test("PR not found — exits 1, no file, pr_not_found reason", async () => {
@@ -782,13 +781,13 @@ describe("PrReviewThreadsScript", () => {
     // pr mode: file invariant
     // ---------------------------------------------------------------
     describe("pr mode: file invariant", () => {
-        test("success — atomicWriteFile called with expected pattern", async () => {
+        test("success — writeFile called with expected pattern", async () => {
             const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makePrThreadsResponse([]))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "42"]);
             expect(code).toBe(0);
-            expect(deps.fileWriter.atomicWriteFile).toHaveBeenCalledWith(
+            expect(deps.fileWriter.writeFile).toHaveBeenCalledWith(
                 expect.stringContaining("pr-review-threads-pr-42"),
                 expect.any(String),
             );
@@ -893,7 +892,7 @@ describe("PrReviewThreadsScript", () => {
     // thread mode: basic success
     // ---------------------------------------------------------------
     describe("thread mode: basic success", () => {
-        test("success — exit 0, atomicWriteFile called, pr derived from node.pullRequest.number", async () => {
+        test("success — exit 0, writeFile called, pr derived from node.pullRequest.number", async () => {
             const { deps, outLines } = makeMockDeps({
                 envVars: {},
                 runQueue: [makeShellResult(makeThreadNodeResponse({ id: "PRRT_abc", prNumber: 303 }))],
@@ -905,7 +904,7 @@ describe("PrReviewThreadsScript", () => {
             expect(out.thread.id).toBe("PRRT_abc");
             expect(out.thread.pr).toBe(303);
             expect(out.thread.resultsFile).toBe("/tmp/mock-result.json");
-            expect(deps.fileWriter.atomicWriteFile).toHaveBeenCalledWith(
+            expect(deps.fileWriter.writeFile).toHaveBeenCalledWith(
                 expect.stringContaining("pr-review-threads-thread-"),
                 expect.any(String),
             );
@@ -989,7 +988,7 @@ describe("PrReviewThreadsScript", () => {
             expect(out.thread?.reason).toBe("scan_limit_exceeded");
             expect(out.thread?.commentCount).toBe(10);
             expect(out.thread as Record<string, unknown>).not.toHaveProperty("resultsFile");
-            expect(deps.fileWriter.atomicWriteFile).not.toHaveBeenCalled();
+            expect(deps.fileWriter.writeFile).not.toHaveBeenCalled();
         });
     });
 

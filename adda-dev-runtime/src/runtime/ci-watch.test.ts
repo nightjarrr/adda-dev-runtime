@@ -1,9 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import { ScriptShellError } from "../lib/errors";
-import type { Shell, ShellDep, ShellResult, Sleep, SleepDep, StdioDep, Tmp, TmpDep } from "../lib/index";
+import type { FileWriter, FileWriterDep, Shell, ShellDep, ShellResult, Sleep, SleepDep, StdioDep } from "../lib/index";
 import { CiWatchScript } from "./ci-watch";
 
-type CiWatchDeps = ShellDep & TmpDep & StdioDep & SleepDep;
+type CiWatchDeps = ShellDep & FileWriterDep & StdioDep & SleepDep;
 
 // --- Mock helpers ---
 
@@ -15,7 +15,6 @@ interface MockDepsOptions {
     runQueue?: ShellResult[];
     runShQueue?: ShellResult[];
     sleepMs?: number[];
-    tmpPrefix?: string;
 }
 
 function makeMockDeps(options: MockDepsOptions = {}): {
@@ -25,12 +24,14 @@ function makeMockDeps(options: MockDepsOptions = {}): {
     runCalls: string[][];
     runShCalls: string[];
     sleepCalls: number[];
+    writtenFiles: Map<string, string>;
 } {
     const outLines: string[] = [];
     const errLines: string[] = [];
     const runCalls: string[][] = [];
     const runShCalls: string[] = [];
     const sleepCalls: number[] = [];
+    const writtenFiles = new Map<string, string>();
 
     const runQueue = options.runQueue ? [...options.runQueue] : [];
     const runShQueue = options.runShQueue ? [...options.runShQueue] : [];
@@ -54,14 +55,14 @@ function makeMockDeps(options: MockDepsOptions = {}): {
         }),
     };
 
-    let tmpCounter = 0;
-    const mockTmp: Tmp = {
-        tempFilePath: mock((prefix = "tmp", suffix = "") => {
-            tmpCounter++;
-            return `/tmp/${prefix}-test-uuid-${tmpCounter}${suffix}`;
+    let fileWriterCounter = 0;
+    const mockFileWriter: FileWriter = {
+        writeFile: mock(async (pathPattern: string, content: string): Promise<string> => {
+            fileWriterCounter++;
+            const fakeLogPath = `/tmp/ci-watch-logs-test-uuid-${fileWriterCounter}.txt`;
+            writtenFiles.set(fakeLogPath, content);
+            return fakeLogPath;
         }),
-        makeTempDir: mock(() => "/tmp/test-dir"),
-        tmpDir: mock(() => "/tmp"),
     };
 
     const mockSleep: Sleep = {
@@ -72,7 +73,7 @@ function makeMockDeps(options: MockDepsOptions = {}): {
 
     const deps: CiWatchDeps = {
         shell: mockShell,
-        tmp: mockTmp,
+        fileWriter: mockFileWriter,
         sleep: mockSleep,
         stdio: {
             stdin: { text: mock(async () => "") },
@@ -89,7 +90,7 @@ function makeMockDeps(options: MockDepsOptions = {}): {
         },
     };
 
-    return { deps, outLines, errLines, runCalls, runShCalls, sleepCalls };
+    return { deps, outLines, errLines, runCalls, runShCalls, sleepCalls, writtenFiles };
 }
 
 function getStdoutJson(outLines: string[]): CiWatchOutputShape {
@@ -411,6 +412,7 @@ describe("CiWatchScript", () => {
     // ---------------------------------------------------------------
     describe("watchPush — one run fails", () => {
         test("collects url/event/conclusion/logFile, outputs failure JSON, exits 1, stderr has Error:", async () => {
+            const logContent = "step1 failed\nsome output here\n";
             const { deps, outLines, errLines, runShCalls } = makeMockDeps({
                 runQueue: [
                     makeShellResult(makeRunListJson([333])), // run list
@@ -420,7 +422,7 @@ describe("CiWatchScript", () => {
                     makeShellResult("https://github.com/repo/actions/runs/333\n"), // url
                     makeShellResult("push\n"), // event
                 ],
-                runShQueue: [makeShellResult("")], // log fetch
+                runShQueue: [makeShellResult(logContent)], // log fetch — returns stdout
             });
             const script = new CiWatchScript(deps);
             const code = await script.run(["bun", "ci-watch.ts", "push", "--commit", "sha5"]);
@@ -437,10 +439,17 @@ describe("CiWatchScript", () => {
             expect(out.runs[0].url).toBe("https://github.com/repo/actions/runs/333");
             // conclusion comes from fetchRunConclusion, not re-fetched in collectFailingRuns
             expect(out.runs[0].conclusion).toBe("failure");
-            expect(out.runs[0].logFile).toMatch(/^\/tmp\/ci-watch-logs-.+\.txt$/);
+            expect(out.runs[0].logFile).toMatch(/^\/tmp\/ci-watch-logs-test-uuid-\d+\.txt$/);
 
-            // runSh called with correct command
-            expect(runShCalls[0]).toMatch(/gh run view 333 --log-failed > .+/);
+            // runSh called with gh run view <id> --log-failed (no redirect)
+            expect(runShCalls[0]).toBe("gh run view 333 --log-failed");
+
+            // fileWriter.writeFile called with placeholder pattern and log content
+            const writeFileMock = deps.fileWriter.writeFile as ReturnType<typeof mock>;
+            expect(writeFileMock).toHaveBeenCalledTimes(1);
+            const [calledPattern, calledContent] = writeFileMock.mock.calls[0] as [string, string];
+            expect(calledPattern).toBe("<tmpDir>/ci-watch-logs-<uuid>.txt");
+            expect(calledContent).toBe(logContent);
         });
     });
 
@@ -715,9 +724,10 @@ describe("CiWatchScript", () => {
     // collectFailingRuns
     // ---------------------------------------------------------------
     describe("collectFailingRuns", () => {
-        test("fetches url/event per run (conclusion passed in), runSh called with correct command, logFile has correct shape", async () => {
+        test("fetches url/event per run (conclusion passed in), fileWriter.writeFile called with placeholder pattern, logFile has correct shape", async () => {
             const runId = "789";
-            const { deps, outLines, runShCalls } = makeMockDeps({
+            const logContent = "build failed: error on line 42\n";
+            const { deps, outLines, runShCalls, writtenFiles } = makeMockDeps({
                 runQueue: [
                     makeShellResult(makeRunListJson([Number(runId)])), // run list
                     makeShellResult(""), // run watch (Promise.all)
@@ -727,19 +737,30 @@ describe("CiWatchScript", () => {
                     makeShellResult("push\n"), // event
                     // no conclusion re-fetch
                 ],
-                runShQueue: [makeShellResult("")],
+                runShQueue: [makeShellResult(logContent)],
             });
             const script = new CiWatchScript(deps);
             await script.run(["bun", "ci-watch.ts", "push", "--commit", "commitsha"]);
 
-            // runSh called with gh run view <id> --log-failed > <path> 2>&1 || true
+            // runSh called with just the gh run view command, no redirect
             expect(runShCalls).toHaveLength(1);
-            expect(runShCalls[0]).toMatch(/^gh run view 789 --log-failed > \/tmp\/ci-watch-logs-.+\.txt$/);
+            expect(runShCalls[0]).toBe(`gh run view ${runId} --log-failed`);
+
+            // fileWriter.writeFile called with the placeholder pattern and captured log content
+            const writeFileMock = deps.fileWriter.writeFile as ReturnType<typeof mock>;
+            expect(writeFileMock).toHaveBeenCalledTimes(1);
+            const [calledPattern, calledContent] = writeFileMock.mock.calls[0] as [string, string];
+            expect(calledPattern).toBe("<tmpDir>/ci-watch-logs-<uuid>.txt");
+            expect(calledContent).toBe(logContent);
+
+            // log content was stored under the fake path
+            const logFilePath = [...writtenFiles.keys()][0]!;
+            expect(writtenFiles.get(logFilePath)).toBe(logContent);
 
             const out = getStdoutJson(outLines);
             expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
             if (out.conclusion !== "failure") throw new Error("expected failure");
-            expect(out.runs[0].logFile).toMatch(/^\/tmp\/ci-watch-logs-.+\.txt$/);
+            expect(out.runs[0].logFile).toMatch(/^\/tmp\/ci-watch-logs-test-uuid-\d+\.txt$/);
             // conclusion in output comes from fetchRunConclusion, not a re-fetch
             expect(out.runs[0].conclusion).toBe("failure");
         });

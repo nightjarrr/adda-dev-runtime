@@ -1,9 +1,9 @@
 import type { parseArgs } from "node:util";
 import { z } from "zod";
-import type { EmptyArgs, FileReaderDep, FileWriterDep, ShellDep, StdioDep, TmpDep } from "@adda/lib";
+import type { EmptyArgs, FileReaderDep, FileWriterDep, ShellDep, StdioDep } from "@adda/lib";
 import { ConfigError, defaultDeps, ScriptBase, ScriptError } from "@adda/lib";
 
-type QualityGatesDeps = ShellDep & FileReaderDep & FileWriterDep & TmpDep & StdioDep;
+type QualityGatesDeps = ShellDep & FileReaderDep & FileWriterDep & StdioDep;
 
 const GateSchema = z.object({
     name: z.string().min(1),
@@ -89,9 +89,11 @@ export class QualityGatesScript extends ScriptBase<QualityGatesDeps, EmptyArgs> 
             });
         }
 
-        const resultPath = this.deps.tmp.tempFilePath("quality-gates", ".json");
         const resultData: QualityGatesResult = { overall, gates: results };
-        await this.deps.fileWriter.writeFile(resultPath, JSON.stringify(resultData, null, 2));
+        const resultPath = await this.deps.fileWriter.writeFile(
+            "<tmpDir>/quality-gates-<uuid>.json",
+            JSON.stringify(resultData, null, 2),
+        );
 
         this.deps.stdio.stdout.write("===\n");
         this.deps.stdio.stdout.write(`${overall}\n`);

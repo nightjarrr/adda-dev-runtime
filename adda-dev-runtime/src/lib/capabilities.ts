@@ -1,9 +1,8 @@
-import { mkdtempSync } from "node:fs";
 import { rename, unlink } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import { dirname } from "node:path";
 import { randomUUID } from "node:crypto";
 import { ScriptShellError } from "./errors";
+import { expandPath } from "./util";
 
 // --- Interfaces ---
 
@@ -31,8 +30,7 @@ export interface FileReaderDep {
 }
 
 export interface FileWriter {
-    writeFile(path: string, content: string): Promise<void>;
-    atomicWriteFile(pathPattern: string, content: string): Promise<string>;
+    writeFile(pathPattern: string, content: string): Promise<string>;
 }
 
 export interface FileWriterDep {
@@ -66,16 +64,6 @@ export interface EnvDep {
     env: Env;
 }
 
-export interface Tmp {
-    tempFilePath(prefix?: string, suffix?: string): string;
-    makeTempDir(prefix?: string): string;
-    tmpDir(): string;
-}
-
-export interface TmpDep {
-    tmp: Tmp;
-}
-
 // --- Bun implementations ---
 
 export class BunShell implements Shell {
@@ -103,15 +91,8 @@ export class BunFileReader implements FileReader {
 }
 
 export class BunFileWriter implements FileWriter {
-    async writeFile(path: string, content: string): Promise<void> {
-        await Bun.write(path, content);
-    }
-
-    async atomicWriteFile(pathPattern: string, content: string): Promise<string> {
-        const finalPath = pathPattern
-            .replace("<tmpDir>", tmpdir())
-            .replace("<ts>", String(Date.now()))
-            .replace("<uuid>", randomUUID());
+    async writeFile(pathPattern: string, content: string): Promise<string> {
+        const finalPath = expandPath(pathPattern);
         const dir = dirname(finalPath);
         const tmpPath = `${dir}/.tmp-${randomUUID()}`;
         await Bun.write(tmpPath, content);
@@ -142,20 +123,6 @@ export class BunEnv implements Env {
     }
 }
 
-export class BunTmp implements Tmp {
-    tempFilePath(prefix = "tmp", suffix = ""): string {
-        return `${this.tmpDir()}/${prefix}-${crypto.randomUUID()}${suffix}`;
-    }
-
-    makeTempDir(prefix = "tmp"): string {
-        return mkdtempSync(`${this.tmpDir()}/${prefix}-`);
-    }
-
-    tmpDir(): string {
-        return tmpdir();
-    }
-}
-
 export interface Sleep {
     sleep(ms: number): Promise<void>;
 }
@@ -170,13 +137,12 @@ export class BunSleep implements Sleep {
     }
 }
 
-export const defaultDeps: ShellDep & FileReaderDep & FileWriterDep & FileSysDep & StdioDep & EnvDep & TmpDep & SleepDep = {
+export const defaultDeps: ShellDep & FileReaderDep & FileWriterDep & FileSysDep & StdioDep & EnvDep & SleepDep = {
     shell: new BunShell(),
     fileReader: new BunFileReader(),
     fileWriter: new BunFileWriter(),
     fileSys: new BunFileSys(),
     stdio: new BunStdio(),
     env: new BunEnv(),
-    tmp: new BunTmp(),
     sleep: new BunSleep(),
 };
