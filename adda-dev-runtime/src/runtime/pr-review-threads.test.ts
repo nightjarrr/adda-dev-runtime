@@ -1,4 +1,23 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { mock } from "bun:test";
+
+mock.module("../lib/capabilities", () => ({
+    defaultDeps: {
+        tmp: { tmpDir: mock(() => "/tmp") },
+        fileWriter: {
+            writeFile: mock(async (p: string, c: string) => {
+                await Bun.write(p, c);
+            }),
+        },
+        fileSys: {
+            renameFile: mock(async (f: string, t: string) => {
+                const fs = await import("node:fs/promises");
+                await fs.rename(f, t);
+            }),
+        },
+    },
+}));
+
+import { afterEach, describe, expect, test } from "bun:test";
 import { rm } from "node:fs/promises";
 import type { Env, EnvDep, Shell, ShellDep, ShellResult, StdioDep } from "../lib/index";
 import { PrReviewThreadsScript } from "./pr-review-threads";
