@@ -1,19 +1,26 @@
 import type { ShellDep } from "@adda/lib";
-import { parseJson, ScriptZodValidationError } from "@adda/lib";
+import { makeEnvelopeSchema, parseJson, ScriptZodValidationError } from "@adda/lib";
 import { z } from "zod";
 
 import { CurrentIssueError } from "./errors";
 
 export const RESOLVE_ISSUE_BRANCH_BIN = "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch";
 
-export const ResolveIssueBranchOutputSchema = z.object({
-    status: z.string(),
+const ResolveResultSchema = z.object({
+    issue_id: z.string(),
+    resolution: z.enum(["feature_branch", "main"]),
     branch: z.string(),
     pr: z.string(),
-    details: z.string(),
 });
 
-export type ResolveIssueBranchData = z.infer<typeof ResolveIssueBranchOutputSchema>;
+export const ResolveIssueBranchOutputSchema = makeEnvelopeSchema(ResolveResultSchema);
+
+export type ResolveIssueBranchData = {
+    issue_id: string;
+    resolution: "feature_branch" | "main";
+    branch: string;
+    pr: string;
+};
 
 export async function resolveIssueBranch(deps: ShellDep, issueId: string): Promise<ResolveIssueBranchData> {
     const resolveResult = await deps.shell.run([RESOLVE_ISSUE_BRANCH_BIN, issueId], { strict: false });
@@ -34,14 +41,11 @@ export async function resolveIssueBranch(deps: ShellDep, issueId: string): Promi
         throw new CurrentIssueError(err.message, err.verboseStderr);
     }
 
-    const resolveData = resolveParsed.data;
+    const data = resolveParsed.data;
 
-    if (resolveData.status === "ambiguous" || resolveData.status === "error") {
-        throw new CurrentIssueError(
-            `resolve-issue-branch returned '${resolveData.status}' for issue #${issueId}: ${resolveData.details}`,
-            resolveResult.stderr,
-        );
+    if (data.status === "fail") {
+        throw new CurrentIssueError(data.error.message, resolveResult.stderr, { reason: data.error.reason });
     }
 
-    return resolveData;
+    return data.result;
 }

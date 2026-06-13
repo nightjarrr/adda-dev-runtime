@@ -9,8 +9,12 @@ function makeShellResult(overrides: Partial<ShellResult> = {}): ShellResult {
     return { stdout: "", stderr: "", exitCode: 0, ...overrides };
 }
 
-function makeResolveResponse(status: string, branch = "", pr = "", details = ""): string {
-    return JSON.stringify({ status, branch, pr, details });
+function makeOkResponse(resolution: string, branch = "", pr = "", issue_id = "42"): string {
+    return JSON.stringify({ status: "ok", result: { issue_id, resolution, branch, pr }, error: null });
+}
+
+function makeFailResponse(reason: string, message: string, details: Record<string, unknown> = {}): string {
+    return JSON.stringify({ status: "fail", result: null, error: { reason, message, details } });
 }
 
 // --- Mock factory ---
@@ -19,7 +23,7 @@ function makeMockDeps(shellRun?: (command: string[]) => Promise<ShellResult>): {
     deps: ShellDep;
 } {
     const defaultShellRun = async (): Promise<ShellResult> =>
-        makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/1-my-branch", "42") });
+        makeShellResult({ stdout: makeOkResponse("feature_branch", "feature/1-my-branch", "42") });
 
     const mockShell: Shell = {
         run: mock(shellRun ?? defaultShellRun),
@@ -52,7 +56,10 @@ describe("resolveIssueBranch", () => {
 
     test("schema validation failure throws CurrentIssueError with short message in envelope", async () => {
         const { deps } = makeMockDeps(async () =>
-            makeShellResult({ stdout: JSON.stringify({ status: "feature_branch" }), exitCode: 0 }),
+            makeShellResult({
+                stdout: JSON.stringify({ status: "ok", result: { resolution: "feature_branch" } }),
+                exitCode: 0,
+            }),
         );
         const err = await resolveIssueBranch(deps, "42").catch((e) => e);
         expect(err).toBeInstanceOf(ScriptStructuredError);
@@ -60,10 +67,10 @@ describe("resolveIssueBranch", () => {
         expect(String(envelope.error)).toContain("unexpected resolve-issue-branch output");
     });
 
-    test("ambiguous status carries verboseStderr and throws CurrentIssueError", async () => {
+    test("fail status with reason ambiguous carries verboseStderr and throws CurrentIssueError", async () => {
         const { deps } = makeMockDeps(async () =>
             makeShellResult({
-                stdout: makeResolveResponse("ambiguous", "", "", "multiple branches"),
+                stdout: makeFailResponse("ambiguous", "multiple linked branches: a, b", { branches: ["a", "b"] }),
                 stderr: "ambiguous detail",
                 exitCode: 0,
             }),
@@ -73,10 +80,10 @@ describe("resolveIssueBranch", () => {
         expect(err.verboseStderr).toContain("ambiguous detail");
     });
 
-    test("error status carries verboseStderr and throws CurrentIssueError", async () => {
+    test("fail status with reason api_error carries verboseStderr and throws CurrentIssueError", async () => {
         const { deps } = makeMockDeps(async () =>
             makeShellResult({
-                stdout: makeResolveResponse("error", "", "", "something failed"),
+                stdout: makeFailResponse("api_error", "GraphQL API call failed"),
                 stderr: "error detail",
                 exitCode: 0,
             }),
@@ -86,22 +93,20 @@ describe("resolveIssueBranch", () => {
         expect(err.verboseStderr).toContain("error detail");
     });
 
-    test("main status returns data successfully", async () => {
-        const { deps } = makeMockDeps(async () =>
-            makeShellResult({ stdout: makeResolveResponse("main", "", "", ""), exitCode: 0 }),
-        );
+    test("ok status with resolution main returns data successfully", async () => {
+        const { deps } = makeMockDeps(async () => makeShellResult({ stdout: makeOkResponse("main", "", ""), exitCode: 0 }));
         const data = await resolveIssueBranch(deps, "42");
-        expect(data.status).toBe("main");
+        expect(data.resolution).toBe("main");
         expect(data.branch).toBe("");
         expect(data.pr).toBe("");
     });
 
-    test("feature_branch status returns data with branch and pr", async () => {
+    test("ok status with resolution feature_branch returns data with branch and pr", async () => {
         const { deps } = makeMockDeps(async () =>
-            makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/42-my-branch", "99"), exitCode: 0 }),
+            makeShellResult({ stdout: makeOkResponse("feature_branch", "feature/42-my-branch", "99"), exitCode: 0 }),
         );
         const data = await resolveIssueBranch(deps, "42");
-        expect(data.status).toBe("feature_branch");
+        expect(data.resolution).toBe("feature_branch");
         expect(data.branch).toBe("feature/42-my-branch");
         expect(data.pr).toBe("99");
     });

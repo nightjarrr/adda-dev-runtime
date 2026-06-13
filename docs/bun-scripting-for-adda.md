@@ -62,6 +62,88 @@ Additional codes: scripts throw subclasses of `ScriptError` (base error class de
 
 ---
 
+## Script output envelope
+
+Scripts whose output is consumed programmatically emit a single-line JSON envelope on stdout.
+Scripts whose output is a rendered artifact (human text, markdown) are exempt.
+
+### Shape
+
+```json
+{ "status": "ok",   "result": { ...script-specific payload... }, "error": null }
+{ "status": "fail", "result": null, "error": { "reason": "...", "message": "...", "details": {} } }
+```
+
+**`status: "ok"`** — the script ran to completion and produced a result. Exit 0.
+`result` carries the payload; it may encode an unfavorable determination (e.g. CI failed,
+gates FAIL). `error` is always `null`.
+
+**`status: "fail"`** — the script could not produce a result. Exit non-zero (2 for arg
+errors, 1 for all others). `result` is always `null`. `error` carries:
+- `reason` — typed code for programmatic branching (see below)
+- `message` — human-readable description
+- `details` — script-specific extra context (may be empty `{}`)
+
+### Standard reason codes
+
+| Reason | Meaning | Exit |
+|---|---|---|
+| `invalid_args` | Argument validation failure | 2 |
+| `missing_env` | Required env var not set | 1 |
+| `api_error` | External API / shell call failed | 1 |
+| `repo_not_found` | GitHub repository not found | 1 |
+| `issue_not_found` | GitHub issue not found | 1 |
+| `validation_error` | Unexpected API response shape | 1 |
+| `ambiguous` | Multiple valid resolutions — caller cannot proceed | 1 |
+
+Scripts may define additional script-specific reason codes.
+
+### Parsing
+
+Use `makeEnvelopeSchema` (from `@adda/lib`) with a Zod `discriminatedUnion` on `"status"` for one-step type-safe parsing:
+
+```typescript
+import { makeEnvelopeSchema } from "@adda/lib";
+import { z } from "zod";
+
+const ResultSchema = z.object({ id: z.string(), name: z.string() });
+const EnvelopeSchema = makeEnvelopeSchema(ResultSchema);
+
+const parsed = EnvelopeSchema.safeParse(parseJson(stdout));
+// TypeScript narrows: parsed.data.status === "ok" → result is non-null
+```
+
+### Dual signal: exit code and status
+
+Exit code and `status` always agree and serve different consumers:
+- Exit code → shell / subprocess layer (`exitCode !== 0` pre-check before parsing)
+- `status` → JSON schema layer (Zod discriminated union, TypeScript narrowing)
+
+### Error implementation
+
+Scripts implement errors as a `ScriptStructuredError` subclass carrying the fail envelope.
+`ScriptBase.run()` catches it and auto-emits the envelope — no manual `this.emit()` at error
+sites. Success paths call `this.emit(...)` once and return.
+
+```typescript
+import { ScriptStructuredError } from "@adda/lib";
+import type { ScriptEnvelope } from "@adda/lib";
+
+class MyScriptError extends ScriptStructuredError {
+    constructor(reason: MyReason, message: string, details: Record<string, unknown> = {}, exitCode = 1, verboseStderr?: string) {
+        const envelope: ScriptEnvelope<never> = { status: "fail", result: null, error: { reason, message, details } };
+        super(envelope, message, exitCode, verboseStderr);
+    }
+}
+// Error sites:
+throw new MyScriptError("repo_not_found", `repo ${owner}/${repo} not found`);
+// Success sites:
+this.emit<ScriptEnvelope<MyResult>>({ status: "ok", result: { ... }, error: null });
+return;
+```
+
+---
+
 ## Capabilities
 
 Capabilities are interfaces representing external services. A script declares exactly the capabilities it needs via intersection types on the `TDeps` generic.

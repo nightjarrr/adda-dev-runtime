@@ -29,3 +29,5 @@ export {
 export type { EmptyArgs } from "./ScriptBase";
 export { ScriptBase } from "./ScriptBase";
 export { expandPath, parseJson, slugify } from "./util";
+export type { ScriptEnvelope, ScriptErrorDetail } from "./envelope";
+export { makeEnvelopeSchema } from "./envelope";
