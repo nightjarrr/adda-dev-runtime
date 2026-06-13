@@ -1,25 +1,17 @@
 // pr mode handler for pr-review-threads.
-import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
-import { ScriptZodValidationError } from "@adda/lib";
+import type { EnvDep, FileWriterDep, ShellDep, StdioDep } from "@adda/lib";
+import { ScriptError, ScriptZodValidationError } from "@adda/lib";
 import { PR_THREADS_QUERY, PrThreadsPageSchema } from "./graphql";
 import type { ThreadNode } from "./graphql";
 import { COMMENT_PREVIEW_DEPTH, FILE_PREFIX_PR, sortThreads, toThreadObject } from "./helpers";
-import { Output, runMode } from "./output";
-import { PrThreadsError } from "./errors";
 import { graphql, paginate, readCeiling, requireOwnerRepo } from "./fetch";
 import type { PrDetailFile, PrFileHeader, PrReviewThreadsArgs, ThreadObject } from "./types";
 
-type PrDeps = ShellDep & EnvDep & StdioDep;
+type PrDeps = ShellDep & EnvDep & StdioDep & FileWriterDep;
 
-/**
- * Handles pr mode: fetches all review threads for a PR, classifies/sorts/windows,
- * builds the detail file, and emits the success envelope.
- */
-export async function runPr(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mode: "pr" }>, output: Output): Promise<void> {
-    await runMode("pr", output, () => runPrInner(deps, args, output));
-}
+type PrResult = { header: PrFileHeader; resultsFile: string };
 
-async function runPrInner(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mode: "pr" }>, output: Output): Promise<void> {
+export async function runPr(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mode: "pr" }>): Promise<PrResult> {
     const ceiling = readCeiling(deps);
     const { owner, repo } = requireOwnerRepo(deps);
 
@@ -29,17 +21,17 @@ async function runPrInner(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mod
     if (!firstParsed.success) throw new ScriptZodValidationError("unexpected PR threads response", firstParsed.error, firstRaw);
 
     if (firstParsed.data.data.repository === null) {
-        throw new PrThreadsError("repo_not_found", `repository ${owner}/${repo} not found`);
+        throw new ScriptError(`repository ${owner}/${repo} not found`, 1, "repo_not_found");
     }
     if (firstParsed.data.data.repository.pullRequest === null) {
-        throw new PrThreadsError("pr_not_found", `PR #${args.prNumber} not found in ${owner}/${repo}`);
+        throw new ScriptError(`PR #${args.prNumber} not found in ${owner}/${repo}`, 1, "pr_not_found");
     }
 
     const firstPage = firstParsed.data.data.repository.pullRequest.reviewThreads;
     const total = firstPage.totalCount;
 
     if (total > ceiling) {
-        throw new PrThreadsError("scan_limit_exceeded", `scan limit exceeded: ${total} threads > ceiling ${ceiling}`, {
+        throw new ScriptError(`scan limit exceeded: ${total} threads > ceiling ${ceiling}`, 1, "scan_limit_exceeded", {
             total,
             ceiling,
         });
@@ -100,11 +92,10 @@ async function runPrInner(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mod
         maxUnresolved: args.maxUnresolved,
     };
 
-    const resultsFile = await output.writeDetailFile<PrDetailFile>(`${FILE_PREFIX_PR}-${args.prNumber}`, {
-        pr: header,
-        threads,
-        hunks,
-    });
+    const resultsFile = await deps.fileWriter.atomicWriteFile(
+        `<tmpDir>/${FILE_PREFIX_PR}-${args.prNumber}-<ts>.json`,
+        JSON.stringify({ pr: header, threads, hunks } satisfies PrDetailFile, null, 2),
+    );
 
-    output.emitSuccess({ status: "success", error: "", pr: { ...header, resultsFile } });
+    return { header, resultsFile };
 }

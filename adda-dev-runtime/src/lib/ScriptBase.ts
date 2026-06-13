@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
 import type { StdioDep } from "./capabilities";
-import { ScriptError } from "./errors";
+import { ScriptError, ScriptStructuredError } from "./errors";
 
 export type EmptyArgs = Record<string, never>;
 
@@ -16,6 +16,10 @@ export abstract class ScriptBase<TDeps extends StdioDep, TArgs> {
     protected abstract validateArgs(parsed: ReturnType<typeof parseArgs>): TArgs;
 
     protected abstract execute(args: TArgs): Promise<void>;
+
+    protected emit<T = unknown>(value: T): void {
+        this.deps.stdio.stdout.write(`${JSON.stringify(value)}\n`);
+    }
 
     async run(argv: string[]): Promise<number> {
         const sliced = argv.slice(2);
@@ -35,6 +39,8 @@ export abstract class ScriptBase<TDeps extends StdioDep, TArgs> {
             return 0;
         } catch (err) {
             if (err instanceof ScriptError) {
+                if (err instanceof ScriptStructuredError) this.emit(err.envelope);
+                if (err.verboseStderr) this.deps.stdio.stderr.write(err.verboseStderr);
                 this.deps.stdio.stderr.write(`Error: ${err.message}\n`);
                 return err.exitCode;
             }

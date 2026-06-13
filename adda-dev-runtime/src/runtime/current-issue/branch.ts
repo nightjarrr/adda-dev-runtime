@@ -1,44 +1,43 @@
 import type { ShellDep } from "@adda/lib";
 import { slugify } from "@adda/lib";
 
+import { CurrentIssueError } from "./errors";
 import { resolveIssueBranch } from "./resolve";
-import type { IssueStateStore, ScriptOutput } from "./types";
+import type { IssueStateStore, SuccessEnvelope } from "./types";
 
-async function getCurrentBranch(deps: ShellDep, output: ScriptOutput): Promise<string> {
+async function getCurrentBranch(deps: ShellDep): Promise<string> {
     const result = await deps.shell.run(["git", "branch", "--show-current"], { strict: false });
     if (result.exitCode !== 0) {
-        output.forwardStderr(result);
-        output.fail(`git branch --show-current failed: ${result.stderr.trim()}`);
+        throw new CurrentIssueError(`git branch --show-current failed: ${result.stderr.trim()}`, result.stderr);
     }
     return result.stdout.trim();
 }
 
-export async function executeBranchEnsure(deps: ShellDep, store: IssueStateStore, output: ScriptOutput): Promise<void> {
+export async function executeBranchEnsure(deps: ShellDep, store: IssueStateStore): Promise<SuccessEnvelope> {
     const state = await store.readState();
-    if (!state) output.fail("no current issue set — run 'current-issue switch <id>' first");
+    if (!state) throw new CurrentIssueError("no current issue set — run 'current-issue switch <id>' first");
 
-    const resolveData = await resolveIssueBranch(deps, state.id, output);
+    const resolveData = await resolveIssueBranch(deps, state.id);
 
-    const currentBranch = await getCurrentBranch(deps, output);
+    const currentBranch = await getCurrentBranch(deps);
 
     if (resolveData.status === "feature_branch") {
         if (currentBranch === resolveData.branch) {
-            output.emit({
+            return {
                 status: "success",
                 issue: state,
                 details: { action: "none", branch: resolveData.branch },
                 error: "",
-            });
-            return;
+            };
         }
-        output.fail(
+        throw new CurrentIssueError(
             `feature branch '${resolveData.branch}' already exists for issue #${state.id} but currently on '${currentBranch}'`,
         );
     }
 
     // resolveData.status === "main"
     if (currentBranch !== "main") {
-        output.fail(`expected to be on 'main' to create feature branch, but currently on '${currentBranch}'`);
+        throw new CurrentIssueError(`expected to be on 'main' to create feature branch, but currently on '${currentBranch}'`);
     }
 
     const rawSlug = slugify(state.title);
@@ -57,30 +56,33 @@ export async function executeBranchEnsure(deps: ShellDep, store: IssueStateStore
         strict: false,
     });
     if (developResult.exitCode !== 0) {
-        output.forwardStderr(developResult);
-        output.fail(`gh issue develop failed for issue #${state.id}`);
+        throw new CurrentIssueError(`gh issue develop failed for issue #${state.id}`, developResult.stderr);
     }
 
     const details: Record<string, unknown> = { action: "created", branch: branchName };
     if (warning) details.warning = warning;
-    output.emit({ status: "success", issue: state, details, error: "" });
+    return { status: "success", issue: state, details, error: "" };
 }
 
-export async function executeBranchVerify(deps: ShellDep, store: IssueStateStore, output: ScriptOutput): Promise<void> {
+export async function executeBranchVerify(deps: ShellDep, store: IssueStateStore): Promise<SuccessEnvelope> {
     const state = await store.readState();
-    if (!state) output.fail("no current issue set — run 'current-issue switch <id>' first");
+    if (!state) throw new CurrentIssueError("no current issue set — run 'current-issue switch <id>' first");
 
-    const resolveData = await resolveIssueBranch(deps, state.id, output);
+    const resolveData = await resolveIssueBranch(deps, state.id);
 
     if (resolveData.status === "main") {
-        output.fail(`no feature branch linked to issue #${state.id} — was 'current-issue branch --ensure' run?`);
+        throw new CurrentIssueError(
+            `no feature branch linked to issue #${state.id} — was 'current-issue branch --ensure' run?`,
+        );
     }
 
-    const currentBranch = await getCurrentBranch(deps, output);
+    const currentBranch = await getCurrentBranch(deps);
 
     if (currentBranch !== resolveData.branch) {
-        output.fail(`expected branch '${resolveData.branch}' for issue #${state.id}, but currently on '${currentBranch}'`);
+        throw new CurrentIssueError(
+            `expected branch '${resolveData.branch}' for issue #${state.id}, but currently on '${currentBranch}'`,
+        );
     }
 
-    output.emit({ status: "success", issue: state, details: { branch: currentBranch }, error: "" });
+    return { status: "success", issue: state, details: { branch: currentBranch }, error: "" };
 }

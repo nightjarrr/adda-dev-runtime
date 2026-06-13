@@ -1,6 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Shell, ShellDep, ShellResult } from "../../lib/index";
-import type { IssueState, IssueStateStore, ScriptOutput } from "./types";
+import { ScriptStructuredError } from "../../lib/index";
+import type { IssueState, IssueStateStore } from "./types";
 import { executeBranchEnsure, executeBranchVerify } from "./branch";
 
 // --- Helpers ---
@@ -37,7 +38,6 @@ function makeMockStore(state: IssueState | null = DEFAULT_STATE): IssueStateStor
 
 function makeMockDeps(shellRun?: (command: string[]) => Promise<ShellResult>): {
     deps: ShellDep;
-    output: ScriptOutput & { emitted: unknown[]; forwarded: string[]; failed: string[] };
 } {
     const defaultShellRun = async (command: string[]): Promise<ShellResult> => {
         if (command[0] === RESOLVE_BIN) {
@@ -56,81 +56,61 @@ function makeMockDeps(shellRun?: (command: string[]) => Promise<ShellResult>): {
         runSh: mock(async (_cmd: string) => makeShellResult()),
     };
 
-    const deps: ShellDep = { shell: mockShell };
-
-    const emitted: unknown[] = [];
-    const forwarded: string[] = [];
-    const failed: string[] = [];
-
-    const output: ScriptOutput & { emitted: unknown[]; forwarded: string[]; failed: string[] } = {
-        emitted,
-        forwarded,
-        failed,
-        emit(envelope) {
-            emitted.push(envelope);
-        },
-        forwardStderr(result) {
-            if (result.stderr) forwarded.push(result.stderr);
-        },
-        fail(message): never {
-            failed.push(message);
-            throw new Error(message);
-        },
+    const deps: ShellDep = {
+        shell: mockShell,
     };
 
-    return { deps, output };
+    return { deps };
 }
 
 // --- executeBranchEnsure tests ---
 
 describe("executeBranchEnsure", () => {
-    test("no stored issue — calls fail with 'no current issue set'", async () => {
-        const { deps, output } = makeMockDeps();
+    test("no stored issue — throws CurrentIssueError with 'no current issue set'", async () => {
+        const { deps } = makeMockDeps();
         const store = makeMockStore(null);
-        await expect(executeBranchEnsure(deps, store, output)).rejects.toThrow();
-        expect(output.failed.length).toBe(1);
-        expect(output.failed[0]).toContain("no current issue set");
+        const err = await executeBranchEnsure(deps, store).catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.message).toContain("no current issue set");
     });
 
-    test("resolve-issue-branch exits non-zero — calls fail", async () => {
-        const { deps, output } = makeMockDeps(async (command) => {
+    test("resolve-issue-branch exits non-zero — throws CurrentIssueError", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: "", stderr: "some error", exitCode: 1 });
             }
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchEnsure(deps, store, output)).rejects.toThrow();
-        expect(output.failed.length).toBe(1);
+        await expect(executeBranchEnsure(deps, store)).rejects.toBeInstanceOf(ScriptStructuredError);
     });
 
-    test("resolve-issue-branch returns invalid JSON — calls fail", async () => {
-        const { deps, output } = makeMockDeps(async (command) => {
+    test("resolve-issue-branch returns invalid JSON — throws CurrentIssueError", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: "not valid json{{", exitCode: 0 });
             }
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchEnsure(deps, store, output)).rejects.toThrow();
-        expect(output.failed.length).toBe(1);
+        await expect(executeBranchEnsure(deps, store)).rejects.toBeInstanceOf(ScriptStructuredError);
     });
 
-    test("resolve-issue-branch returns ambiguous — calls fail", async () => {
-        const { deps, output } = makeMockDeps(async (command) => {
+    test("resolve-issue-branch returns ambiguous — throws CurrentIssueError with 'ambiguous'", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeResolveResponse("ambiguous", "", "", "two branches"), exitCode: 0 });
             }
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchEnsure(deps, store, output)).rejects.toThrow();
-        expect(output.failed.length).toBe(1);
-        expect(output.failed[0]).toContain("ambiguous");
+        const err = await executeBranchEnsure(deps, store).catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.message).toContain("ambiguous");
     });
 
-    test("feature_branch + current matches — emits success with action: none", async () => {
-        const { deps, output } = makeMockDeps(async (command) => {
+    test("feature_branch + current matches — returns success envelope with action: none", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeResolveResponse("feature_branch", "chore/270-my-branch") });
             }
@@ -140,16 +120,14 @@ describe("executeBranchEnsure", () => {
             return makeShellResult();
         });
         const store = makeMockStore();
-        await executeBranchEnsure(deps, store, output);
-        expect(output.emitted.length).toBe(1);
-        const env = output.emitted[0] as { status: string; details: { action: string; branch: string } };
-        expect(env.status).toBe("success");
-        expect(env.details.action).toBe("none");
-        expect(env.details.branch).toBe("chore/270-my-branch");
+        const result = await executeBranchEnsure(deps, store);
+        expect(result.status).toBe("success");
+        expect(result.details.action).toBe("none");
+        expect(result.details.branch).toBe("chore/270-my-branch");
     });
 
-    test("feature_branch + current doesn't match — calls fail with expected branch info", async () => {
-        const { deps, output } = makeMockDeps(async (command) => {
+    test("feature_branch + current doesn't match — throws CurrentIssueError with expected branch info", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeResolveResponse("feature_branch", "chore/270-my-branch") });
             }
@@ -159,14 +137,14 @@ describe("executeBranchEnsure", () => {
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchEnsure(deps, store, output)).rejects.toThrow();
-        expect(output.failed.length).toBe(1);
-        expect(output.failed[0]).toContain("chore/270-my-branch");
-        expect(output.failed[0]).toContain("some-other-branch");
+        const err = await executeBranchEnsure(deps, store).catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.message).toContain("chore/270-my-branch");
+        expect(err.message).toContain("some-other-branch");
     });
 
-    test("main + current is not main — calls fail with expected/actual branch info", async () => {
-        const { deps, output } = makeMockDeps(async (command) => {
+    test("main + current is not main — throws CurrentIssueError with expected/actual branch info", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeResolveResponse("main") });
             }
@@ -176,14 +154,14 @@ describe("executeBranchEnsure", () => {
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchEnsure(deps, store, output)).rejects.toThrow();
-        expect(output.failed.length).toBe(1);
-        expect(output.failed[0]).toContain("some-other-branch");
+        const err = await executeBranchEnsure(deps, store).catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.message).toContain("some-other-branch");
     });
 
-    test("main + current is main, normal title — emits success with action: created, correct branch name", async () => {
+    test("main + current is main, normal title — returns success envelope with action: created, correct branch name", async () => {
         const ghDevelopCalls: string[][] = [];
-        const { deps, output } = makeMockDeps(async (command) => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeResolveResponse("main") });
             }
@@ -197,20 +175,18 @@ describe("executeBranchEnsure", () => {
             return makeShellResult();
         });
         const store = makeMockStore();
-        await executeBranchEnsure(deps, store, output);
-        expect(output.emitted.length).toBe(1);
-        const env = output.emitted[0] as { status: string; details: { action: string; branch: string } };
-        expect(env.status).toBe("success");
-        expect(env.details.action).toBe("created");
-        expect(env.details.branch).toBe("chore/270-branch-lifecycle-tooling-for-sdlc-roles");
+        const result = await executeBranchEnsure(deps, store);
+        expect(result.status).toBe("success");
+        expect(result.details.action).toBe("created");
+        expect(result.details.branch).toBe("chore/270-branch-lifecycle-tooling-for-sdlc-roles");
         expect(ghDevelopCalls.length).toBe(1);
         expect(ghDevelopCalls[0]).toContain("chore/270-branch-lifecycle-tooling-for-sdlc-roles");
         expect(ghDevelopCalls[0]).toContain("270");
         expect(ghDevelopCalls[0]).toContain("--checkout");
     });
 
-    test("main + current is main, degenerate title (all Unicode) — emits success with action: created, warning present", async () => {
-        const { deps, output } = makeMockDeps(async (command) => {
+    test("main + current is main, degenerate title (all Unicode) — returns success with action: created, warning present", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeResolveResponse("main") });
             }
@@ -220,17 +196,15 @@ describe("executeBranchEnsure", () => {
             return makeShellResult();
         });
         const store = makeMockStore({ ...DEFAULT_STATE, title: "😀🎉✨" });
-        await executeBranchEnsure(deps, store, output);
-        expect(output.emitted.length).toBe(1);
-        const env = output.emitted[0] as { status: string; details: { action: string; branch: string; warning?: string } };
-        expect(env.status).toBe("success");
-        expect(env.details.action).toBe("created");
-        expect(typeof env.details.warning).toBe("string");
-        expect(env.details.branch).toMatch(/^chore\/270-[a-z0-9]{8}$/);
+        const result = await executeBranchEnsure(deps, store);
+        expect(result.status).toBe("success");
+        expect(result.details.action).toBe("created");
+        expect(typeof result.details.warning).toBe("string");
+        expect(String(result.details.branch)).toMatch(/^chore\/270-[a-z0-9]{8}$/);
     });
 
-    test("gh issue develop fails — forwards stderr and calls fail", async () => {
-        const { deps, output } = makeMockDeps(async (command) => {
+    test("gh issue develop fails — error carries verboseStderr and throws CurrentIssueError", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeResolveResponse("main") });
             }
@@ -243,13 +217,13 @@ describe("executeBranchEnsure", () => {
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchEnsure(deps, store, output)).rejects.toThrow();
-        expect(output.forwarded).toContain("gh error output");
-        expect(output.failed.length).toBe(1);
+        const err = await executeBranchEnsure(deps, store).catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.verboseStderr).toContain("gh error output");
     });
 
-    test("git branch --show-current fails — forwards stderr and calls fail", async () => {
-        const { deps, output } = makeMockDeps(async (command) => {
+    test("git branch --show-current fails — error carries verboseStderr and throws CurrentIssueError", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeResolveResponse("feature_branch", "chore/270-my-branch") });
             }
@@ -259,51 +233,50 @@ describe("executeBranchEnsure", () => {
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchEnsure(deps, store, output)).rejects.toThrow();
-        expect(output.forwarded).toContain("fatal: not a git repository");
-        expect(output.failed.length).toBe(1);
-        expect(output.failed[0]).toContain("git branch --show-current failed");
+        const err = await executeBranchEnsure(deps, store).catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.verboseStderr).toContain("fatal: not a git repository");
+        expect(err.message).toContain("git branch --show-current failed");
     });
 });
 
 // --- executeBranchVerify tests ---
 
 describe("executeBranchVerify", () => {
-    test("no stored issue — calls fail with 'no current issue set'", async () => {
-        const { deps, output } = makeMockDeps();
+    test("no stored issue — throws CurrentIssueError with 'no current issue set'", async () => {
+        const { deps } = makeMockDeps();
         const store = makeMockStore(null);
-        await expect(executeBranchVerify(deps, store, output)).rejects.toThrow();
-        expect(output.failed.length).toBe(1);
-        expect(output.failed[0]).toContain("no current issue set");
+        const err = await executeBranchVerify(deps, store).catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.message).toContain("no current issue set");
     });
 
-    test("resolve-issue-branch exits non-zero — calls fail", async () => {
-        const { deps, output } = makeMockDeps(async (command) => {
+    test("resolve-issue-branch exits non-zero — throws CurrentIssueError", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: "", stderr: "some error", exitCode: 1 });
             }
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchVerify(deps, store, output)).rejects.toThrow();
-        expect(output.failed.length).toBe(1);
+        await expect(executeBranchVerify(deps, store)).rejects.toBeInstanceOf(ScriptStructuredError);
     });
 
-    test("resolve-issue-branch returns main — calls fail with 'no feature branch linked'", async () => {
-        const { deps, output } = makeMockDeps(async (command) => {
+    test("resolve-issue-branch returns main — throws CurrentIssueError with 'no feature branch linked'", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeResolveResponse("main") });
             }
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchVerify(deps, store, output)).rejects.toThrow();
-        expect(output.failed.length).toBe(1);
-        expect(output.failed[0]).toContain("no feature branch linked");
+        const err = await executeBranchVerify(deps, store).catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.message).toContain("no feature branch linked");
     });
 
-    test("feature_branch + matches current — emits success with branch", async () => {
-        const { deps, output } = makeMockDeps(async (command) => {
+    test("feature_branch + matches current — returns success envelope with branch", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeResolveResponse("feature_branch", "chore/270-my-branch") });
             }
@@ -313,15 +286,13 @@ describe("executeBranchVerify", () => {
             return makeShellResult();
         });
         const store = makeMockStore();
-        await executeBranchVerify(deps, store, output);
-        expect(output.emitted.length).toBe(1);
-        const env = output.emitted[0] as { status: string; details: { branch: string } };
-        expect(env.status).toBe("success");
-        expect(env.details.branch).toBe("chore/270-my-branch");
+        const result = await executeBranchVerify(deps, store);
+        expect(result.status).toBe("success");
+        expect(result.details.branch).toBe("chore/270-my-branch");
     });
 
-    test("feature_branch + doesn't match current — calls fail with expected/actual branch", async () => {
-        const { deps, output } = makeMockDeps(async (command) => {
+    test("feature_branch + doesn't match current — throws CurrentIssueError with expected/actual branch", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeResolveResponse("feature_branch", "chore/270-my-branch") });
             }
@@ -331,22 +302,22 @@ describe("executeBranchVerify", () => {
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchVerify(deps, store, output)).rejects.toThrow();
-        expect(output.failed.length).toBe(1);
-        expect(output.failed[0]).toContain("chore/270-my-branch");
-        expect(output.failed[0]).toContain("some-other-branch");
+        const err = await executeBranchVerify(deps, store).catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.message).toContain("chore/270-my-branch");
+        expect(err.message).toContain("some-other-branch");
     });
 
-    test("resolve-issue-branch returns ambiguous — calls fail", async () => {
-        const { deps, output } = makeMockDeps(async (command) => {
+    test("resolve-issue-branch returns ambiguous — throws CurrentIssueError", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeResolveResponse("ambiguous", "", "", "two branches"), exitCode: 0 });
             }
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchVerify(deps, store, output)).rejects.toThrow();
-        expect(output.failed.length).toBe(1);
-        expect(output.failed[0]).toContain("ambiguous");
+        const err = await executeBranchVerify(deps, store).catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.message).toContain("ambiguous");
     });
 });

@@ -1,4 +1,3 @@
-import type { ShellResult } from "@adda/lib";
 import { z } from "zod";
 
 // --- Schemas ---
@@ -69,10 +68,4 @@ export interface IssueStateStore {
     writeState(state: IssueState): Promise<void>;
     deleteState(): Promise<void>;
     stateExists(): Promise<boolean>;
-}
-
-export interface ScriptOutput {
-    emit(envelope: Envelope): void;
-    fail(message: string, details?: Record<string, unknown>): never;
-    forwardStderr(result: ShellResult): void;
 }

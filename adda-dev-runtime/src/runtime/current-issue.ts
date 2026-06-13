@@ -1,23 +1,23 @@
 import type { parseArgs } from "node:util";
-import type { EnvDep, FileReaderDep, FileSysDep, FileWriterDep, ShellDep, ShellResult, StdioDep } from "@adda/lib";
-import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError } from "@adda/lib";
+import type { EnvDep, FileReaderDep, FileSysDep, FileWriterDep, ShellDep, StdioDep } from "@adda/lib";
+import { defaultDeps, parseJson, ScriptBase } from "@adda/lib";
 
 import { executeBranchEnsure, executeBranchVerify } from "./current-issue/branch";
 import { executeClear } from "./current-issue/clear";
+import { CurrentIssueArgsError, CurrentIssueError } from "./current-issue/errors";
 import { executeShow } from "./current-issue/show";
 import { executeSwitch } from "./current-issue/switch";
 import { executeSync } from "./current-issue/sync";
-import type { Envelope, IssueState, IssueStateStore, ScriptOutput } from "./current-issue/types";
+import type { IssueState, IssueStateStore } from "./current-issue/types";
 import { IssueStateSchema } from "./current-issue/types";
 
 const STATE_PATH = "/run/adda/.adda-current-issue";
-const STATE_TMP_PATH = "/run/adda/.adda-current-issue.tmp";
 
-export type { IssueStateStore, ScriptOutput } from "./current-issue/types";
+export type { IssueStateStore } from "./current-issue/types";
 
 // --- Types ---
 
-type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep;
+type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileReaderDep & FileWriterDep & FileSysDep;
 
 type CurrentIssueArgs =
     | { subcommand: "switch"; issueId: string; skipRepoInit: boolean }
@@ -61,31 +61,9 @@ export class SilentStore implements IssueStateStore {
     }
 }
 
-class GetScriptOutput implements ScriptOutput {
-    constructor(
-        private field: string,
-        private stdout: { write(text: string): void },
-    ) {}
-
-    emit(envelope: Envelope): void {
-        if (envelope.status === "success" && envelope.issue) {
-            const value = (envelope.issue as unknown as Record<string, string>)[this.field] ?? "";
-            if (value) this.stdout.write(value + "\n");
-        }
-    }
-
-    fail(_message: string): never {
-        throw new Error("unreachable");
-    }
-    forwardStderr(_result: ShellResult): void {}
-}
-
 // --- Script ---
 
-export class CurrentIssueScript
-    extends ScriptBase<CurrentIssueDeps, CurrentIssueArgs>
-    implements IssueStateStore, ScriptOutput
-{
+export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssueArgs> implements IssueStateStore {
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return {
             allowPositionals: true,
@@ -102,39 +80,32 @@ export class CurrentIssueScript
         const subcommand = positionals[0];
 
         if (!subcommand) {
-            this.emit({ status: "error", issue: null, details: {}, error: "usage: current-issue <subcommand> [args]" });
-            throw new ScriptArgsError("usage: current-issue <subcommand> [args]");
+            throw new CurrentIssueArgsError("usage: current-issue <subcommand> [args]");
         }
 
         const skipRepoInit = (parsed.values["skip-repo-init"] as boolean | undefined) ?? false;
         if (skipRepoInit && (subcommand === "show" || subcommand === "get")) {
-            const error = `--skip-repo-init is not valid for '${subcommand}'`;
-            this.emit({ status: "error", issue: null, details: {}, error });
-            throw new ScriptArgsError(error);
+            throw new CurrentIssueArgsError(`--skip-repo-init is not valid for '${subcommand}'`);
         }
 
         const ensure = (parsed.values["ensure"] as boolean | undefined) ?? false;
         const verify = (parsed.values["verify"] as boolean | undefined) ?? false;
         if ((ensure || verify) && subcommand !== "branch") {
             const flag = ensure ? "--ensure" : "--verify";
-            const error = `${flag} is not valid for '${subcommand}'`;
-            this.emit({ status: "error", issue: null, details: {}, error });
-            throw new ScriptArgsError(error);
+            throw new CurrentIssueArgsError(`${flag} is not valid for '${subcommand}'`);
         }
 
         if (subcommand === "switch") {
             const issueId = positionals[1];
             if (!issueId) {
-                this.emit({ status: "error", issue: null, details: {}, error: "usage: current-issue switch <id>" });
-                throw new ScriptArgsError("usage: current-issue switch <id>");
+                throw new CurrentIssueArgsError("usage: current-issue switch <id>");
             }
             return { subcommand: "switch", issueId, skipRepoInit };
         }
 
         if (subcommand === "show") {
             if (positionals.length > 1) {
-                this.emit({ status: "error", issue: null, details: {}, error: "usage: current-issue show" });
-                throw new ScriptArgsError("usage: current-issue show");
+                throw new CurrentIssueArgsError("usage: current-issue show");
             }
             return { subcommand: "show" };
         }
@@ -150,27 +121,20 @@ export class CurrentIssueScript
         if (subcommand === "get") {
             const field = positionals[1];
             if (!field) {
-                this.emit({ status: "error", issue: null, details: {}, error: "usage: current-issue get <field>" });
-                throw new ScriptArgsError("usage: current-issue get <field>");
+                throw new CurrentIssueArgsError("usage: current-issue get <field>");
             }
             return { subcommand: "get", field };
         }
 
         if (subcommand === "branch") {
             if (skipRepoInit) {
-                const error = "--skip-repo-init is not valid for 'branch'";
-                this.emit({ status: "error", issue: null, details: {}, error });
-                throw new ScriptArgsError(error);
+                throw new CurrentIssueArgsError("--skip-repo-init is not valid for 'branch'");
             }
             if (ensure && verify) {
-                const error = "--ensure and --verify are mutually exclusive";
-                this.emit({ status: "error", issue: null, details: {}, error });
-                throw new ScriptArgsError(error);
+                throw new CurrentIssueArgsError("--ensure and --verify are mutually exclusive");
             }
             if (!ensure && !verify) {
-                const error = "usage: current-issue branch --ensure | --verify";
-                this.emit({ status: "error", issue: null, details: {}, error });
-                throw new ScriptArgsError(error);
+                throw new CurrentIssueArgsError("usage: current-issue branch --ensure | --verify");
             }
             return { subcommand: "branch", mode: ensure ? "ensure" : "verify" };
         }
@@ -181,48 +145,34 @@ export class CurrentIssueScript
     protected async execute(args: CurrentIssueArgs): Promise<void> {
         switch (args.subcommand) {
             case "switch":
-                await executeSwitch(args.issueId, args.skipRepoInit, this.deps, this, this);
+                this.emit(await executeSwitch(args.issueId, args.skipRepoInit, this.deps, this));
                 return;
             case "show":
-                await executeShow(this, this);
+                this.emit(await executeShow(this));
                 return;
             case "sync":
-                await executeSync(args.skipRepoInit, this.deps, this, this);
+                this.emit(await executeSync(args.skipRepoInit, this.deps, this));
                 return;
             case "clear":
-                await executeClear(args.skipRepoInit, this.deps, this, this);
+                this.emit(await executeClear(args.skipRepoInit, this.deps, this));
                 return;
-            case "get":
-                try {
-                    await executeShow(new SilentStore(this.deps), new GetScriptOutput(args.field, this.deps.stdio.stdout));
-                } catch {}
+            case "get": {
+                const envelope = await executeShow(new SilentStore(this.deps)).catch(() => null);
+                if (envelope && envelope.issue) {
+                    const value = (envelope.issue as unknown as Record<string, string>)[args.field] ?? "";
+                    if (value) this.deps.stdio.stdout.write(value + "\n");
+                }
                 return;
+            }
             case "branch":
-                if (args.mode === "ensure") await executeBranchEnsure(this.deps, this, this);
-                else await executeBranchVerify(this.deps, this, this);
+                if (args.mode === "ensure") this.emit(await executeBranchEnsure(this.deps, this));
+                else this.emit(await executeBranchVerify(this.deps, this));
                 return;
             default: {
                 const message = `unknown subcommand: ${args.name}`;
-                this.fail(message);
+                throw new CurrentIssueError(message);
             }
         }
-    }
-
-    // --- ScriptOutput ---
-
-    emit(envelope: Envelope): void {
-        this.deps.stdio.stdout.write(`${JSON.stringify(envelope)}\n`);
-    }
-
-    forwardStderr(result: ShellResult): void {
-        if (result.stderr) {
-            this.deps.stdio.stderr.write(result.stderr);
-        }
-    }
-
-    fail(message: string, details?: Record<string, unknown>): never {
-        this.emit({ status: "error", issue: null, details: details ?? {}, error: message });
-        throw new ScriptError(message);
     }
 
     // --- IssueStateStore ---
@@ -246,20 +196,19 @@ export class CurrentIssueScript
         try {
             raw = parseJson(content);
         } catch {
-            this.fail("state file is corrupt — run 'current-issue clear' to reset");
+            throw new CurrentIssueError("state file is corrupt — run 'current-issue clear' to reset");
         }
 
         const parsed = IssueStateSchema.safeParse(raw);
         if (!parsed.success) {
-            this.fail("state file is corrupt — run 'current-issue clear' to reset");
+            throw new CurrentIssueError("state file is corrupt — run 'current-issue clear' to reset");
         }
 
         return parsed.data;
     }
 
     async writeState(state: IssueState): Promise<void> {
-        await this.deps.fileWriter.writeFile(STATE_TMP_PATH, JSON.stringify(state));
-        await this.deps.fileSys.renameFile(STATE_TMP_PATH, STATE_PATH);
+        await this.deps.fileWriter.atomicWriteFile(STATE_PATH, JSON.stringify(state));
     }
 
     async deleteState(): Promise<void> {

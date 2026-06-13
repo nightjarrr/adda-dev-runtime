@@ -1,7 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Shell, ShellDep, ShellResult } from "../../lib/index";
-import { ScriptZodValidationError } from "../../lib/index";
-import type { ScriptOutput } from "./types";
+import { ScriptStructuredError } from "../../lib/index";
 import { resolveIssueBranch } from "./resolve";
 
 // --- Helpers ---
@@ -18,7 +17,6 @@ function makeResolveResponse(status: string, branch = "", pr = "", details = "")
 
 function makeMockDeps(shellRun?: (command: string[]) => Promise<ShellResult>): {
     deps: ShellDep;
-    output: ScriptOutput & { emitted: unknown[]; forwarded: string[]; failed: string[] };
 } {
     const defaultShellRun = async (): Promise<ShellResult> =>
         makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/1-my-branch", "42") });
@@ -28,104 +26,83 @@ function makeMockDeps(shellRun?: (command: string[]) => Promise<ShellResult>): {
         runSh: mock(async (_cmd: string) => makeShellResult()),
     };
 
-    const deps: ShellDep = { shell: mockShell };
-
-    const emitted: unknown[] = [];
-    const forwarded: string[] = [];
-    const failed: string[] = [];
-
-    const output: ScriptOutput & { emitted: unknown[]; forwarded: string[]; failed: string[] } = {
-        emitted,
-        forwarded,
-        failed,
-        emit(envelope) {
-            emitted.push(envelope);
-        },
-        forwardStderr(result) {
-            if (result.stderr) forwarded.push(result.stderr);
-        },
-        fail(message): never {
-            failed.push(message);
-            throw new Error(message);
-        },
+    const deps: ShellDep = {
+        shell: mockShell,
     };
 
-    return { deps, output };
+    return { deps };
 }
 
 // --- Tests ---
 
 describe("resolveIssueBranch", () => {
-    test("non-zero exit forwards stderr and calls fail", async () => {
-        const { deps, output } = makeMockDeps(async () => makeShellResult({ stdout: "", stderr: "some error", exitCode: 1 }));
-        await expect(resolveIssueBranch(deps, "42", output)).rejects.toThrow();
-        expect(output.forwarded).toContain("some error");
-        expect(output.failed.length).toBe(1);
-        expect(output.failed[0]).toContain("42");
+    test("non-zero exit carries verboseStderr and throws CurrentIssueError", async () => {
+        const { deps } = makeMockDeps(async () => makeShellResult({ stdout: "", stderr: "some error", exitCode: 1 }));
+        const err = await resolveIssueBranch(deps, "42").catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.verboseStderr).toContain("some error");
     });
 
-    test("invalid JSON calls fail", async () => {
-        const { deps, output } = makeMockDeps(async () => makeShellResult({ stdout: "not valid json{{", exitCode: 0 }));
-        await expect(resolveIssueBranch(deps, "42", output)).rejects.toThrow();
-        expect(output.failed.length).toBe(1);
-        expect(output.failed[0]).toContain("invalid JSON");
+    test("invalid JSON throws CurrentIssueError with 'invalid JSON'", async () => {
+        const { deps } = makeMockDeps(async () => makeShellResult({ stdout: "not valid json{{", exitCode: 0 }));
+        await expect(resolveIssueBranch(deps, "42")).rejects.toMatchObject({
+            message: expect.stringContaining("invalid JSON"),
+        });
     });
 
-    test("schema validation failure emits error and throws ScriptZodValidationError", async () => {
-        const { deps, output } = makeMockDeps(async () =>
+    test("schema validation failure throws CurrentIssueError with short message in envelope", async () => {
+        const { deps } = makeMockDeps(async () =>
             makeShellResult({ stdout: JSON.stringify({ status: "feature_branch" }), exitCode: 0 }),
         );
-        await expect(resolveIssueBranch(deps, "42", output)).rejects.toBeInstanceOf(ScriptZodValidationError);
-        expect(output.emitted.length).toBe(1);
+        const err = await resolveIssueBranch(deps, "42").catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        const envelope = (err as ScriptStructuredError).envelope as Record<string, unknown>;
+        expect(String(envelope.error)).toContain("unexpected resolve-issue-branch output");
     });
 
-    test("ambiguous status forwards stderr and calls fail", async () => {
-        const { deps, output } = makeMockDeps(async () =>
+    test("ambiguous status carries verboseStderr and throws CurrentIssueError", async () => {
+        const { deps } = makeMockDeps(async () =>
             makeShellResult({
                 stdout: makeResolveResponse("ambiguous", "", "", "multiple branches"),
                 stderr: "ambiguous detail",
                 exitCode: 0,
             }),
         );
-        await expect(resolveIssueBranch(deps, "42", output)).rejects.toThrow();
-        expect(output.forwarded).toContain("ambiguous detail");
-        expect(output.failed.length).toBe(1);
-        expect(output.failed[0]).toContain("ambiguous");
+        const err = await resolveIssueBranch(deps, "42").catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.verboseStderr).toContain("ambiguous detail");
     });
 
-    test("error status forwards stderr and calls fail", async () => {
-        const { deps, output } = makeMockDeps(async () =>
+    test("error status carries verboseStderr and throws CurrentIssueError", async () => {
+        const { deps } = makeMockDeps(async () =>
             makeShellResult({
                 stdout: makeResolveResponse("error", "", "", "something failed"),
                 stderr: "error detail",
                 exitCode: 0,
             }),
         );
-        await expect(resolveIssueBranch(deps, "42", output)).rejects.toThrow();
-        expect(output.forwarded).toContain("error detail");
-        expect(output.failed.length).toBe(1);
-        expect(output.failed[0]).toContain("error");
+        const err = await resolveIssueBranch(deps, "42").catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.verboseStderr).toContain("error detail");
     });
 
     test("main status returns data successfully", async () => {
-        const { deps, output } = makeMockDeps(async () =>
+        const { deps } = makeMockDeps(async () =>
             makeShellResult({ stdout: makeResolveResponse("main", "", "", ""), exitCode: 0 }),
         );
-        const data = await resolveIssueBranch(deps, "42", output);
+        const data = await resolveIssueBranch(deps, "42");
         expect(data.status).toBe("main");
         expect(data.branch).toBe("");
         expect(data.pr).toBe("");
-        expect(output.failed.length).toBe(0);
     });
 
     test("feature_branch status returns data with branch and pr", async () => {
-        const { deps, output } = makeMockDeps(async () =>
+        const { deps } = makeMockDeps(async () =>
             makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/42-my-branch", "99"), exitCode: 0 }),
         );
-        const data = await resolveIssueBranch(deps, "42", output);
+        const data = await resolveIssueBranch(deps, "42");
         expect(data.status).toBe("feature_branch");
         expect(data.branch).toBe("feature/42-my-branch");
         expect(data.pr).toBe("99");
-        expect(output.failed.length).toBe(0);
     });
 });

@@ -42,7 +42,7 @@ interface MockDepsOptions {
     envVars?: Record<string, string>;
     fileReaderReadFile?: (path: string) => Promise<string>;
     fileWriterWriteFile?: (path: string, content: string) => Promise<void>;
-    fileSysRenameFile?: (from: string, to: string) => Promise<void>;
+    fileWriterAtomicWriteFile?: (pathPattern: string, content: string) => Promise<string>;
     fileSysDeleteFile?: (path: string) => Promise<void>;
     fileSysFileExists?: (path: string) => Promise<boolean>;
 }
@@ -100,10 +100,12 @@ function makeMockDeps(options: MockDepsOptions = {}): {
 
     const mockFileWriter: FileWriter = {
         writeFile: mock(options.fileWriterWriteFile ?? (async (_path: string, _content: string) => {})),
+        atomicWriteFile: mock(
+            options.fileWriterAtomicWriteFile ?? (async (_pathPattern: string, _content: string) => "/tmp/mock-state.json"),
+        ),
     };
 
     const mockFileSys: FileSys = {
-        renameFile: mock(options.fileSysRenameFile ?? (async (_from: string, _to: string) => {})),
         deleteFile: mock(options.fileSysDeleteFile ?? (async (_path: string) => {})),
         fileExists: mock(options.fileSysFileExists ?? (async (_path: string) => false)),
     };
@@ -214,9 +216,6 @@ describe("CurrentIssueScript", () => {
 
     describe("switch — dirty tree", () => {
         test("dirty tree — exits 1, error envelope, state file not written", async () => {
-            const writeFileMock = mock(async (_path: string, _content: string) => {});
-            const renameMock = mock(async (_from: string, _to: string) => {});
-
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") {
@@ -224,16 +223,13 @@ describe("CurrentIssueScript", () => {
                     }
                     return makeShellResult();
                 },
-                fileWriterWriteFile: writeFileMock,
-                fileSysRenameFile: renameMock,
             });
 
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("error");
-            expect(writeFileMock).not.toHaveBeenCalled();
-            expect(renameMock).not.toHaveBeenCalled();
+            expect(deps.fileWriter.atomicWriteFile).not.toHaveBeenCalled();
         });
     });
 
@@ -403,9 +399,6 @@ describe("CurrentIssueScript", () => {
 
     describe("switch — git checkout failure", () => {
         test("git checkout fails — exits 1, error envelope, state file not written", async () => {
-            const writeFileMock = mock(async (_path: string, _content: string) => {});
-            const renameMock = mock(async (_from: string, _to: string) => {});
-
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -418,16 +411,13 @@ describe("CurrentIssueScript", () => {
                     }
                     return makeShellResult();
                 },
-                fileWriterWriteFile: writeFileMock,
-                fileSysRenameFile: renameMock,
             });
 
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("error");
-            expect(writeFileMock).not.toHaveBeenCalled();
-            expect(renameMock).not.toHaveBeenCalled();
+            expect(deps.fileWriter.atomicWriteFile).not.toHaveBeenCalled();
         });
     });
 
@@ -1151,30 +1141,24 @@ describe("CurrentIssueScript", () => {
                 expect(result?.pr).toBe("99");
             });
 
-            test("fileReader returns invalid JSON — throws ScriptError with 'state file is corrupt' and emits error envelope", async () => {
-                const { deps, outLines } = makeMockDeps({
+            test("fileReader returns invalid JSON — throws CurrentIssueError with 'state file is corrupt'", async () => {
+                const { deps } = makeMockDeps({
                     fileReaderReadFile: async (_path: string) => "not valid json {{{",
                 });
                 const script: IssueStateStore = new CurrentIssueScript(deps);
                 await expect(script.readState()).rejects.toMatchObject({
                     message: expect.stringContaining("state file is corrupt"),
                 });
-                const out = parseStdoutJson(outLines);
-                expect(out.status).toBe("error");
-                expect(String(out.error)).toContain("state file is corrupt");
             });
 
-            test("fileReader returns valid JSON but wrong schema — throws ScriptError with 'state file is corrupt' and emits error envelope", async () => {
-                const { deps, outLines } = makeMockDeps({
+            test("fileReader returns valid JSON but wrong schema — throws CurrentIssueError with 'state file is corrupt'", async () => {
+                const { deps } = makeMockDeps({
                     fileReaderReadFile: async (_path: string) => JSON.stringify({ foo: "bar" }),
                 });
                 const script: IssueStateStore = new CurrentIssueScript(deps);
                 await expect(script.readState()).rejects.toMatchObject({
                     message: expect.stringContaining("state file is corrupt"),
                 });
-                const out = parseStdoutJson(outLines);
-                expect(out.status).toBe("error");
-                expect(String(out.error)).toContain("state file is corrupt");
             });
         });
 

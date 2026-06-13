@@ -149,5 +149,13 @@ Always use `.safeParse()`, never `.parse()`. Use `.nullable()` on fields the API
   mocking needed.
 - `mock.module()` (top-level, before imports) is reserved for capability implementation
   integration tests only, where a Bun built-in must be intercepted before the module loads.
-  Never use it in script descendant tests.
+  Never use it in script descendant tests. Bun's test runner shares a single module registry
+  across all files in a process run — a `mock.module()` in one file leaks into files loaded
+  afterward. Alias-based mocks (`"@adda/lib"`) are additionally environment-sensitive and
+  may apply in CI but not locally (or vice versa).
+- All I/O operations must be methods on a capability interface, never standalone functions
+  that capture `defaultDeps` at module level. A function that performs I/O by closing over
+  `defaultDeps` is invisible to constructor injection — tests that exercise it will always
+  hit the real filesystem. Putting the operation on the capability interface (e.g.
+  `FileWriter.atomicWriteFile`) is what makes constructor injection sufficient.
 - Coverage floor: 95% line / 90% statement, enforced via `bunfig.toml`.
