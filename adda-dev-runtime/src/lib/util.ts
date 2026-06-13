@@ -28,7 +28,7 @@ export async function writeDetailFile<T>(
 ): Promise<string> {
     const epoch = Date.now();
     const finalPath = `${deps.tmp.tmpDir()}/${prefix}-${epoch}.json`;
-    const tmpPath = deps.tmp.tempFilePath("pr-review-threads-tmp", ".json");
+    const tmpPath = deps.tmp.tempFilePath();
     await deps.fileWriter.writeFile(tmpPath, JSON.stringify(content, null, 2));
     await deps.fileSys.renameFile(tmpPath, finalPath);
     return finalPath;

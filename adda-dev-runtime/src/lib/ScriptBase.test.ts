@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { parseArgs } from "node:util";
 import type { StdioDep } from "./capabilities";
-import { ScriptArgsError, ScriptError } from "./errors";
+import { ScriptArgsError, ScriptError, ScriptStructuredError } from "./errors";
 import { ScriptBase } from "./ScriptBase";
 
 // --- Test helpers ---
@@ -132,6 +132,44 @@ describe("ScriptBase", () => {
             });
             await script.run(["bun", "script.ts"]);
             expect(errLines.join("")).toContain("domain error");
+        });
+    });
+
+    describe("ScriptStructuredError thrown in execute", () => {
+        test("emits envelope JSON to stdout", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const script = new NoArgScript(deps, async () => {
+                throw new ScriptStructuredError({ status: "error", error: "oops" }, "oops");
+            });
+            await script.run(["bun", "script.ts"]);
+            expect(outLines.join("")).toContain('{"status":"error","error":"oops"}');
+        });
+
+        test("writes diagnostic message to stderr", async () => {
+            const { deps, errLines } = makeMockDeps();
+            const script = new NoArgScript(deps, async () => {
+                throw new ScriptStructuredError({ status: "error", error: "oops" }, "oops");
+            });
+            await script.run(["bun", "script.ts"]);
+            expect(errLines.join("")).toContain("Error: oops");
+        });
+
+        test("returns the error's exit code", async () => {
+            const { deps } = makeMockDeps();
+            const script = new NoArgScript(deps, async () => {
+                throw new ScriptStructuredError({}, "msg", 3);
+            });
+            const code = await script.run(["bun", "script.ts"]);
+            expect(code).toBe(3);
+        });
+
+        test("plain ScriptError does not emit to stdout", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const script = new NoArgScript(deps, async () => {
+                throw new ScriptError("plain");
+            });
+            await script.run(["bun", "script.ts"]);
+            expect(outLines).toHaveLength(0);
         });
     });
 
