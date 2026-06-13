@@ -4,22 +4,30 @@ export class ScriptError extends Error {
     readonly exitCode: number;
     readonly reason: string;
     readonly payload: Record<string, unknown>;
+    readonly verboseStderr?: string;
 
-    constructor(message: string, exitCode = 1, reason = "internal_error", payload: Record<string, unknown> = {}) {
+    constructor(
+        message: string,
+        exitCode = 1,
+        reason = "internal_error",
+        payload: Record<string, unknown> = {},
+        verboseStderr?: string,
+    ) {
         super(message);
         if (exitCode < 1) throw new RangeError(`ScriptError exitCode must be >= 1, got ${exitCode}`);
         this.name = "ScriptError";
         this.exitCode = exitCode;
         this.reason = reason;
         this.payload = payload;
+        this.verboseStderr = verboseStderr;
     }
 }
 
 export class ScriptStructuredError extends ScriptError {
     readonly envelope: unknown;
 
-    constructor(envelope: unknown, message: string, exitCode = 1) {
-        super(message, exitCode);
+    constructor(envelope: unknown, message: string, exitCode = 1, verboseStderr?: string) {
+        super(message, exitCode, "internal_error", {}, verboseStderr);
         this.name = "ScriptStructuredError";
         this.envelope = envelope;
     }
@@ -47,19 +55,20 @@ export class ScriptShellError extends ScriptError {
             `shell command failed (exit ${shellExitCode})\n  cmd:    ${cmdline}\n  stdout: ${stdoutText}\n  stderr: ${stderrText}`,
             1,
             "shell_error",
+            {},
+            stderr,
         );
         this.name = "ScriptShellError";
     }
 }
 
 export class ScriptZodValidationError extends ScriptError {
-    readonly short: string;
-
     constructor(context: string, error: z.ZodError, rawInput?: unknown) {
         const issues = error.issues.map((i) => `${i.path.length > 0 ? i.path.join(".") : "(root)"}: ${i.message}`).join("; ");
         const raw = rawInput !== undefined ? `\nraw data:\n\n${JSON.stringify(rawInput)}` : "";
-        super(`${context}: ${issues}${raw}`, 1, "validation_error");
-        this.short = `${context}: ${issues}`;
+        const shortSummary = `${context}: ${issues}`;
+        const verboseStderr = rawInput !== undefined ? `${shortSummary}${raw}` : undefined;
+        super(shortSummary, 1, "validation_error", {}, verboseStderr);
         this.name = "ScriptZodValidationError";
     }
 }

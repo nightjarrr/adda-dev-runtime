@@ -1,6 +1,6 @@
 import type { parseArgs } from "node:util";
-import type { EnvDep, FileReaderDep, FileSysDep, FileWriterDep, ShellDep, StdioDep } from "@adda/lib";
-import { defaultDeps, parseJson, ScriptBase } from "@adda/lib";
+import type { EnvDep, FileReaderDep, FileSysDep, FileWriterDep, ShellDep, StdioDep, TmpDep } from "@adda/lib";
+import { atomicWriteFile, defaultDeps, parseJson, ScriptBase } from "@adda/lib";
 
 import { executeBranchEnsure, executeBranchVerify } from "./current-issue/branch";
 import { executeClear } from "./current-issue/clear";
@@ -12,13 +12,12 @@ import type { IssueState, IssueStateStore } from "./current-issue/types";
 import { IssueStateSchema } from "./current-issue/types";
 
 const STATE_PATH = "/run/adda/.adda-current-issue";
-const STATE_TMP_PATH = "/run/adda/.adda-current-issue.tmp";
 
 export type { IssueStateStore } from "./current-issue/types";
 
 // --- Types ---
 
-type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep;
+type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep & TmpDep;
 
 type CurrentIssueArgs =
     | { subcommand: "switch"; issueId: string; skipRepoInit: boolean }
@@ -209,8 +208,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
     }
 
     async writeState(state: IssueState): Promise<void> {
-        await this.deps.fileWriter.writeFile(STATE_TMP_PATH, JSON.stringify(state));
-        await this.deps.fileSys.renameFile(STATE_TMP_PATH, STATE_PATH);
+        await atomicWriteFile(this.deps, STATE_PATH, JSON.stringify(state));
     }
 
     async deleteState(): Promise<void> {

@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { Shell, ShellDep, ShellResult, StdioDep } from "../../lib/index";
+import type { Shell, ShellDep, ShellResult } from "../../lib/index";
 import { ScriptStructuredError } from "../../lib/index";
 import { resolveIssueBranch } from "./resolve";
 
@@ -16,8 +16,7 @@ function makeResolveResponse(status: string, branch = "", pr = "", details = "")
 // --- Mock factory ---
 
 function makeMockDeps(shellRun?: (command: string[]) => Promise<ShellResult>): {
-    deps: ShellDep & StdioDep;
-    errLines: string[];
+    deps: ShellDep;
 } {
     const defaultShellRun = async (): Promise<ShellResult> =>
         makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/1-my-branch", "42") });
@@ -27,31 +26,21 @@ function makeMockDeps(shellRun?: (command: string[]) => Promise<ShellResult>): {
         runSh: mock(async (_cmd: string) => makeShellResult()),
     };
 
-    const errLines: string[] = [];
-
-    const deps: ShellDep & StdioDep = {
+    const deps: ShellDep = {
         shell: mockShell,
-        stdio: {
-            stdin: { text: mock(async () => "") },
-            stdout: { write: mock(() => {}) },
-            stderr: {
-                write: mock((t: string) => {
-                    errLines.push(t);
-                }),
-            },
-        },
     };
 
-    return { deps, errLines };
+    return { deps };
 }
 
 // --- Tests ---
 
 describe("resolveIssueBranch", () => {
-    test("non-zero exit forwards stderr and throws CurrentIssueError", async () => {
-        const { deps, errLines } = makeMockDeps(async () => makeShellResult({ stdout: "", stderr: "some error", exitCode: 1 }));
-        await expect(resolveIssueBranch(deps, "42")).rejects.toBeInstanceOf(ScriptStructuredError);
-        expect(errLines.join("")).toContain("some error");
+    test("non-zero exit carries verboseStderr and throws CurrentIssueError", async () => {
+        const { deps } = makeMockDeps(async () => makeShellResult({ stdout: "", stderr: "some error", exitCode: 1 }));
+        const err = await resolveIssueBranch(deps, "42").catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.verboseStderr).toContain("some error");
     });
 
     test("invalid JSON throws CurrentIssueError with 'invalid JSON'", async () => {
@@ -61,7 +50,7 @@ describe("resolveIssueBranch", () => {
         });
     });
 
-    test("schema validation failure throws CurrentIssueError with short message in envelope, full message as diagnostic", async () => {
+    test("schema validation failure throws CurrentIssueError with short message in envelope", async () => {
         const { deps } = makeMockDeps(async () =>
             makeShellResult({ stdout: JSON.stringify({ status: "feature_branch" }), exitCode: 0 }),
         );
@@ -71,28 +60,30 @@ describe("resolveIssueBranch", () => {
         expect(String(envelope.error)).toContain("unexpected resolve-issue-branch output");
     });
 
-    test("ambiguous status forwards stderr and throws CurrentIssueError", async () => {
-        const { deps, errLines } = makeMockDeps(async () =>
+    test("ambiguous status carries verboseStderr and throws CurrentIssueError", async () => {
+        const { deps } = makeMockDeps(async () =>
             makeShellResult({
                 stdout: makeResolveResponse("ambiguous", "", "", "multiple branches"),
                 stderr: "ambiguous detail",
                 exitCode: 0,
             }),
         );
-        await expect(resolveIssueBranch(deps, "42")).rejects.toBeInstanceOf(ScriptStructuredError);
-        expect(errLines.join("")).toContain("ambiguous detail");
+        const err = await resolveIssueBranch(deps, "42").catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.verboseStderr).toContain("ambiguous detail");
     });
 
-    test("error status forwards stderr and throws CurrentIssueError", async () => {
-        const { deps, errLines } = makeMockDeps(async () =>
+    test("error status carries verboseStderr and throws CurrentIssueError", async () => {
+        const { deps } = makeMockDeps(async () =>
             makeShellResult({
                 stdout: makeResolveResponse("error", "", "", "something failed"),
                 stderr: "error detail",
                 exitCode: 0,
             }),
         );
-        await expect(resolveIssueBranch(deps, "42")).rejects.toBeInstanceOf(ScriptStructuredError);
-        expect(errLines.join("")).toContain("error detail");
+        const err = await resolveIssueBranch(deps, "42").catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.verboseStderr).toContain("error detail");
     });
 
     test("main status returns data successfully", async () => {

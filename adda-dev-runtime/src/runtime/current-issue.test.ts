@@ -12,10 +12,12 @@ import type {
     ShellDep,
     ShellResult,
     StdioDep,
+    Tmp,
+    TmpDep,
 } from "../lib/index";
 import { CurrentIssueScript, SilentStore, type IssueStateStore } from "./current-issue";
 
-type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep;
+type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep & TmpDep;
 
 // --- Helpers ---
 
@@ -108,12 +110,19 @@ function makeMockDeps(options: MockDepsOptions = {}): {
         fileExists: mock(options.fileSysFileExists ?? (async (_path: string) => false)),
     };
 
+    const mockTmp: Tmp = {
+        tmpDir: mock(() => "/tmp"),
+        tempFilePath: mock((p = "tmp", s = "") => `/tmp/${p}-uuid${s}`),
+        makeTempDir: mock(() => "/tmp/dir"),
+    };
+
     const deps: CurrentIssueDeps = {
         shell: mockShell,
         env: mockEnv,
         fileReader: mockFileReader,
         fileWriter: mockFileWriter,
         fileSys: mockFileSys,
+        tmp: mockTmp,
         stdio: {
             stdin: { text: mock(async () => "") },
             stdout: {

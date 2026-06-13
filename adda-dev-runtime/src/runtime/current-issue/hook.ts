@@ -14,6 +14,8 @@ export async function runRepoInitHook(
     const result = await deps.shell.run(["bash", ADDA_INIT_HOOK_PATH], { strict: false });
     const hookOutput = result.stdout + result.stderr;
     if (result.exitCode !== 0)
-        throw new CurrentIssueError("repo init hook failed", { hook: { status: "failed" as const, output: hookOutput } });
+        throw new CurrentIssueError("repo init hook failed", {
+            details: { hook: { status: "failed" as const, output: hookOutput } },
+        });
     return { status: "ok", output: hookOutput };
 }

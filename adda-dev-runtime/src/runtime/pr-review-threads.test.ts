@@ -1071,11 +1071,10 @@ describe("PrReviewThreadsScript", () => {
 // ---------------------------------------------------------------
 import { hunkToFields, sortThreads, toThreadObject } from "./pr-review-threads/helpers";
 import type { ThreadNode } from "./pr-review-threads/graphql";
-import { PrThreadsModeError, runMode } from "./pr-review-threads/errors";
+import { PrThreadsArgsError, PrThreadsModeError } from "./pr-review-threads/errors";
 import { paginate } from "./pr-review-threads/fetch";
 import { PR_THREADS_QUERY, PrThreadsPageSchema } from "./pr-review-threads/graphql";
-import { ScriptError, ScriptStructuredError } from "../lib/index";
-import { writeDetailFile } from "../lib/index";
+import { ScriptError, ScriptStructuredError, atomicWriteFile } from "../lib/index";
 
 describe("sortThreads", () => {
     test("sorts by path, then by line", () => {
@@ -1234,19 +1233,19 @@ describe("hunkToFields", () => {
 });
 
 // ---------------------------------------------------------------
-// writeDetailFile unit tests (lib utility)
+// atomicWriteFile unit tests (lib utility)
 // ---------------------------------------------------------------
 
-type DetailFileDeps = TmpDep & FileWriterDep & FileSysDep;
+type AtomicFileDeps = TmpDep & FileWriterDep & FileSysDep;
 
-function makeDetailFileDeps(): {
-    deps: DetailFileDeps;
+function makeAtomicFileDeps(): {
+    deps: AtomicFileDeps;
     writtenFiles: Map<string, string>;
     renamedFiles: Array<{ from: string; to: string }>;
 } {
     const writtenFiles = new Map<string, string>();
     const renamedFiles: Array<{ from: string; to: string }> = [];
-    const deps: DetailFileDeps = {
+    const deps: AtomicFileDeps = {
         tmp: {
             tmpDir: mock(() => "/tmp"),
             tempFilePath: mock((p = "tmp", s = "") => `/tmp/${p}-uuid${s}`),
@@ -1268,74 +1267,56 @@ function makeDetailFileDeps(): {
     return { deps, writtenFiles, renamedFiles };
 }
 
-describe("writeDetailFile", () => {
-    test("writes then renames, returns final path matching prefix pattern", async () => {
-        const { deps, writtenFiles, renamedFiles } = makeDetailFileDeps();
-        const path = await writeDetailFile(deps, "pr-review-threads-pr-42", { foo: "bar" });
+describe("atomicWriteFile", () => {
+    test("writes then renames, returns final path", async () => {
+        const { deps, writtenFiles, renamedFiles } = makeAtomicFileDeps();
+        const path = await atomicWriteFile(deps, "/tmp/pr-review-threads-pr-42-<ts>.json", '{"foo":"bar"}');
         expect(writtenFiles.size).toBe(1);
         expect(renamedFiles).toHaveLength(1);
         expect(path).toMatch(/\/tmp\/pr-review-threads-pr-42-\d+\.json$/);
     });
 
-    test("content is written as pretty-printed JSON", async () => {
-        const { deps, writtenFiles } = makeDetailFileDeps();
-        await writeDetailFile(deps, "test-prefix", { key: "value" });
+    test("<tmpDir> placeholder expands to deps.tmp.tmpDir()", async () => {
+        const { deps, renamedFiles } = makeAtomicFileDeps();
+        const path = await atomicWriteFile(deps, "<tmpDir>/out.json", "data");
+        expect(path).toBe("/tmp/out.json");
+        expect(renamedFiles[0]!.to).toBe("/tmp/out.json");
+    });
+
+    test("content is written as provided", async () => {
+        const { deps, writtenFiles } = makeAtomicFileDeps();
+        await atomicWriteFile(deps, "/tmp/test.json", '{"key":"value"}');
         const content = writtenFiles.values().next().value!;
         expect(JSON.parse(content)).toEqual({ key: "value" });
     });
 });
 
 // ---------------------------------------------------------------
-// runMode unit tests
+// PrThreadsArgsError unit tests
 // ---------------------------------------------------------------
 
-describe("runMode", () => {
-    test("runMode resolves when inner resolves — throws nothing", async () => {
-        await expect(runMode("pr", async () => {})).resolves.toBeUndefined();
+describe("PrThreadsArgsError", () => {
+    test("is a ScriptStructuredError with exit code 2", () => {
+        const err = new PrThreadsArgsError("mode is required");
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.exitCode).toBe(2);
     });
 
-    test("runMode wraps thrown ScriptError into PrThreadsModeError with mode-keyed envelope (pr)", async () => {
-        const err = new ScriptError("repo not found", 1, "repo_not_found");
-        const caught = await runMode("pr", async () => {
-            throw err;
-        }).catch((e) => e);
-        expect(caught).toBeInstanceOf(PrThreadsModeError);
-        expect(caught).toBeInstanceOf(ScriptStructuredError);
-        const envelope = (caught as PrThreadsModeError).envelope as Record<string, unknown>;
+    test("envelope has status error and error message", () => {
+        const err = new PrThreadsArgsError("invalid argument");
+        const envelope = err.envelope as Record<string, unknown>;
         expect(envelope.status).toBe("error");
-        expect((envelope["pr"] as Record<string, unknown>)?.reason).toBe("repo_not_found");
-        expect(envelope.error).toBe("repo not found");
+        expect(envelope.error).toBe("invalid argument");
     });
 
-    test("runMode wraps thrown ScriptError into PrThreadsModeError with mode-keyed envelope (thread)", async () => {
-        const err = new ScriptError("not found", 1, "thread_not_found");
-        const caught = await runMode("thread", async () => {
-            throw err;
-        }).catch((e) => e);
-        expect(caught).toBeInstanceOf(PrThreadsModeError);
-        const envelope = (caught as PrThreadsModeError).envelope as Record<string, unknown>;
-        expect((envelope["thread"] as Record<string, unknown>)?.reason).toBe("thread_not_found");
+    test("message matches the provided string", () => {
+        const err = new PrThreadsArgsError("pr mode requires a PR number");
+        expect(err.message).toBe("pr mode requires a PR number");
     });
 
-    test("runMode wraps generic Error with internal_error reason", async () => {
-        const caught = await runMode("thread", async () => {
-            throw new Error("boom");
-        }).catch((e) => e);
-        expect(caught).toBeInstanceOf(PrThreadsModeError);
-        const envelope = (caught as PrThreadsModeError).envelope as Record<string, unknown>;
-        expect((envelope["thread"] as Record<string, unknown>)?.reason).toBe("internal_error");
-    });
-
-    test("runMode preserves ScriptError payload in envelope", async () => {
-        const err = new ScriptError("scan exceeded", 1, "scan_limit_exceeded", { total: 1500, ceiling: 1000 });
-        const caught = await runMode("pr", async () => {
-            throw err;
-        }).catch((e) => e);
-        const envelope = (caught as PrThreadsModeError).envelope as Record<string, unknown>;
-        const pr = envelope["pr"] as Record<string, unknown>;
-        expect(pr?.reason).toBe("scan_limit_exceeded");
-        expect(pr?.total).toBe(1500);
-        expect(pr?.ceiling).toBe(1000);
+    test("name is 'PrThreadsArgsError'", () => {
+        const err = new PrThreadsArgsError("bad");
+        expect(err.name).toBe("PrThreadsArgsError");
     });
 });
 
@@ -1379,6 +1360,23 @@ describe("PrThreadsModeError", () => {
         const cause = new ScriptError("config bad", 2, "invalid_config");
         const err = new PrThreadsModeError("pr", cause);
         expect(err.exitCode).toBe(2);
+    });
+
+    test("threads verboseStderr from ScriptError cause", () => {
+        const cause = new ScriptError("failed", 1, "graphql_error", {}, "raw stderr from gh");
+        const err = new PrThreadsModeError("pr", cause);
+        expect(err.verboseStderr).toBe("raw stderr from gh");
+    });
+
+    test("verboseStderr is undefined when cause has no verboseStderr", () => {
+        const cause = new ScriptError("failed", 1, "error_code");
+        const err = new PrThreadsModeError("pr", cause);
+        expect(err.verboseStderr).toBeUndefined();
+    });
+
+    test("verboseStderr is undefined for non-ScriptError cause", () => {
+        const err = new PrThreadsModeError("pr", new Error("boom"));
+        expect(err.verboseStderr).toBeUndefined();
     });
 });
 

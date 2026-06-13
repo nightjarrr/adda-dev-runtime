@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { Shell, ShellDep, ShellResult, StdioDep } from "../../lib/index";
+import type { Shell, ShellDep, ShellResult } from "../../lib/index";
 import { ScriptStructuredError } from "../../lib/index";
 import type { IssueState, IssueStateStore } from "./types";
 import { executeBranchEnsure, executeBranchVerify } from "./branch";
@@ -37,8 +37,7 @@ function makeMockStore(state: IssueState | null = DEFAULT_STATE): IssueStateStor
 }
 
 function makeMockDeps(shellRun?: (command: string[]) => Promise<ShellResult>): {
-    deps: ShellDep & StdioDep;
-    errLines: string[];
+    deps: ShellDep;
 } {
     const defaultShellRun = async (command: string[]): Promise<ShellResult> => {
         if (command[0] === RESOLVE_BIN) {
@@ -57,22 +56,11 @@ function makeMockDeps(shellRun?: (command: string[]) => Promise<ShellResult>): {
         runSh: mock(async (_cmd: string) => makeShellResult()),
     };
 
-    const errLines: string[] = [];
-
-    const deps: ShellDep & StdioDep = {
+    const deps: ShellDep = {
         shell: mockShell,
-        stdio: {
-            stdin: { text: mock(async () => "") },
-            stdout: { write: mock(() => {}) },
-            stderr: {
-                write: mock((t: string) => {
-                    errLines.push(t);
-                }),
-            },
-        },
     };
 
-    return { deps, errLines };
+    return { deps };
 }
 
 // --- executeBranchEnsure tests ---
@@ -215,8 +203,8 @@ describe("executeBranchEnsure", () => {
         expect(String(result.details.branch)).toMatch(/^chore\/270-[a-z0-9]{8}$/);
     });
 
-    test("gh issue develop fails — forwards stderr and throws CurrentIssueError", async () => {
-        const { deps, errLines } = makeMockDeps(async (command) => {
+    test("gh issue develop fails — error carries verboseStderr and throws CurrentIssueError", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeResolveResponse("main") });
             }
@@ -229,12 +217,13 @@ describe("executeBranchEnsure", () => {
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchEnsure(deps, store)).rejects.toBeInstanceOf(ScriptStructuredError);
-        expect(errLines.join("")).toContain("gh error output");
+        const err = await executeBranchEnsure(deps, store).catch((e) => e);
+        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err.verboseStderr).toContain("gh error output");
     });
 
-    test("git branch --show-current fails — forwards stderr and throws CurrentIssueError", async () => {
-        const { deps, errLines } = makeMockDeps(async (command) => {
+    test("git branch --show-current fails — error carries verboseStderr and throws CurrentIssueError", async () => {
+        const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeResolveResponse("feature_branch", "chore/270-my-branch") });
             }
@@ -246,7 +235,7 @@ describe("executeBranchEnsure", () => {
         const store = makeMockStore();
         const err = await executeBranchEnsure(deps, store).catch((e) => e);
         expect(err).toBeInstanceOf(ScriptStructuredError);
-        expect(errLines.join("")).toContain("fatal: not a git repository");
+        expect(err.verboseStderr).toContain("fatal: not a git repository");
         expect(err.message).toContain("git branch --show-current failed");
     });
 });

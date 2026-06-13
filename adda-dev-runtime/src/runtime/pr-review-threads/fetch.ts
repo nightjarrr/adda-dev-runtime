@@ -1,5 +1,5 @@
 // Fetch helpers for pr-review-threads: graphql caller, generic paginate, env helpers.
-import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
+import type { EnvDep, ShellDep } from "@adda/lib";
 import { ConfigError, parseJson, ScriptError, ScriptZodValidationError } from "@adda/lib";
 import type { z } from "zod";
 
@@ -9,11 +9,11 @@ const DEFAULT_SCAN_CEILING = 1000;
 
 /**
  * Calls the GitHub GraphQL API with the given query and variables.
- * Forwards gh's stderr to the script's stderr on failure (diagnostics).
  * Throws ScriptError("graphql_error") on non-zero exit from gh.
+ * The raw stderr is available via err.verboseStderr for upstream diagnostics.
  */
 export async function graphql(
-    deps: ShellDep & StdioDep,
+    deps: ShellDep,
     variables: Record<string, string | number | null>,
     query: string,
 ): Promise<unknown> {
@@ -24,10 +24,7 @@ export async function graphql(
     }
     const result = await deps.shell.run(args, { strict: false });
     if (result.exitCode !== 0) {
-        if (result.stderr) {
-            deps.stdio.stderr.write(result.stderr);
-        }
-        throw new ScriptError("GitHub GraphQL request failed", 1, "graphql_error");
+        throw new ScriptError("GitHub GraphQL request failed", 1, "graphql_error", {}, result.stderr);
     }
     return parseJson(result.stdout);
 }
@@ -52,7 +49,7 @@ export async function graphql(
  * Returns all nodes from all pages (first + subsequent).
  */
 export async function paginate<TNode, TSchema extends z.ZodTypeAny>(
-    deps: ShellDep & StdioDep,
+    deps: ShellDep,
     firstNodes: TNode[],
     firstPageInfo: { hasNextPage: boolean; endCursor: string | null },
     variables: Record<string, string | number | null>,

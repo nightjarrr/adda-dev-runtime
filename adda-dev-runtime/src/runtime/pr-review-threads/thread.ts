@@ -1,10 +1,10 @@
 // thread mode handler for pr-review-threads.
 import type { EnvDep, FileSysDep, FileWriterDep, ShellDep, StdioDep, TmpDep } from "@adda/lib";
-import { ScriptError, ScriptZodValidationError, writeDetailFile } from "@adda/lib";
+import { atomicWriteFile, ScriptError, ScriptZodValidationError } from "@adda/lib";
 import { THREAD_NODE_QUERY, ThreadNodeQuerySchema } from "./graphql";
 import type { CommentNode } from "./graphql";
 import { FILE_PREFIX_THREAD, toThreadObjectFull } from "./helpers";
-import { runMode } from "./errors";
+import { PrThreadsModeError } from "./errors";
 import { graphql, paginate, readCeiling } from "./fetch";
 import type { PrReviewThreadsArgs, ThreadDetailFile, ThreadFileHeader } from "./types";
 
@@ -20,13 +20,11 @@ export async function runThread(
     deps: ThreadDeps,
     args: Extract<PrReviewThreadsArgs, { mode: "thread" }>,
 ): Promise<ThreadSuccessEnvelope> {
-    let result!: ThreadSuccessEnvelope;
-    await runMode("thread", () =>
-        runThreadInner(deps, args).then((r) => {
-            result = r;
-        }),
-    );
-    return result;
+    try {
+        return await runThreadInner(deps, args);
+    } catch (err) {
+        throw new PrThreadsModeError("thread", err);
+    }
 }
 
 async function runThreadInner(
@@ -116,11 +114,11 @@ async function runThreadInner(
         commentCount,
     };
 
-    const resultsFile = await writeDetailFile<ThreadDetailFile>(deps, FILE_PREFIX_THREAD, {
-        thread: header,
-        threads: [threadObj],
-        hunks,
-    });
+    const resultsFile = await atomicWriteFile(
+        deps,
+        `<tmpDir>/${FILE_PREFIX_THREAD}-<ts>.json`,
+        JSON.stringify({ thread: header, threads: [threadObj], hunks } satisfies ThreadDetailFile, null, 2),
+    );
 
     return { status: "success" as const, error: "", thread: { ...header, resultsFile } };
 }

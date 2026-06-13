@@ -1,10 +1,10 @@
 // pr mode handler for pr-review-threads.
 import type { EnvDep, FileSysDep, FileWriterDep, ShellDep, StdioDep, TmpDep } from "@adda/lib";
-import { ScriptError, ScriptZodValidationError, writeDetailFile } from "@adda/lib";
+import { atomicWriteFile, ScriptError, ScriptZodValidationError } from "@adda/lib";
 import { PR_THREADS_QUERY, PrThreadsPageSchema } from "./graphql";
 import type { ThreadNode } from "./graphql";
 import { COMMENT_PREVIEW_DEPTH, FILE_PREFIX_PR, sortThreads, toThreadObject } from "./helpers";
-import { runMode } from "./errors";
+import { PrThreadsModeError } from "./errors";
 import { graphql, paginate, readCeiling, requireOwnerRepo } from "./fetch";
 import type { PrDetailFile, PrFileHeader, PrReviewThreadsArgs, ThreadObject } from "./types";
 
@@ -17,13 +17,11 @@ type PrSuccessEnvelope = { status: "success"; error: string; pr: PrFileHeader & 
  * builds the detail file, and returns the success envelope.
  */
 export async function runPr(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mode: "pr" }>): Promise<PrSuccessEnvelope> {
-    let result!: PrSuccessEnvelope;
-    await runMode("pr", () =>
-        runPrInner(deps, args).then((r) => {
-            result = r;
-        }),
-    );
-    return result;
+    try {
+        return await runPrInner(deps, args);
+    } catch (err) {
+        throw new PrThreadsModeError("pr", err);
+    }
 }
 
 async function runPrInner(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mode: "pr" }>): Promise<PrSuccessEnvelope> {
@@ -107,11 +105,11 @@ async function runPrInner(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mod
         maxUnresolved: args.maxUnresolved,
     };
 
-    const resultsFile = await writeDetailFile<PrDetailFile>(deps, `${FILE_PREFIX_PR}-${args.prNumber}`, {
-        pr: header,
-        threads,
-        hunks,
-    });
+    const resultsFile = await atomicWriteFile(
+        deps,
+        `<tmpDir>/${FILE_PREFIX_PR}-${args.prNumber}-<ts>.json`,
+        JSON.stringify({ pr: header, threads, hunks } satisfies PrDetailFile, null, 2),
+    );
 
     return { status: "success" as const, error: "", pr: { ...header, resultsFile } };
 }

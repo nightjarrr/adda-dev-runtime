@@ -1,5 +1,5 @@
 import { parseArgs } from "node:util";
-import type { ShellResult, StdioDep } from "./capabilities";
+import type { StdioDep } from "./capabilities";
 import { ScriptError, ScriptStructuredError } from "./errors";
 
 export type EmptyArgs = Record<string, never>;
@@ -17,14 +17,8 @@ export abstract class ScriptBase<TDeps extends StdioDep, TArgs> {
 
     protected abstract execute(args: TArgs): Promise<void>;
 
-    protected emit(value: unknown): void {
+    protected emit<T = unknown>(value: T): void {
         this.deps.stdio.stdout.write(`${JSON.stringify(value)}\n`);
-    }
-
-    protected forwardStderr(result: ShellResult): void {
-        if (result.stderr) {
-            this.deps.stdio.stderr.write(result.stderr);
-        }
     }
 
     async run(argv: string[]): Promise<number> {
@@ -44,12 +38,9 @@ export abstract class ScriptBase<TDeps extends StdioDep, TArgs> {
             await this.execute(args);
             return 0;
         } catch (err) {
-            if (err instanceof ScriptStructuredError) {
-                this.deps.stdio.stdout.write(`${JSON.stringify(err.envelope)}\n`);
-                this.deps.stdio.stderr.write(`Error: ${err.message}\n`);
-                return err.exitCode;
-            }
             if (err instanceof ScriptError) {
+                if (err instanceof ScriptStructuredError) this.emit(err.envelope);
+                if (err.verboseStderr) this.deps.stdio.stderr.write(err.verboseStderr);
                 this.deps.stdio.stderr.write(`Error: ${err.message}\n`);
                 return err.exitCode;
             }

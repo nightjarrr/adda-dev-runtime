@@ -1,20 +1,21 @@
-import type { ShellDep, StdioDep } from "@adda/lib";
+import type { ShellDep } from "@adda/lib";
 import { slugify } from "@adda/lib";
 
 import { CurrentIssueError } from "./errors";
 import { resolveIssueBranch } from "./resolve";
 import type { IssueStateStore, SuccessEnvelope } from "./types";
 
-async function getCurrentBranch(deps: ShellDep & StdioDep): Promise<string> {
+async function getCurrentBranch(deps: ShellDep): Promise<string> {
     const result = await deps.shell.run(["git", "branch", "--show-current"], { strict: false });
     if (result.exitCode !== 0) {
-        deps.stdio.stderr.write(result.stderr);
-        throw new CurrentIssueError(`git branch --show-current failed: ${result.stderr.trim()}`);
+        throw new CurrentIssueError(`git branch --show-current failed: ${result.stderr.trim()}`, {
+            verboseStderr: result.stderr,
+        });
     }
     return result.stdout.trim();
 }
 
-export async function executeBranchEnsure(deps: ShellDep & StdioDep, store: IssueStateStore): Promise<SuccessEnvelope> {
+export async function executeBranchEnsure(deps: ShellDep, store: IssueStateStore): Promise<SuccessEnvelope> {
     const state = await store.readState();
     if (!state) throw new CurrentIssueError("no current issue set — run 'current-issue switch <id>' first");
 
@@ -57,8 +58,9 @@ export async function executeBranchEnsure(deps: ShellDep & StdioDep, store: Issu
         strict: false,
     });
     if (developResult.exitCode !== 0) {
-        deps.stdio.stderr.write(developResult.stderr);
-        throw new CurrentIssueError(`gh issue develop failed for issue #${state.id}`);
+        throw new CurrentIssueError(`gh issue develop failed for issue #${state.id}`, {
+            verboseStderr: developResult.stderr,
+        });
     }
 
     const details: Record<string, unknown> = { action: "created", branch: branchName };
@@ -66,7 +68,7 @@ export async function executeBranchEnsure(deps: ShellDep & StdioDep, store: Issu
     return { status: "success", issue: state, details, error: "" };
 }
 
-export async function executeBranchVerify(deps: ShellDep & StdioDep, store: IssueStateStore): Promise<SuccessEnvelope> {
+export async function executeBranchVerify(deps: ShellDep, store: IssueStateStore): Promise<SuccessEnvelope> {
     const state = await store.readState();
     if (!state) throw new CurrentIssueError("no current issue set — run 'current-issue switch <id>' first");
 

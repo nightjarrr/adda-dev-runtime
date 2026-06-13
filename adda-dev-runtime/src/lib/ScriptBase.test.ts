@@ -133,6 +133,21 @@ describe("ScriptBase", () => {
             await script.run(["bun", "script.ts"]);
             expect(errLines.join("")).toContain("domain error");
         });
+
+        test("verboseStderr is written to stderr before error message", async () => {
+            const { deps, errLines, outLines } = makeMockDeps();
+            const script = new NoArgScript(deps, async () => {
+                throw new ScriptError("short message", 1, "reason", {}, "verbose details from tool");
+            });
+            await script.run(["bun", "script.ts"]);
+            const combined = errLines.join("");
+            expect(combined).toContain("verbose details from tool");
+            expect(combined).toContain("Error: short message");
+            // verboseStderr appears before the error message
+            expect(combined.indexOf("verbose details from tool")).toBeLessThan(combined.indexOf("Error: short message"));
+            // nothing emitted to stdout
+            expect(outLines).toHaveLength(0);
+        });
     });
 
     describe("ScriptStructuredError thrown in execute", () => {
