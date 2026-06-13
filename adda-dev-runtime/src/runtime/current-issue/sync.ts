@@ -1,4 +1,4 @@
-import type { EnvDep, FileSysDep, ShellDep, StdioDep } from "@adda/lib";
+import type { EnvDep, FileSysDep, ShellDep } from "@adda/lib";
 
 import { CurrentIssueError } from "./errors";
 import { executeSwitch } from "./switch";
@@ -6,7 +6,7 @@ import type { IssueStateStore, SuccessEnvelope } from "./types";
 
 export async function executeSync(
     skipRepoInit: boolean,
-    deps: ShellDep & EnvDep & FileSysDep & StdioDep,
+    deps: ShellDep & EnvDep & FileSysDep,
     store: IssueStateStore,
 ): Promise<SuccessEnvelope> {
     const state = await store.readState();
