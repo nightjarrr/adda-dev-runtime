@@ -1151,30 +1151,24 @@ describe("CurrentIssueScript", () => {
                 expect(result?.pr).toBe("99");
             });
 
-            test("fileReader returns invalid JSON — throws ScriptError with 'state file is corrupt' and emits error envelope", async () => {
-                const { deps, outLines } = makeMockDeps({
+            test("fileReader returns invalid JSON — throws CurrentIssueError with 'state file is corrupt'", async () => {
+                const { deps } = makeMockDeps({
                     fileReaderReadFile: async (_path: string) => "not valid json {{{",
                 });
                 const script: IssueStateStore = new CurrentIssueScript(deps);
                 await expect(script.readState()).rejects.toMatchObject({
                     message: expect.stringContaining("state file is corrupt"),
                 });
-                const out = parseStdoutJson(outLines);
-                expect(out.status).toBe("error");
-                expect(String(out.error)).toContain("state file is corrupt");
             });
 
-            test("fileReader returns valid JSON but wrong schema — throws ScriptError with 'state file is corrupt' and emits error envelope", async () => {
-                const { deps, outLines } = makeMockDeps({
+            test("fileReader returns valid JSON but wrong schema — throws CurrentIssueError with 'state file is corrupt'", async () => {
+                const { deps } = makeMockDeps({
                     fileReaderReadFile: async (_path: string) => JSON.stringify({ foo: "bar" }),
                 });
                 const script: IssueStateStore = new CurrentIssueScript(deps);
                 await expect(script.readState()).rejects.toMatchObject({
                     message: expect.stringContaining("state file is corrupt"),
                 });
-                const out = parseStdoutJson(outLines);
-                expect(out.status).toBe("error");
-                expect(String(out.error)).toContain("state file is corrupt");
             });
         });
 

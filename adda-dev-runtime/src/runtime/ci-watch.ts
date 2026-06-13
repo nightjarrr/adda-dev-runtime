@@ -165,12 +165,12 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         const getElapsed = () => Math.round((Date.now() - startMs) / 1000);
 
         if (failingRuns.length === 0) {
-            this.emit({ conclusion: "success", elapsed_seconds: getElapsed() });
+            this.emitResult({ conclusion: "success", elapsed_seconds: getElapsed() });
             return;
         }
 
         const runs = await this.collectFailingRuns(failingRuns);
-        this.emit({ conclusion: "failure", elapsed_seconds: getElapsed(), runs });
+        this.emitResult({ conclusion: "failure", elapsed_seconds: getElapsed(), runs });
         throw new ScriptError("CI runs failed", 1);
     }
 
@@ -210,14 +210,14 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
 
         // Phase 4 — emit result
         if (failingRunIdSet.size === 0 && !hasUnresolvableFailure) {
-            this.emit({ conclusion: "success", elapsed_seconds: getElapsed() });
+            this.emitResult({ conclusion: "success", elapsed_seconds: getElapsed() });
             return;
         }
 
         const failingRunIds = Array.from(failingRunIdSet);
         const runsWithConclusion = await Promise.all(failingRunIds.map((id) => this.fetchRunConclusion(id)));
         const runs = await this.collectFailingRuns(runsWithConclusion);
-        this.emit({ conclusion: "failure", elapsed_seconds: getElapsed(), runs });
+        this.emitResult({ conclusion: "failure", elapsed_seconds: getElapsed(), runs });
         throw new ScriptError("CI runs failed", 1);
     }
 
@@ -283,7 +283,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         return result.data.map((r) => String(r.databaseId));
     }
 
-    private emit(output: CiWatchOutput): void {
+    private emitResult(output: CiWatchOutput): void {
         this.deps.stdio.stdout.write(`${JSON.stringify(output)}\n`);
     }
 }

@@ -1,33 +1,38 @@
 // thread mode handler for pr-review-threads.
-import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
-import { ScriptError, ScriptZodValidationError } from "@adda/lib";
+import type { EnvDep, FileSysDep, FileWriterDep, ShellDep, StdioDep, TmpDep } from "@adda/lib";
+import { ScriptError, ScriptZodValidationError, writeDetailFile } from "@adda/lib";
 import { THREAD_NODE_QUERY, ThreadNodeQuerySchema } from "./graphql";
 import type { CommentNode } from "./graphql";
 import { FILE_PREFIX_THREAD, toThreadObjectFull } from "./helpers";
-import { Output, runMode } from "./output";
-import { PrThreadsError } from "./errors";
+import { runMode } from "./errors";
 import { graphql, paginate, readCeiling } from "./fetch";
 import type { PrReviewThreadsArgs, ThreadDetailFile, ThreadFileHeader } from "./types";
 
-type ThreadDeps = ShellDep & EnvDep & StdioDep;
+type ThreadDeps = ShellDep & EnvDep & StdioDep & TmpDep & FileWriterDep & FileSysDep;
+
+type ThreadSuccessEnvelope = { status: "success"; error: string; thread: ThreadFileHeader & { resultsFile: string } };
 
 /**
  * Handles thread mode: fetches a single review thread and all its comments,
- * builds the detail file, and emits the success envelope.
+ * builds the detail file, and returns the success envelope.
  */
 export async function runThread(
     deps: ThreadDeps,
     args: Extract<PrReviewThreadsArgs, { mode: "thread" }>,
-    output: Output,
-): Promise<void> {
-    await runMode("thread", output, () => runThreadInner(deps, args, output));
+): Promise<ThreadSuccessEnvelope> {
+    let result!: ThreadSuccessEnvelope;
+    await runMode("thread", () =>
+        runThreadInner(deps, args).then((r) => {
+            result = r;
+        }),
+    );
+    return result;
 }
 
 async function runThreadInner(
     deps: ThreadDeps,
     args: Extract<PrReviewThreadsArgs, { mode: "thread" }>,
-    output: Output,
-): Promise<void> {
+): Promise<ThreadSuccessEnvelope> {
     const ceiling = readCeiling(deps);
 
     // Fetch first page for domain checks before full pagination
@@ -38,12 +43,13 @@ async function runThreadInner(
 
     const node = firstParsed.data.data.node;
     if (node === null) {
-        throw new PrThreadsError("thread_not_found", `thread '${args.threadId}' not found`);
+        throw new ScriptError(`thread '${args.threadId}' not found`, 1, "thread_not_found");
     }
     if (node.__typename !== "PullRequestReviewThread") {
-        throw new PrThreadsError(
-            "not_a_thread",
+        throw new ScriptError(
             `node '${args.threadId}' is not a PullRequestReviewThread (got ${node.__typename})`,
+            1,
+            "not_a_thread",
         );
     }
 
@@ -54,7 +60,7 @@ async function runThreadInner(
 
     const commentCount = comments.totalCount;
     if (commentCount > ceiling) {
-        throw new PrThreadsError("scan_limit_exceeded", `scan limit exceeded: ${commentCount} comments > ceiling ${ceiling}`, {
+        throw new ScriptError(`scan limit exceeded: ${commentCount} comments > ceiling ${ceiling}`, 1, "scan_limit_exceeded", {
             commentCount,
             ceiling,
         });
@@ -110,11 +116,11 @@ async function runThreadInner(
         commentCount,
     };
 
-    const resultsFile = await output.writeDetailFile<ThreadDetailFile>(FILE_PREFIX_THREAD, {
+    const resultsFile = await writeDetailFile<ThreadDetailFile>(deps, FILE_PREFIX_THREAD, {
         thread: header,
         threads: [threadObj],
         hunks,
     });
 
-    output.emitSuccess({ status: "success", error: "", thread: { ...header, resultsFile } });
+    return { status: "success" as const, error: "", thread: { ...header, resultsFile } };
 }

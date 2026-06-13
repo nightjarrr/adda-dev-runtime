@@ -1,36 +1,35 @@
 import type { FileSysDep, ShellDep } from "@adda/lib";
 
+import { CurrentIssueError } from "./errors";
 import { runRepoInitHook } from "./hook";
-import type { IssueStateStore, ScriptOutput } from "./types";
+import type { IssueStateStore, SuccessEnvelope } from "./types";
 import { EMPTY_ISSUE_VIEW } from "./types";
 
 export async function executeClear(
     skipRepoInit: boolean,
     deps: ShellDep & FileSysDep,
     store: IssueStateStore,
-    output: ScriptOutput,
-): Promise<void> {
+): Promise<SuccessEnvelope> {
     if (!(await store.stateExists())) {
-        output.emit({ status: "success", issue: EMPTY_ISSUE_VIEW, details: { resolution: "no-op" }, error: "" });
-        return;
+        return { status: "success", issue: EMPTY_ISSUE_VIEW, details: { resolution: "no-op" }, error: "" };
     }
 
     const statusResult = await deps.shell.run(["git", "status", "--porcelain"], { strict: false });
     if (statusResult.stdout.trim()) {
-        output.fail("working tree is dirty — commit or stash changes before clearing");
+        throw new CurrentIssueError("working tree is dirty — commit or stash changes before clearing");
     }
 
     const checkoutResult = await deps.shell.run(["git", "checkout", "main"], { strict: false });
     if (checkoutResult.exitCode !== 0) {
-        output.fail(checkoutResult.stderr.trim() || "git checkout main failed");
+        throw new CurrentIssueError(checkoutResult.stderr.trim() || "git checkout main failed");
     }
 
     await store.deleteState();
-    const hook = await runRepoInitHook(deps, skipRepoInit, output);
-    output.emit({
+    const hook = await runRepoInitHook(deps, skipRepoInit);
+    return {
         status: "success",
         issue: EMPTY_ISSUE_VIEW,
         details: { branch: "main", resolution: "main", hook },
         error: "",
-    });
+    };
 }

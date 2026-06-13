@@ -2,7 +2,6 @@
 import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
 import { ConfigError, parseJson, ScriptError, ScriptZodValidationError } from "@adda/lib";
 import type { z } from "zod";
-import { PrThreadsError } from "./errors";
 
 const DEFAULT_SCAN_CEILING = 1000;
 
@@ -11,7 +10,7 @@ const DEFAULT_SCAN_CEILING = 1000;
 /**
  * Calls the GitHub GraphQL API with the given query and variables.
  * Forwards gh's stderr to the script's stderr on failure (diagnostics).
- * Throws PrThreadsError("graphql_error") on non-zero exit from gh.
+ * Throws ScriptError("graphql_error") on non-zero exit from gh.
  */
 export async function graphql(
     deps: ShellDep & StdioDep,
@@ -28,7 +27,7 @@ export async function graphql(
         if (result.stderr) {
             deps.stdio.stderr.write(result.stderr);
         }
-        throw new PrThreadsError("graphql_error", "GitHub GraphQL request failed");
+        throw new ScriptError("GitHub GraphQL request failed", 1, "graphql_error");
     }
     return parseJson(result.stdout);
 }
@@ -95,8 +94,8 @@ export function readCeiling(deps: EnvDep): number {
 
 export function requireOwnerRepo(deps: EnvDep): { owner: string; repo: string } {
     const owner = deps.env.get("GITHUB_OWNER");
-    if (!owner) throw new PrThreadsError("missing_env", "required environment variable 'GITHUB_OWNER' is not set");
+    if (!owner) throw new ScriptError("required environment variable 'GITHUB_OWNER' is not set", 1, "missing_env");
     const repo = deps.env.get("GITHUB_REPO");
-    if (!repo) throw new PrThreadsError("missing_env", "required environment variable 'GITHUB_REPO' is not set");
+    if (!repo) throw new ScriptError("required environment variable 'GITHUB_REPO' is not set", 1, "missing_env");
     return { owner, repo };
 }

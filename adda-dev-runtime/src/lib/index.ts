@@ -20,7 +20,7 @@ export type {
 
 export { BunFileSys, defaultDeps } from "./capabilities";
 
-export { ConfigError, ScriptArgsError, ScriptError, ScriptZodValidationError } from "./errors";
+export { ConfigError, ScriptArgsError, ScriptError, ScriptStructuredError, ScriptZodValidationError } from "./errors";
 export type { EmptyArgs } from "./ScriptBase";
 export { ScriptBase } from "./ScriptBase";
-export { parseJson, slugify } from "./util";
+export { parseJson, slugify, writeDetailFile } from "./util";

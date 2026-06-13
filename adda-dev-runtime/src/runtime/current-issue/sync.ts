@@ -1,17 +1,17 @@
-import type { EnvDep, FileSysDep, ShellDep } from "@adda/lib";
+import type { EnvDep, FileSysDep, ShellDep, StdioDep } from "@adda/lib";
 
+import { CurrentIssueError } from "./errors";
 import { executeSwitch } from "./switch";
-import type { IssueStateStore, ScriptOutput } from "./types";
+import type { IssueStateStore, SuccessEnvelope } from "./types";
 
 export async function executeSync(
     skipRepoInit: boolean,
-    deps: ShellDep & EnvDep & FileSysDep,
+    deps: ShellDep & EnvDep & FileSysDep & StdioDep,
     store: IssueStateStore,
-    output: ScriptOutput,
-): Promise<void> {
+): Promise<SuccessEnvelope> {
     const state = await store.readState();
     if (!state || !state.id) {
-        output.fail("no active issue to sync");
+        throw new CurrentIssueError("no active issue to sync");
     }
-    await executeSwitch(state.id, skipRepoInit, deps, store, output);
+    return executeSwitch(state.id, skipRepoInit, deps, store);
 }
