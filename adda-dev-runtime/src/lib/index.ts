@@ -18,7 +18,7 @@ export type {
     TmpDep,
 } from "./capabilities";
 
-export { BunFileSys, defaultDeps } from "./capabilities";
+export { defaultDeps } from "./capabilities";
 
 export {
     ConfigError,

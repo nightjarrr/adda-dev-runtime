@@ -1,5 +1,25 @@
-import { describe, expect, mock, spyOn, test } from "bun:test";
-import type { FileSysDep, FileWriterDep, TmpDep } from "./capabilities";
+import { beforeEach, describe, expect, mock, spyOn, test } from "bun:test";
+
+// --- mock.module must appear before any import of the mocked module ---
+const writtenFiles = new Map<string, string>();
+const renamedFiles: Array<{ from: string; to: string }> = [];
+
+mock.module("./capabilities", () => ({
+    defaultDeps: {
+        tmp: { tmpDir: mock(() => "/mock-tmp") },
+        fileWriter: {
+            writeFile: mock(async (p: string, c: string) => {
+                writtenFiles.set(p, c);
+            }),
+        },
+        fileSys: {
+            renameFile: mock(async (f: string, t: string) => {
+                renamedFiles.push({ from: f, to: t });
+            }),
+        },
+    },
+}));
+
 import { ScriptError } from "./errors";
 import { atomicWriteFile, parseJson, slugify } from "./util";
 
@@ -116,58 +136,28 @@ describe("slugify", () => {
 
 // --- atomicWriteFile ---
 
-type AtomicWriteFileDeps = TmpDep & FileWriterDep & FileSysDep;
-
-function makeAtomicWriteFileDeps(tmpDirValue = "/tmp"): {
-    deps: AtomicWriteFileDeps;
-    writtenFiles: Map<string, string>;
-    renamedFiles: Array<{ from: string; to: string }>;
-} {
-    const writtenFiles = new Map<string, string>();
-    const renamedFiles: Array<{ from: string; to: string }> = [];
-    const deps: AtomicWriteFileDeps = {
-        tmp: {
-            tmpDir: mock(() => tmpDirValue),
-            tempFilePath: mock((p = "tmp", s = "") => `${tmpDirValue}/${p}-uuid${s}`),
-            makeTempDir: mock(() => `${tmpDirValue}/dir`),
-        },
-        fileWriter: {
-            writeFile: mock(async (path: string, content: string): Promise<void> => {
-                writtenFiles.set(path, content);
-            }),
-        },
-        fileSys: {
-            renameFile: mock(async (from: string, to: string): Promise<void> => {
-                renamedFiles.push({ from, to });
-            }),
-            deleteFile: mock(async () => {}),
-            fileExists: mock(async () => false),
-        },
-    };
-    return { deps, writtenFiles, renamedFiles };
-}
-
 describe("atomicWriteFile", () => {
+    beforeEach(() => {
+        writtenFiles.clear();
+        renamedFiles.length = 0;
+    });
+
     test("static path (no placeholders): file written at exact path, returns it", async () => {
-        const { deps, writtenFiles, renamedFiles } = makeAtomicWriteFileDeps();
-        const result = await atomicWriteFile(deps, "/some/dir/file.json", "content");
+        const result = await atomicWriteFile("/some/dir/file.json", "content");
         expect(result).toBe("/some/dir/file.json");
         expect(renamedFiles).toHaveLength(1);
         expect(renamedFiles[0]!.to).toBe("/some/dir/file.json");
         expect(writtenFiles.size).toBe(1);
     });
 
-    test("<tmpDir> placeholder is expanded to deps.tmp.tmpDir()", async () => {
-        const { deps, renamedFiles } = makeAtomicWriteFileDeps("/custom/tmp");
-        const result = await atomicWriteFile(deps, "<tmpDir>/out.json", "data");
-        expect(result).toBe("/custom/tmp/out.json");
-        expect(renamedFiles[0]!.to).toBe("/custom/tmp/out.json");
+    test("<tmpDir> placeholder is expanded to defaultDeps.tmp.tmpDir()", async () => {
+        const result = await atomicWriteFile("<tmpDir>/out.json", "data");
+        expect(result).toBe("/mock-tmp/out.json");
+        expect(renamedFiles[0]!.to).toBe("/mock-tmp/out.json");
     });
 
     test("<ts> placeholder is expanded to a numeric string", async () => {
-        const { deps, renamedFiles } = makeAtomicWriteFileDeps();
-        const result = await atomicWriteFile(deps, "/tmp/file-<ts>.json", "data");
-        // Extract the timestamp portion
+        const result = await atomicWriteFile("/tmp/file-<ts>.json", "data");
         const match = /^\/tmp\/file-(\d+)\.json$/.exec(result);
         expect(match).not.toBeNull();
         expect(Number(match![1])).toBeGreaterThan(0);
@@ -175,16 +165,14 @@ describe("atomicWriteFile", () => {
     });
 
     test("<uuid> placeholder is expanded to a UUID-format string", async () => {
-        const { deps, renamedFiles } = makeAtomicWriteFileDeps();
-        const result = await atomicWriteFile(deps, "/tmp/file-<uuid>.json", "data");
+        const result = await atomicWriteFile("/tmp/file-<uuid>.json", "data");
         const match = /^\/tmp\/file-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.json$/i.exec(result);
         expect(match).not.toBeNull();
         expect(renamedFiles[0]!.to).toBe(result);
     });
 
     test("temp file is created in same directory as final path", async () => {
-        const { deps, writtenFiles, renamedFiles } = makeAtomicWriteFileDeps();
-        await atomicWriteFile(deps, "/some/dir/output.json", "data");
+        await atomicWriteFile("/some/dir/output.json", "data");
         const tmpPath = [...writtenFiles.keys()][0]!;
         expect(tmpPath.startsWith("/some/dir/")).toBe(true);
         expect(tmpPath).not.toBe("/some/dir/output.json");
@@ -192,16 +180,14 @@ describe("atomicWriteFile", () => {
     });
 
     test("content is written to the temp file", async () => {
-        const { deps, writtenFiles } = makeAtomicWriteFileDeps();
-        await atomicWriteFile(deps, "/tmp/out.json", "hello world");
+        await atomicWriteFile("/tmp/out.json", "hello world");
         const content = [...writtenFiles.values()][0]!;
         expect(content).toBe("hello world");
     });
 
     test("returns the resolved final path", async () => {
-        const { deps } = makeAtomicWriteFileDeps("/my/tmp");
-        const result = await atomicWriteFile(deps, "<tmpDir>/prefix-<ts>.json", "x");
-        expect(result.startsWith("/my/tmp/prefix-")).toBe(true);
+        const result = await atomicWriteFile("<tmpDir>/prefix-<ts>.json", "x");
+        expect(result.startsWith("/mock-tmp/prefix-")).toBe(true);
         expect(result.endsWith(".json")).toBe(true);
     });
 });

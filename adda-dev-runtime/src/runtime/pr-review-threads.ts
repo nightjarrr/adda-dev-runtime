@@ -12,17 +12,17 @@
 //   stdout: JSON envelope (mode-keyed: .pr or .thread)
 //   file:   detail file at /tmp/pr-review-threads-{pr|thread}-…-<epoch-ms>.json
 import type { parseArgs } from "node:util";
-import type { EnvDep, FileWriterDep, FileSysDep, ShellDep, StdioDep, TmpDep } from "@adda/lib";
+import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
 import { defaultDeps, ScriptBase } from "@adda/lib";
 
-import { PrThreadsArgsError } from "./pr-review-threads/errors";
+import { PrThreadsArgsError, PrThreadsModeError } from "./pr-review-threads/errors";
 import { runPr } from "./pr-review-threads/pr";
 import { runThread } from "./pr-review-threads/thread";
 import type { PrReviewThreadsArgs } from "./pr-review-threads/types";
 
 const DEFAULT_MAX_UNRESOLVED = 50;
 
-type PrReviewThreadsDeps = ShellDep & EnvDep & StdioDep & TmpDep & FileWriterDep & FileSysDep;
+type PrReviewThreadsDeps = ShellDep & EnvDep & StdioDep;
 
 export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrReviewThreadsArgs> {
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
@@ -90,10 +90,17 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
     }
 
     protected async execute(args: PrReviewThreadsArgs): Promise<void> {
-        if (args.mode === "pr") {
-            this.emit(await runPr(this.deps, args));
-        } else {
-            this.emit(await runThread(this.deps, args));
+        const mode = args.mode;
+        try {
+            if (mode === "pr") {
+                const { header, resultsFile } = await runPr(this.deps, args);
+                this.emit({ status: "success", error: "", pr: { ...header, resultsFile } });
+            } else {
+                const { header, resultsFile } = await runThread(this.deps, args);
+                this.emit({ status: "success", error: "", thread: { ...header, resultsFile } });
+            }
+        } catch (err) {
+            throw new PrThreadsModeError(mode, err);
         }
     }
 }

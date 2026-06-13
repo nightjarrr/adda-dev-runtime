@@ -34,9 +34,10 @@ export async function executeSwitch(
         strict: false,
     });
     if (ghResult.exitCode !== 0) {
-        throw new CurrentIssueError(`failed to fetch issue #${issueId}: ${ghResult.stderr.trim() || ghResult.stdout.trim()}`, {
-            verboseStderr: ghResult.stderr,
-        });
+        throw new CurrentIssueError(
+            `failed to fetch issue #${issueId}: ${ghResult.stderr.trim() || ghResult.stdout.trim()}`,
+            ghResult.stderr,
+        );
     }
 
     let ghRaw: unknown;
@@ -49,7 +50,7 @@ export async function executeSwitch(
     const ghParsed = GhIssueSchema.safeParse(ghRaw);
     if (!ghParsed.success) {
         const err = new ScriptZodValidationError("unexpected gh issue response", ghParsed.error, ghRaw);
-        throw new CurrentIssueError(err.message, { verboseStderr: err.verboseStderr });
+        throw new CurrentIssueError(err.message, err.verboseStderr);
     }
 
     const { title, labels, state } = ghParsed.data;
@@ -68,7 +69,7 @@ export async function executeSwitch(
     if (checkoutResult.exitCode !== 0) {
         throw new CurrentIssueError(
             `git checkout '${branch}' failed: ${checkoutResult.stderr.trim() || checkoutResult.stdout.trim()}`,
-            { verboseStderr: checkoutResult.stderr },
+            checkoutResult.stderr,
         );
     }
 

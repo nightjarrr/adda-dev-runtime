@@ -1,30 +1,25 @@
 // pr mode handler for pr-review-threads.
-import type { EnvDep, FileSysDep, FileWriterDep, ShellDep, StdioDep, TmpDep } from "@adda/lib";
+import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
 import { atomicWriteFile, ScriptError, ScriptZodValidationError } from "@adda/lib";
 import { PR_THREADS_QUERY, PrThreadsPageSchema } from "./graphql";
 import type { ThreadNode } from "./graphql";
 import { COMMENT_PREVIEW_DEPTH, FILE_PREFIX_PR, sortThreads, toThreadObject } from "./helpers";
-import { PrThreadsModeError } from "./errors";
 import { graphql, paginate, readCeiling, requireOwnerRepo } from "./fetch";
 import type { PrDetailFile, PrFileHeader, PrReviewThreadsArgs, ThreadObject } from "./types";
 
-type PrDeps = ShellDep & EnvDep & StdioDep & TmpDep & FileWriterDep & FileSysDep;
+type PrDeps = ShellDep & EnvDep & StdioDep;
 
-type PrSuccessEnvelope = { status: "success"; error: string; pr: PrFileHeader & { resultsFile: string } };
+type PrResult = { header: PrFileHeader; resultsFile: string };
 
 /**
  * Handles pr mode: fetches all review threads for a PR, classifies/sorts/windows,
- * builds the detail file, and returns the success envelope.
+ * builds the detail file, and returns the result.
  */
-export async function runPr(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mode: "pr" }>): Promise<PrSuccessEnvelope> {
-    try {
-        return await runPrInner(deps, args);
-    } catch (err) {
-        throw new PrThreadsModeError("pr", err);
-    }
+export async function runPr(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mode: "pr" }>): Promise<PrResult> {
+    return runPrInner(deps, args);
 }
 
-async function runPrInner(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mode: "pr" }>): Promise<PrSuccessEnvelope> {
+async function runPrInner(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mode: "pr" }>): Promise<PrResult> {
     const ceiling = readCeiling(deps);
     const { owner, repo } = requireOwnerRepo(deps);
 
@@ -106,10 +101,9 @@ async function runPrInner(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mod
     };
 
     const resultsFile = await atomicWriteFile(
-        deps,
         `<tmpDir>/${FILE_PREFIX_PR}-${args.prNumber}-<ts>.json`,
         JSON.stringify({ pr: header, threads, hunks } satisfies PrDetailFile, null, 2),
     );
 
-    return { status: "success" as const, error: "", pr: { ...header, resultsFile } };
+    return { header, resultsFile };
 }

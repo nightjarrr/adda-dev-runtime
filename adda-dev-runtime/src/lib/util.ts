@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { dirname } from "node:path";
-import type { FileSysDep, FileWriterDep, TmpDep } from "./capabilities";
+import { defaultDeps } from "./capabilities";
 import { ScriptError } from "./errors";
 
 export function parseJson(raw: string): unknown {
@@ -32,20 +32,16 @@ export function slugify(title: string): string {
  *
  * Returns the resolved final path.
  */
-export async function atomicWriteFile(
-    deps: TmpDep & FileWriterDep & FileSysDep,
-    pathPattern: string,
-    content: string,
-): Promise<string> {
+export async function atomicWriteFile(pathPattern: string, content: string): Promise<string> {
     const finalPath = pathPattern
-        .replace("<tmpDir>", deps.tmp.tmpDir())
+        .replace("<tmpDir>", defaultDeps.tmp.tmpDir())
         .replace("<ts>", String(Date.now()))
         .replace("<uuid>", randomUUID());
 
     const dir = dirname(finalPath);
     const tmpPath = `${dir}/.tmp-${randomUUID()}`;
 
-    await deps.fileWriter.writeFile(tmpPath, content);
-    await deps.fileSys.renameFile(tmpPath, finalPath);
+    await defaultDeps.fileWriter.writeFile(tmpPath, content);
+    await defaultDeps.fileSys.renameFile(tmpPath, finalPath);
     return finalPath;
 }

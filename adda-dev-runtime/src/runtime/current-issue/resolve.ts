@@ -18,9 +18,7 @@ export type ResolveIssueBranchData = z.infer<typeof ResolveIssueBranchOutputSche
 export async function resolveIssueBranch(deps: ShellDep, issueId: string): Promise<ResolveIssueBranchData> {
     const resolveResult = await deps.shell.run([RESOLVE_ISSUE_BRANCH_BIN, issueId], { strict: false });
     if (resolveResult.exitCode !== 0) {
-        throw new CurrentIssueError(`resolve-issue-branch failed for issue #${issueId}`, {
-            verboseStderr: resolveResult.stderr,
-        });
+        throw new CurrentIssueError(`resolve-issue-branch failed for issue #${issueId}`, resolveResult.stderr);
     }
 
     let resolveRaw: unknown;
@@ -33,7 +31,7 @@ export async function resolveIssueBranch(deps: ShellDep, issueId: string): Promi
     const resolveParsed = ResolveIssueBranchOutputSchema.safeParse(resolveRaw);
     if (!resolveParsed.success) {
         const err = new ScriptZodValidationError("unexpected resolve-issue-branch output", resolveParsed.error, resolveRaw);
-        throw new CurrentIssueError(err.message, { verboseStderr: err.verboseStderr });
+        throw new CurrentIssueError(err.message, err.verboseStderr);
     }
 
     const resolveData = resolveParsed.data;
@@ -41,7 +39,7 @@ export async function resolveIssueBranch(deps: ShellDep, issueId: string): Promi
     if (resolveData.status === "ambiguous" || resolveData.status === "error") {
         throw new CurrentIssueError(
             `resolve-issue-branch returned '${resolveData.status}' for issue #${issueId}: ${resolveData.details}`,
-            { verboseStderr: resolveResult.stderr },
+            resolveResult.stderr,
         );
     }
 

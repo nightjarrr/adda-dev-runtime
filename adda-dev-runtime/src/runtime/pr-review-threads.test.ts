@@ -1,21 +1,20 @@
-import { describe, expect, mock, test } from "bun:test";
-import type {
-    Env,
-    EnvDep,
-    FileWriter,
-    FileWriterDep,
-    FileSys,
-    FileSysDep,
-    Shell,
-    ShellDep,
-    ShellResult,
-    StdioDep,
-    Tmp,
-    TmpDep,
-} from "../lib/index";
+import { afterEach, describe, expect, mock, test } from "bun:test";
+import { rm } from "node:fs/promises";
+import type { Env, EnvDep, Shell, ShellDep, ShellResult, StdioDep } from "../lib/index";
 import { PrReviewThreadsScript } from "./pr-review-threads";
 
-type PrReviewThreadsDeps = ShellDep & EnvDep & StdioDep & TmpDep & FileWriterDep & FileSysDep;
+type PrReviewThreadsDeps = ShellDep & EnvDep & StdioDep;
+
+// --- Cleanup written result files after each test ---
+
+const writtenResultFiles: string[] = [];
+
+afterEach(async () => {
+    for (const f of writtenResultFiles) {
+        await rm(f, { force: true });
+    }
+    writtenResultFiles.length = 0;
+});
 
 // --- Mock helpers ---
 
@@ -26,7 +25,6 @@ function makeShellResult(stdout: string, exitCode = 0, stderr = ""): ShellResult
 interface MockDepsOptions {
     runQueue?: ShellResult[];
     envVars?: Record<string, string>;
-    tmpDirValue?: string;
 }
 
 interface MockDepsResult {
@@ -34,16 +32,12 @@ interface MockDepsResult {
     outLines: string[];
     errLines: string[];
     runCalls: string[][];
-    writtenFiles: Map<string, string>;
-    renamedFiles: Array<{ from: string; to: string }>;
 }
 
 function makeMockDeps(options: MockDepsOptions = {}): MockDepsResult {
     const outLines: string[] = [];
     const errLines: string[] = [];
     const runCalls: string[][] = [];
-    const writtenFiles = new Map<string, string>();
-    const renamedFiles: Array<{ from: string; to: string }> = [];
 
     const runQueue = options.runQueue ? [...options.runQueue] : [];
 
@@ -69,37 +63,9 @@ function makeMockDeps(options: MockDepsOptions = {}): MockDepsResult {
         get: mock((name: string) => envVars[name]),
     };
 
-    let tmpCounter = 0;
-    const tmpDirValue = options.tmpDirValue ?? "/tmp";
-    const mockTmp: Tmp = {
-        tempFilePath: mock((prefix = "tmp", suffix = "") => {
-            tmpCounter++;
-            return `${tmpDirValue}/${prefix}-test-uuid-${tmpCounter}${suffix}`;
-        }),
-        makeTempDir: mock(() => `${tmpDirValue}/test-dir`),
-        tmpDir: mock(() => tmpDirValue),
-    };
-
-    const mockFileWriter: FileWriter = {
-        writeFile: mock(async (path: string, content: string): Promise<void> => {
-            writtenFiles.set(path, content);
-        }),
-    };
-
-    const mockFileSys: FileSys = {
-        renameFile: mock(async (from: string, to: string): Promise<void> => {
-            renamedFiles.push({ from, to });
-        }),
-        deleteFile: mock(async () => {}),
-        fileExists: mock(async () => false),
-    };
-
     const deps: PrReviewThreadsDeps = {
         shell: mockShell,
         env: mockEnv,
-        tmp: mockTmp,
-        fileWriter: mockFileWriter,
-        fileSys: mockFileSys,
         stdio: {
             stdin: { text: mock(async () => "") },
             stdout: {
@@ -115,11 +81,20 @@ function makeMockDeps(options: MockDepsOptions = {}): MockDepsResult {
         },
     };
 
-    return { deps, outLines, errLines, runCalls, writtenFiles, renamedFiles };
+    return { deps, outLines, errLines, runCalls };
 }
 
 function getStdoutJson(outLines: string[]): unknown {
     return JSON.parse(outLines.join("").trim()) as unknown;
+}
+
+async function getResultFileContent(outLines: string[]): Promise<unknown> {
+    const out = getStdoutJson(outLines) as Record<string, unknown>;
+    const modePayload = (out["pr"] ?? out["thread"]) as Record<string, unknown> | undefined;
+    const resultsFile = modePayload?.["resultsFile"] as string | undefined;
+    if (!resultsFile) return null;
+    writtenResultFiles.push(resultsFile);
+    return Bun.file(resultsFile).json();
 }
 
 // --- GraphQL response builders ---
@@ -398,12 +373,16 @@ describe("PrReviewThreadsScript", () => {
         });
 
         test("thread mode: works without GITHUB_OWNER/GITHUB_REPO", async () => {
-            const { deps } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 envVars: {},
                 runQueue: [makeShellResult(makeThreadNodeResponse())],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
             expect(code).toBe(0);
+            const resultsFile = ((getStdoutJson(outLines) as Record<string, unknown>)["thread"] as Record<string, unknown>)?.[
+                "resultsFile"
+            ] as string | undefined;
+            if (resultsFile) writtenResultFiles.push(resultsFile);
         });
 
         test("valid ADDA_DEV_PR_REVIEW_SCAN_CEILING override — used as ceiling", async () => {
@@ -457,28 +436,27 @@ describe("PrReviewThreadsScript", () => {
     // ---------------------------------------------------------------
     describe("pr mode: graphql failure", () => {
         test("graphql returns non-zero exit — exits 1, graphql_error envelope on stdout, no file", async () => {
-            const { deps, outLines, errLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines, errLines } = makeMockDeps({
                 runQueue: [makeShellResult("", 1, "Could not resolve to a PullRequest with the number of 999999")],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "999999"]);
             expect(code).toBe(1);
-            expect(renamedFiles).toHaveLength(0);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("error");
             const pr = out["pr"] as Record<string, unknown>;
             expect(pr?.reason).toBe("graphql_error");
+            expect(pr).not.toHaveProperty("resultsFile");
             // gh's stderr must be forwarded to the script's stderr
             expect(errLines.join("")).toContain("Could not resolve to a PullRequest with the number of 999999");
         });
 
         test("graphql failure on pagination page — exits 1, graphql_error envelope on stdout", async () => {
             const page1 = makePrThreadsResponse([makeThread()], 2, true, "cursor1");
-            const { deps, outLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(page1), makeShellResult("", 1, "GraphQL error on page 2")],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
-            expect(renamedFiles).toHaveLength(0);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("error");
             expect((out["pr"] as Record<string, unknown>)?.reason).toBe("graphql_error");
@@ -490,16 +468,16 @@ describe("PrReviewThreadsScript", () => {
     // ---------------------------------------------------------------
     describe("thread mode: graphql failure", () => {
         test("graphql returns non-zero exit — exits 1, graphql_error envelope on stdout, no file", async () => {
-            const { deps, outLines, errLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines, errLines } = makeMockDeps({
                 envVars: {},
                 runQueue: [makeShellResult("", 1, "Could not resolve to a node")],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
             expect(code).toBe(1);
-            expect(renamedFiles).toHaveLength(0);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("error");
             expect((out["thread"] as Record<string, unknown>)?.reason).toBe("graphql_error");
+            expect(out["thread"] as Record<string, unknown>).not.toHaveProperty("resultsFile");
             // gh's stderr must be forwarded to the script's stderr
             expect(errLines.join("")).toContain("Could not resolve to a node");
         });
@@ -510,7 +488,7 @@ describe("PrReviewThreadsScript", () => {
     // ---------------------------------------------------------------
     describe("pr mode: basic success", () => {
         test("empty PR — exit 0, file written, empty threads array", async () => {
-            const { deps, outLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makePrThreadsResponse([]))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "303"]);
@@ -524,44 +502,51 @@ describe("PrReviewThreadsScript", () => {
             expect(out.pr.total).toBe(0);
             expect(out.pr.unresolved).toBe(0);
             expect(out.pr.returnedUnresolved).toBe(0);
-            expect(renamedFiles).toHaveLength(1);
-            expect(renamedFiles[0]!.to).toMatch(/\/tmp\/pr-review-threads-pr-303-\d+\.json$/);
+            expect(out.pr.resultsFile).toMatch(/\/tmp\/pr-review-threads-pr-303-\d+\.json$/);
+            writtenResultFiles.push(out.pr.resultsFile);
         });
 
         test("single unresolved thread — included in output", async () => {
             const thread = makeThread({ id: "PRRT_aaa", isResolved: false });
-            const { deps, outLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makePrThreadsResponse([thread]))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(0);
             const out = getStdoutJson(outLines) as {
-                pr: { unresolved: number; resolved: number; returnedUnresolved: number; moreUnresolvedAvailable: boolean };
+                pr: {
+                    unresolved: number;
+                    resolved: number;
+                    returnedUnresolved: number;
+                    moreUnresolvedAvailable: boolean;
+                    resultsFile: string;
+                };
             };
             expect(out.pr.unresolved).toBe(1);
             expect(out.pr.resolved).toBe(0);
             expect(out.pr.returnedUnresolved).toBe(1);
             expect(out.pr.moreUnresolvedAvailable).toBe(false);
-            expect(renamedFiles).toHaveLength(1);
+            expect(out.pr.resultsFile).toBeDefined();
+            writtenResultFiles.push(out.pr.resultsFile);
         });
 
         test("all resolved, no --include-resolved — threads empty, exit 0, file written", async () => {
             const thread = makeThread({ id: "PRRT_bbb", isResolved: true });
-            const { deps, outLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makePrThreadsResponse([thread]))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(0);
-            const out = getStdoutJson(outLines) as { pr: { unresolved: number; resolved: number } };
+            const out = getStdoutJson(outLines) as { pr: { unresolved: number; resolved: number; resultsFile: string } };
             expect(out.pr.unresolved).toBe(0);
             expect(out.pr.resolved).toBe(1);
-            expect(renamedFiles).toHaveLength(1);
+            writtenResultFiles.push(out.pr.resultsFile);
         });
 
         test("--include-resolved adds resolved threads", async () => {
             const t1 = makeThread({ id: "PRRT_r1", isResolved: true });
             const t2 = makeThread({ id: "PRRT_u1", isResolved: false });
-            const { deps, renamedFiles, writtenFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makePrThreadsResponse([t1, t2]))],
             });
             const code = await new PrReviewThreadsScript(deps).run([
@@ -572,8 +557,9 @@ describe("PrReviewThreadsScript", () => {
                 "--include-resolved",
             ]);
             expect(code).toBe(0);
-            expect(renamedFiles).toHaveLength(1);
-            const fileContent = JSON.parse(writtenFiles.values().next().value!) as { threads: Array<{ id: string }> };
+            const out = getStdoutJson(outLines) as { pr: { resultsFile: string } };
+            writtenResultFiles.push(out.pr.resultsFile);
+            const fileContent = (await getResultFileContent(outLines)) as { threads: Array<{ id: string }> };
             const ids = fileContent.threads.map((t) => t.id);
             expect(ids).toContain("PRRT_r1");
             expect(ids).toContain("PRRT_u1");
@@ -599,12 +585,19 @@ describe("PrReviewThreadsScript", () => {
             ]);
             expect(code).toBe(0);
             const out = getStdoutJson(outLines) as {
-                pr: { unresolved: number; returnedUnresolved: number; moreUnresolvedAvailable: boolean; maxUnresolved: number };
+                pr: {
+                    unresolved: number;
+                    returnedUnresolved: number;
+                    moreUnresolvedAvailable: boolean;
+                    maxUnresolved: number;
+                    resultsFile: string;
+                };
             };
             expect(out.pr.unresolved).toBe(10);
             expect(out.pr.returnedUnresolved).toBe(3);
             expect(out.pr.moreUnresolvedAvailable).toBe(true);
             expect(out.pr.maxUnresolved).toBe(3);
+            writtenResultFiles.push(out.pr.resultsFile);
         });
 
         test("unresolved <= maxUnresolved — all included, moreUnresolvedAvailable false", async () => {
@@ -621,9 +614,12 @@ describe("PrReviewThreadsScript", () => {
                 "5",
             ]);
             expect(code).toBe(0);
-            const out = getStdoutJson(outLines) as { pr: { returnedUnresolved: number; moreUnresolvedAvailable: boolean } };
+            const out = getStdoutJson(outLines) as {
+                pr: { returnedUnresolved: number; moreUnresolvedAvailable: boolean; resultsFile: string };
+            };
             expect(out.pr.returnedUnresolved).toBe(3);
             expect(out.pr.moreUnresolvedAvailable).toBe(false);
+            writtenResultFiles.push(out.pr.resultsFile);
         });
 
         test("default maxUnresolved is 50", async () => {
@@ -633,8 +629,9 @@ describe("PrReviewThreadsScript", () => {
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(0);
-            const out = getStdoutJson(outLines) as { pr: { maxUnresolved: number } };
+            const out = getStdoutJson(outLines) as { pr: { maxUnresolved: number; resultsFile: string } };
             expect(out.pr.maxUnresolved).toBe(50);
+            writtenResultFiles.push(out.pr.resultsFile);
         });
     });
 
@@ -650,13 +647,12 @@ describe("PrReviewThreadsScript", () => {
                 "cursor1",
             );
             const page2 = makePrThreadsResponse([makeThread({ id: "PRRT_p2t1" })], 3, false);
-            const { deps, writtenFiles, renamedFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(page1), makeShellResult(page2)],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(0);
-            expect(renamedFiles).toHaveLength(1);
-            const content = JSON.parse(writtenFiles.values().next().value!) as { threads: Array<{ id: string }> };
+            const content = (await getResultFileContent(outLines)) as { threads: Array<{ id: string }> };
             expect(content.threads).toHaveLength(3);
             const ids = content.threads.map((t) => t.id);
             expect(ids).toContain("PRRT_p1t1");
@@ -672,14 +668,14 @@ describe("PrReviewThreadsScript", () => {
         test("thread with totalCount > 5 — commentsTruncated true, commentCount set, stderr warning", async () => {
             const comments = Array.from({ length: 5 }, (_, i) => makeComment({ body: `comment ${i}` }));
             const thread = makeThread({ id: "PRRT_trunc", comments, commentsTotalCount: 8 });
-            const { deps, errLines, writtenFiles } = makeMockDeps({
+            const { deps, outLines, errLines } = makeMockDeps({
                 runQueue: [makeShellResult(makePrThreadsResponse([thread]))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(0);
             expect(errLines.join("")).toContain("Warning:");
             expect(errLines.join("")).toContain("PRRT_trunc");
-            const content = JSON.parse(writtenFiles.values().next().value!) as {
+            const content = (await getResultFileContent(outLines)) as {
                 threads: Array<{ commentsTruncated?: boolean; commentCount?: number; comments: unknown[] }>;
             };
             const t = content.threads[0]!;
@@ -690,13 +686,13 @@ describe("PrReviewThreadsScript", () => {
 
         test("thread with totalCount <= 5 — no truncation fields, no warning", async () => {
             const thread = makeThread({ id: "PRRT_ok", commentsTotalCount: 2 });
-            const { deps, errLines, writtenFiles } = makeMockDeps({
+            const { deps, outLines, errLines } = makeMockDeps({
                 runQueue: [makeShellResult(makePrThreadsResponse([thread]))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(0);
             expect(errLines.join("")).toBe("");
-            const content = JSON.parse(writtenFiles.values().next().value!) as {
+            const content = (await getResultFileContent(outLines)) as {
                 threads: Array<{ commentsTruncated?: boolean; commentCount?: number }>;
             };
             const t = content.threads[0]!;
@@ -706,12 +702,12 @@ describe("PrReviewThreadsScript", () => {
 
         test("thread with hasNextPage true — commentsTruncated true even if totalCount <= 5", async () => {
             const thread = makeThread({ id: "PRRT_np", commentsTotalCount: 3, commentsHasNextPage: true });
-            const { deps, writtenFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makePrThreadsResponse([thread]))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(0);
-            const content = JSON.parse(writtenFiles.values().next().value!) as {
+            const content = (await getResultFileContent(outLines)) as {
                 threads: Array<{ commentsTruncated?: boolean }>;
             };
             expect(content.threads[0]!.commentsTruncated).toBe(true);
@@ -723,13 +719,12 @@ describe("PrReviewThreadsScript", () => {
     // ---------------------------------------------------------------
     describe("pr mode: scan ceiling", () => {
         test("threads totalCount > ceiling — scan_limit_exceeded, no file, exits 1", async () => {
-            const { deps, outLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 envVars: { GITHUB_OWNER: "o", GITHUB_REPO: "r", ADDA_DEV_PR_REVIEW_SCAN_CEILING: "5" },
                 runQueue: [makeShellResult(makePrThreadsResponse([], 10, false))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
-            expect(renamedFiles).toHaveLength(0);
             const out = getStdoutJson(outLines) as {
                 status: string;
                 pr?: { reason: string; total?: number; ceiling?: number };
@@ -741,12 +736,14 @@ describe("PrReviewThreadsScript", () => {
         });
 
         test("threads totalCount <= ceiling — succeeds", async () => {
-            const { deps } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 envVars: { GITHUB_OWNER: "o", GITHUB_REPO: "r", ADDA_DEV_PR_REVIEW_SCAN_CEILING: "10" },
                 runQueue: [makeShellResult(makePrThreadsResponse([], 10, false))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(0);
+            const out = getStdoutJson(outLines) as { pr: { resultsFile: string } };
+            writtenResultFiles.push(out.pr.resultsFile);
         });
     });
 
@@ -755,24 +752,23 @@ describe("PrReviewThreadsScript", () => {
     // ---------------------------------------------------------------
     describe("pr mode: domain nulls", () => {
         test("repository not found — exits 1, no file, repo_not_found reason", async () => {
-            const { deps, outLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makeRepoNotFound())],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
-            expect(renamedFiles).toHaveLength(0);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("error");
             expect((out["pr"] as Record<string, unknown>)?.reason).toBe("repo_not_found");
+            expect(out["pr"] as Record<string, unknown>).not.toHaveProperty("resultsFile");
         });
 
         test("PR not found — exits 1, no file, pr_not_found reason", async () => {
-            const { deps, outLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makePrNotFound())],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
-            expect(renamedFiles).toHaveLength(0);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("error");
             expect((out["pr"] as Record<string, unknown>)?.reason).toBe("pr_not_found");
@@ -783,24 +779,25 @@ describe("PrReviewThreadsScript", () => {
     // pr mode: file invariant
     // ---------------------------------------------------------------
     describe("pr mode: file invariant", () => {
-        test("success — writeFile and renameFile called with correct pattern", async () => {
-            const { deps, renamedFiles, writtenFiles } = makeMockDeps({
+        test("success — resultsFile path matches expected pattern", async () => {
+            const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makePrThreadsResponse([]))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "42"]);
             expect(code).toBe(0);
-            expect(renamedFiles).toHaveLength(1);
-            expect(renamedFiles[0]!.to).toMatch(/\/tmp\/pr-review-threads-pr-42-\d+\.json$/);
-            expect(writtenFiles.size).toBe(1);
+            const out = getStdoutJson(outLines) as { pr: { resultsFile: string } };
+            expect(out.pr.resultsFile).toMatch(/\/tmp\/pr-review-threads-pr-42-\d+\.json$/);
+            writtenResultFiles.push(out.pr.resultsFile);
         });
 
-        test("error — no renameFile called", async () => {
-            const { deps, renamedFiles } = makeMockDeps({
+        test("error — no resultsFile in envelope", async () => {
+            const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makeRepoNotFound())],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
-            expect(renamedFiles).toHaveLength(0);
+            const out = getStdoutJson(outLines) as Record<string, unknown>;
+            expect(out["pr"] as Record<string, unknown>).not.toHaveProperty("resultsFile");
         });
     });
 
@@ -811,12 +808,12 @@ describe("PrReviewThreadsScript", () => {
         test("targetLine is last line of hunk, hunkPreview omits @@ header, hunks map contains full hunk", async () => {
             const hunk = "@@ -1,4 +1,5 @@\n line1\n line2\n-removed\n+added\n+added2";
             const thread = makeThread({ id: "PRRT_hunk", comments: [makeComment({ diffHunk: hunk })] });
-            const { deps, writtenFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makePrThreadsResponse([thread]))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(0);
-            const content = JSON.parse(writtenFiles.values().next().value!) as {
+            const content = (await getResultFileContent(outLines)) as {
                 threads: Array<{ targetLine: string; hunkPreview: string }>;
                 hunks: Record<string, string>;
             };
@@ -829,12 +826,12 @@ describe("PrReviewThreadsScript", () => {
 
         test("null hunk (thread with no comments) — targetLine and hunkPreview are null", async () => {
             const thread = makeThread({ id: "PRRT_nohunk", comments: [] });
-            const { deps, writtenFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makePrThreadsResponse([thread]))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(0);
-            const content = JSON.parse(writtenFiles.values().next().value!) as {
+            const content = (await getResultFileContent(outLines)) as {
                 threads: Array<{ targetLine: null; hunkPreview: null }>;
             };
             expect(content.threads[0]!.targetLine).toBeNull();
@@ -861,6 +858,7 @@ describe("PrReviewThreadsScript", () => {
             const pr = out["pr"] as Record<string, unknown>;
             expect(pr).toHaveProperty("resultsFile");
             expect(pr).toHaveProperty("number", 303);
+            writtenResultFiles.push(pr["resultsFile"] as string);
         });
 
         test("error envelope has pr key with reason", async () => {
@@ -891,7 +889,7 @@ describe("PrReviewThreadsScript", () => {
     // ---------------------------------------------------------------
     describe("thread mode: basic success", () => {
         test("success — exit 0, file written, pr derived from node.pullRequest.number", async () => {
-            const { deps, outLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 envVars: {},
                 runQueue: [makeShellResult(makeThreadNodeResponse({ id: "PRRT_abc", prNumber: 303 }))],
             });
@@ -901,12 +899,12 @@ describe("PrReviewThreadsScript", () => {
             expect(out.status).toBe("success");
             expect(out.thread.id).toBe("PRRT_abc");
             expect(out.thread.pr).toBe(303);
-            expect(renamedFiles).toHaveLength(1);
-            expect(renamedFiles[0]!.to).toMatch(/\/tmp\/pr-review-threads-thread-\d+\.json$/);
+            expect(out.thread.resultsFile).toMatch(/\/tmp\/pr-review-threads-thread-\d+\.json$/);
+            writtenResultFiles.push(out.thread.resultsFile);
         });
 
         test("file header matches envelope minus resultsFile", async () => {
-            const { deps, outLines, writtenFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 envVars: {},
                 runQueue: [
                     makeShellResult(
@@ -922,7 +920,7 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_abc"]);
             expect(code).toBe(0);
             const envOut = getStdoutJson(outLines) as { thread: Record<string, unknown> };
-            const fileContent = JSON.parse(writtenFiles.values().next().value!) as {
+            const fileContent = (await getResultFileContent(outLines)) as {
                 thread: Record<string, unknown>;
                 threads: unknown[];
                 hunks: Record<string, string>;
@@ -952,13 +950,13 @@ describe("PrReviewThreadsScript", () => {
                 commentsHasNextPage: false,
                 comments: [makeComment({ body: "c3" })],
             });
-            const { deps, writtenFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 envVars: {},
                 runQueue: [makeShellResult(page1), makeShellResult(page2)],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_pg"]);
             expect(code).toBe(0);
-            const content = JSON.parse(writtenFiles.values().next().value!) as {
+            const content = (await getResultFileContent(outLines)) as {
                 threads: Array<{ comments: Array<{ body: string }> }>;
             };
             const comments = content.threads[0]!.comments;
@@ -972,17 +970,17 @@ describe("PrReviewThreadsScript", () => {
     // ---------------------------------------------------------------
     describe("thread mode: ceiling", () => {
         test("comments totalCount > ceiling — refuses, no file, exits 1", async () => {
-            const { deps, outLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 envVars: { ADDA_DEV_PR_REVIEW_SCAN_CEILING: "3" },
                 runQueue: [makeShellResult(makeThreadNodeResponse({ commentsTotalCount: 10 }))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
             expect(code).toBe(1);
-            expect(renamedFiles).toHaveLength(0);
             const out = getStdoutJson(outLines) as { status: string; thread?: { reason: string; commentCount?: number } };
             expect(out.status).toBe("error");
             expect(out.thread?.reason).toBe("scan_limit_exceeded");
             expect(out.thread?.commentCount).toBe(10);
+            expect(out.thread as Record<string, unknown>).not.toHaveProperty("resultsFile");
         });
     });
 
@@ -991,26 +989,24 @@ describe("PrReviewThreadsScript", () => {
     // ---------------------------------------------------------------
     describe("thread mode: domain errors", () => {
         test("node not found (null) — exits 1, no file, thread_not_found reason", async () => {
-            const { deps, outLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 envVars: {},
                 runQueue: [makeShellResult(makeThreadNodeNotFound())],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
             expect(code).toBe(1);
-            expect(renamedFiles).toHaveLength(0);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("error");
             expect((out["thread"] as Record<string, unknown>)?.reason).toBe("thread_not_found");
         });
 
         test("node is not a PullRequestReviewThread — exits 1, no file, not_a_thread reason", async () => {
-            const { deps, outLines, renamedFiles } = makeMockDeps({
+            const { deps, outLines } = makeMockDeps({
                 envVars: {},
                 runQueue: [makeShellResult(makeThreadNodeResponse({ typename: "Issue" }))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
             expect(code).toBe(1);
-            expect(renamedFiles).toHaveLength(0);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("error");
             expect((out["thread"] as Record<string, unknown>)?.reason).toBe("not_a_thread");
@@ -1033,6 +1029,7 @@ describe("PrReviewThreadsScript", () => {
             expect(out).not.toHaveProperty("pr");
             expect(out).not.toHaveProperty("result");
             expect(out).not.toHaveProperty("mode");
+            writtenResultFiles.push((out["thread"] as Record<string, unknown>)["resultsFile"] as string);
         });
     });
 
@@ -1074,7 +1071,7 @@ import type { ThreadNode } from "./pr-review-threads/graphql";
 import { PrThreadsArgsError, PrThreadsModeError } from "./pr-review-threads/errors";
 import { paginate } from "./pr-review-threads/fetch";
 import { PR_THREADS_QUERY, PrThreadsPageSchema } from "./pr-review-threads/graphql";
-import { ScriptError, ScriptStructuredError, atomicWriteFile } from "../lib/index";
+import { ScriptError, ScriptStructuredError } from "../lib/index";
 
 describe("sortThreads", () => {
     test("sorts by path, then by line", () => {
@@ -1229,65 +1226,6 @@ describe("hunkToFields", () => {
         const hunk = "@@ -1,2 +1,3 @@\n line\n+new\n";
         const { targetLine } = hunkToFields(hunk);
         expect(targetLine).toBe("+new");
-    });
-});
-
-// ---------------------------------------------------------------
-// atomicWriteFile unit tests (lib utility)
-// ---------------------------------------------------------------
-
-type AtomicFileDeps = TmpDep & FileWriterDep & FileSysDep;
-
-function makeAtomicFileDeps(): {
-    deps: AtomicFileDeps;
-    writtenFiles: Map<string, string>;
-    renamedFiles: Array<{ from: string; to: string }>;
-} {
-    const writtenFiles = new Map<string, string>();
-    const renamedFiles: Array<{ from: string; to: string }> = [];
-    const deps: AtomicFileDeps = {
-        tmp: {
-            tmpDir: mock(() => "/tmp"),
-            tempFilePath: mock((p = "tmp", s = "") => `/tmp/${p}-uuid${s}`),
-            makeTempDir: mock(() => "/tmp/dir"),
-        },
-        fileWriter: {
-            writeFile: mock(async (path: string, content: string): Promise<void> => {
-                writtenFiles.set(path, content);
-            }),
-        },
-        fileSys: {
-            renameFile: mock(async (from: string, to: string): Promise<void> => {
-                renamedFiles.push({ from, to });
-            }),
-            deleteFile: mock(async () => {}),
-            fileExists: mock(async () => false),
-        },
-    };
-    return { deps, writtenFiles, renamedFiles };
-}
-
-describe("atomicWriteFile", () => {
-    test("writes then renames, returns final path", async () => {
-        const { deps, writtenFiles, renamedFiles } = makeAtomicFileDeps();
-        const path = await atomicWriteFile(deps, "/tmp/pr-review-threads-pr-42-<ts>.json", '{"foo":"bar"}');
-        expect(writtenFiles.size).toBe(1);
-        expect(renamedFiles).toHaveLength(1);
-        expect(path).toMatch(/\/tmp\/pr-review-threads-pr-42-\d+\.json$/);
-    });
-
-    test("<tmpDir> placeholder expands to deps.tmp.tmpDir()", async () => {
-        const { deps, renamedFiles } = makeAtomicFileDeps();
-        const path = await atomicWriteFile(deps, "<tmpDir>/out.json", "data");
-        expect(path).toBe("/tmp/out.json");
-        expect(renamedFiles[0]!.to).toBe("/tmp/out.json");
-    });
-
-    test("content is written as provided", async () => {
-        const { deps, writtenFiles } = makeAtomicFileDeps();
-        await atomicWriteFile(deps, "/tmp/test.json", '{"key":"value"}');
-        const content = writtenFiles.values().next().value!;
-        expect(JSON.parse(content)).toEqual({ key: "value" });
     });
 });
 

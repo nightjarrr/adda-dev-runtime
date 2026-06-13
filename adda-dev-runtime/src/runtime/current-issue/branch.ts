@@ -8,9 +8,7 @@ import type { IssueStateStore, SuccessEnvelope } from "./types";
 async function getCurrentBranch(deps: ShellDep): Promise<string> {
     const result = await deps.shell.run(["git", "branch", "--show-current"], { strict: false });
     if (result.exitCode !== 0) {
-        throw new CurrentIssueError(`git branch --show-current failed: ${result.stderr.trim()}`, {
-            verboseStderr: result.stderr,
-        });
+        throw new CurrentIssueError(`git branch --show-current failed: ${result.stderr.trim()}`, result.stderr);
     }
     return result.stdout.trim();
 }
@@ -58,9 +56,7 @@ export async function executeBranchEnsure(deps: ShellDep, store: IssueStateStore
         strict: false,
     });
     if (developResult.exitCode !== 0) {
-        throw new CurrentIssueError(`gh issue develop failed for issue #${state.id}`, {
-            verboseStderr: developResult.stderr,
-        });
+        throw new CurrentIssueError(`gh issue develop failed for issue #${state.id}`, developResult.stderr);
     }
 
     const details: Record<string, unknown> = { action: "created", branch: branchName };

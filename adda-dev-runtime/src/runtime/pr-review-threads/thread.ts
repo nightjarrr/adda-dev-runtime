@@ -1,36 +1,28 @@
 // thread mode handler for pr-review-threads.
-import type { EnvDep, FileSysDep, FileWriterDep, ShellDep, StdioDep, TmpDep } from "@adda/lib";
+import type { EnvDep, ShellDep } from "@adda/lib";
 import { atomicWriteFile, ScriptError, ScriptZodValidationError } from "@adda/lib";
 import { THREAD_NODE_QUERY, ThreadNodeQuerySchema } from "./graphql";
 import type { CommentNode } from "./graphql";
 import { FILE_PREFIX_THREAD, toThreadObjectFull } from "./helpers";
-import { PrThreadsModeError } from "./errors";
 import { graphql, paginate, readCeiling } from "./fetch";
 import type { PrReviewThreadsArgs, ThreadDetailFile, ThreadFileHeader } from "./types";
 
-type ThreadDeps = ShellDep & EnvDep & StdioDep & TmpDep & FileWriterDep & FileSysDep;
+type ThreadDeps = ShellDep & EnvDep;
 
-type ThreadSuccessEnvelope = { status: "success"; error: string; thread: ThreadFileHeader & { resultsFile: string } };
+type ThreadResult = { header: ThreadFileHeader; resultsFile: string };
 
 /**
  * Handles thread mode: fetches a single review thread and all its comments,
- * builds the detail file, and returns the success envelope.
+ * builds the detail file, and returns the result.
  */
 export async function runThread(
     deps: ThreadDeps,
     args: Extract<PrReviewThreadsArgs, { mode: "thread" }>,
-): Promise<ThreadSuccessEnvelope> {
-    try {
-        return await runThreadInner(deps, args);
-    } catch (err) {
-        throw new PrThreadsModeError("thread", err);
-    }
+): Promise<ThreadResult> {
+    return runThreadInner(deps, args);
 }
 
-async function runThreadInner(
-    deps: ThreadDeps,
-    args: Extract<PrReviewThreadsArgs, { mode: "thread" }>,
-): Promise<ThreadSuccessEnvelope> {
+async function runThreadInner(deps: ThreadDeps, args: Extract<PrReviewThreadsArgs, { mode: "thread" }>): Promise<ThreadResult> {
     const ceiling = readCeiling(deps);
 
     // Fetch first page for domain checks before full pagination
@@ -115,10 +107,9 @@ async function runThreadInner(
     };
 
     const resultsFile = await atomicWriteFile(
-        deps,
         `<tmpDir>/${FILE_PREFIX_THREAD}-<ts>.json`,
         JSON.stringify({ thread: header, threads: [threadObj], hunks } satisfies ThreadDetailFile, null, 2),
     );
 
-    return { status: "success" as const, error: "", thread: { ...header, resultsFile } };
+    return { header, resultsFile };
 }
