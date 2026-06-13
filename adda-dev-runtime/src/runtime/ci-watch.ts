@@ -1,12 +1,12 @@
 import type { parseArgs } from "node:util";
-import type { ShellDep, SleepDep, StdioDep, TmpDep } from "@adda/lib";
+import type { FileWriterDep, ShellDep, SleepDep, StdioDep } from "@adda/lib";
 import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError, ScriptZodValidationError } from "@adda/lib";
 import { z } from "zod";
 
 const ChecksSchema = z.array(z.object({ name: z.string(), state: z.string(), link: z.string() }));
 const RunListSchema = z.array(z.object({ databaseId: z.union([z.number(), z.string()]) }));
 
-type CiWatchDeps = ShellDep & TmpDep & StdioDep & SleepDep;
+type CiWatchDeps = ShellDep & FileWriterDep & StdioDep & SleepDep;
 
 type CiWatchRef = { branch: string } | { tag: string } | { commit: string };
 type CiWatchArgs = { mode: "push"; ref: CiWatchRef } | { mode: "pr"; prNumber: string };
@@ -248,8 +248,8 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
                     this.deps.shell.run(["gh", "run", "view", runId, "--json", "url", "-q", ".url"]),
                     this.deps.shell.run(["gh", "run", "view", runId, "--json", "event", "-q", ".event"]),
                 ]);
-                const logFile = this.deps.tmp.tempFilePath("ci-watch-logs", ".txt");
-                await this.deps.shell.runSh(`gh run view ${runId} --log-failed > ${logFile}`);
+                const logResult = await this.deps.shell.runSh(`gh run view ${runId} --log-failed`);
+                const logFile = await this.deps.fileWriter.writeFile("<tmpDir>/ci-watch-logs-<uuid>.txt", logResult.stdout);
                 return { runId, conclusion, url: urlResult.stdout.trim(), event: eventResult.stdout.trim(), logFile };
             }),
         );

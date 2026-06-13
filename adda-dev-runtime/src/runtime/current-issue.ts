@@ -208,7 +208,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
     }
 
     async writeState(state: IssueState): Promise<void> {
-        await this.deps.fileWriter.atomicWriteFile(STATE_PATH, JSON.stringify(state));
+        await this.deps.fileWriter.writeFile(STATE_PATH, JSON.stringify(state));
     }
 
     async deleteState(): Promise<void> {

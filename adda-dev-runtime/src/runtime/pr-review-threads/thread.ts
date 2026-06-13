@@ -98,7 +98,7 @@ export async function runThread(
         commentCount,
     };
 
-    const resultsFile = await deps.fileWriter.atomicWriteFile(
+    const resultsFile = await deps.fileWriter.writeFile(
         `<tmpDir>/${FILE_PREFIX_THREAD}-<ts>.json`,
         JSON.stringify({ thread: header, threads: [threadObj], hunks } satisfies ThreadDetailFile, null, 2),
     );

@@ -159,3 +159,19 @@ Always use `.safeParse()`, never `.parse()`. Use `.nullable()` on fields the API
   hit the real filesystem. Putting the operation on the capability interface (e.g.
   `FileWriter.atomicWriteFile`) is what makes constructor injection sufficient.
 - Coverage floor: 95% line / 90% statement, enforced via `bunfig.toml`.
+
+## FileWriter.writeFile
+
+All writes use `fileWriter.writeFile(pathPattern, content)` — the single write method on
+`FileWriter`. It is always atomic (temp file + same-directory rename), supports placeholder
+expansion in `pathPattern`, and returns the resolved path as `Promise<string>`.
+
+Supported placeholders: `<tmpDir>` (OS temp directory), `<uuid>` (random UUID v4),
+`<ts>` (epoch milliseconds as a string). Combine them freely, e.g.
+`<tmpDir>/my-tool-results-<uuid>.json`.
+
+`expandPath(pattern)` (exported from `@adda/lib`) performs the same placeholder expansion
+without writing — use it when you need a resolved path for a purpose other than a file write
+(e.g. passing a path to an external tool).
+
+There is no non-atomic write method and no decision to make: use `writeFile` for every write.

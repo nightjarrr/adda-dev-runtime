@@ -92,7 +92,7 @@ export async function runPr(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { m
         maxUnresolved: args.maxUnresolved,
     };
 
-    const resultsFile = await deps.fileWriter.atomicWriteFile(
+    const resultsFile = await deps.fileWriter.writeFile(
         `<tmpDir>/${FILE_PREFIX_PR}-${args.prNumber}-<ts>.json`,
         JSON.stringify({ pr: header, threads, hunks } satisfies PrDetailFile, null, 2),
     );

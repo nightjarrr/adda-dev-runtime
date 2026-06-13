@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { BunEnv, BunFileSys, BunFileReader, BunFileWriter, BunShell, BunStdio, BunTmp } from "./capabilities";
+import { BunEnv, BunFileSys, BunFileReader, BunFileWriter, BunShell, BunStdio } from "./capabilities";
+import { expandPath } from "./util";
 import { ScriptShellError } from "./errors";
 
 // --- BunShell ---
@@ -83,6 +84,7 @@ describe("BunShell", () => {
         });
 
         test("executes shell features (glob expansion)", async () => {
+            const { writeFile } = await import("node:fs/promises");
             const tmpDir = await mkdtemp(join(tmpdir(), "adda-runsh-"));
             try {
                 await writeFile(join(tmpDir, "a.txt"), "");
@@ -139,24 +141,13 @@ describe("BunFileWriter", () => {
         if (tmpDir) await rm(tmpDir, { recursive: true, force: true });
     });
 
-    test("writes content to a temp path and it is readable", async () => {
-        tmpDir = await mkdtemp(join(tmpdir(), "adda-test-"));
-        const filePath = join(tmpDir, "out.txt");
-
-        const writer = new BunFileWriter();
-        await writer.writeFile(filePath, "written content");
-
-        const readBack = await Bun.file(filePath).text();
-        expect(readBack).toBe("written content");
-    });
-
-    describe("atomicWriteFile", () => {
+    describe("writeFile", () => {
         test("static path: file written at exact path, content correct, path returned", async () => {
             tmpDir = await mkdtemp(join(tmpdir(), "adda-test-"));
             const finalPath = join(tmpDir, "output.json");
 
             const writer = new BunFileWriter();
-            const returned = await writer.atomicWriteFile(finalPath, '{"key":"value"}');
+            const returned = await writer.writeFile(finalPath, '{"key":"value"}');
 
             expect(returned).toBe(finalPath);
             const content = await Bun.file(finalPath).text();
@@ -165,7 +156,7 @@ describe("BunFileWriter", () => {
 
         test("<tmpDir> placeholder is replaced with os.tmpdir() value", async () => {
             const writer = new BunFileWriter();
-            const returned = await writer.atomicWriteFile("<tmpDir>/adda-placeholder-test.json", "placeholder data");
+            const returned = await writer.writeFile("<tmpDir>/adda-placeholder-test.json", "placeholder data");
 
             expect(returned).toBe(join(tmpdir(), "adda-placeholder-test.json"));
             const content = await Bun.file(returned).text();
@@ -176,7 +167,7 @@ describe("BunFileWriter", () => {
         test("<ts> placeholder is expanded to a numeric string", async () => {
             tmpDir = await mkdtemp(join(tmpdir(), "adda-test-"));
             const writer = new BunFileWriter();
-            const returned = await writer.atomicWriteFile(join(tmpDir, "file-<ts>.json"), "ts data");
+            const returned = await writer.writeFile(join(tmpDir, "file-<ts>.json"), "ts data");
 
             const match = /file-(\d+)\.json$/.exec(returned);
             expect(match).not.toBeNull();
@@ -188,7 +179,7 @@ describe("BunFileWriter", () => {
         test("<uuid> placeholder is expanded to a UUID-format string", async () => {
             tmpDir = await mkdtemp(join(tmpdir(), "adda-test-"));
             const writer = new BunFileWriter();
-            const returned = await writer.atomicWriteFile(join(tmpDir, "file-<uuid>.json"), "uuid data");
+            const returned = await writer.writeFile(join(tmpDir, "file-<uuid>.json"), "uuid data");
 
             const match = /file-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.json$/i.exec(returned);
             expect(match).not.toBeNull();
@@ -201,7 +192,7 @@ describe("BunFileWriter", () => {
             const finalPath = join(tmpDir, "output.json");
 
             const writer = new BunFileWriter();
-            await writer.atomicWriteFile(finalPath, "same-dir data");
+            await writer.writeFile(finalPath, "same-dir data");
 
             // Final file is present
             expect(await Bun.file(finalPath).exists()).toBe(true);
@@ -252,91 +243,6 @@ describe("BunEnv", () => {
     });
 });
 
-// --- BunTmp ---
-
-describe("BunTmp", () => {
-    const createdDirs: string[] = [];
-
-    afterEach(async () => {
-        for (const dir of createdDirs) {
-            await rm(dir, { recursive: true, force: true });
-        }
-        createdDirs.length = 0;
-    });
-
-    describe("tempFilePath", () => {
-        test("returns a string path under os.tmpdir()", () => {
-            const tmp = new BunTmp();
-            const path = tmp.tempFilePath();
-            expect(path.startsWith(tmpdir())).toBe(true);
-        });
-
-        test("contains the given prefix", () => {
-            const tmp = new BunTmp();
-            const path = tmp.tempFilePath("myprefix");
-            expect(path).toContain("myprefix");
-        });
-
-        test("ends with the given suffix", () => {
-            const tmp = new BunTmp();
-            const path = tmp.tempFilePath("pre", ".json");
-            expect(path.endsWith(".json")).toBe(true);
-        });
-
-        test("uses default prefix 'tmp' when not provided", () => {
-            const tmp = new BunTmp();
-            const path = tmp.tempFilePath();
-            const basename = path.slice(tmpdir().length + 1);
-            expect(basename.startsWith("tmp-")).toBe(true);
-        });
-
-        test("returns a unique path each call", () => {
-            const tmp = new BunTmp();
-            const a = tmp.tempFilePath();
-            const b = tmp.tempFilePath();
-            expect(a).not.toBe(b);
-        });
-    });
-
-    describe("tmpDir", () => {
-        test("returns the os temp directory path", () => {
-            const tmp = new BunTmp();
-            expect(tmp.tmpDir()).toBe(tmpdir());
-        });
-
-        test("returns a non-empty string", () => {
-            const tmp = new BunTmp();
-            expect(tmp.tmpDir().length).toBeGreaterThan(0);
-        });
-    });
-
-    describe("makeTempDir", () => {
-        test("creates a directory under os.tmpdir()", async () => {
-            const tmp = new BunTmp();
-            const dir = tmp.makeTempDir("adda-test");
-            createdDirs.push(dir);
-            expect(dir.startsWith(tmpdir())).toBe(true);
-            const info = await stat(dir);
-            expect(info.isDirectory()).toBe(true);
-        });
-
-        test("directory name contains the given prefix", () => {
-            const tmp = new BunTmp();
-            const dir = tmp.makeTempDir("mypfx");
-            createdDirs.push(dir);
-            expect(dir).toContain("mypfx");
-        });
-
-        test("uses default prefix 'tmp' when not provided", () => {
-            const tmp = new BunTmp();
-            const dir = tmp.makeTempDir();
-            createdDirs.push(dir);
-            const basename = dir.slice(tmpdir().length + 1);
-            expect(basename.startsWith("tmp-")).toBe(true);
-        });
-    });
-});
-
 // --- BunFileSys ---
 
 describe("BunFileSys", () => {
@@ -373,5 +279,43 @@ describe("BunFileSys", () => {
 
         const fileSys = new BunFileSys();
         expect(await fileSys.fileExists(filePath)).toBe(false);
+    });
+});
+
+// --- expandPath ---
+
+describe("expandPath", () => {
+    test("<tmpDir> placeholder is replaced with os.tmpdir()", () => {
+        const result = expandPath("<tmpDir>/my-file.json");
+        expect(result).toBe(`${tmpdir()}/my-file.json`);
+    });
+
+    test("<ts> placeholder is replaced with a numeric epoch string", () => {
+        const before = Date.now();
+        const result = expandPath("file-<ts>.json");
+        const after = Date.now();
+        const match = /file-(\d+)\.json/.exec(result);
+        expect(match).not.toBeNull();
+        const ts = Number(match![1]);
+        expect(ts).toBeGreaterThanOrEqual(before);
+        expect(ts).toBeLessThanOrEqual(after);
+    });
+
+    test("<uuid> placeholder is replaced with a UUID v4 format string", () => {
+        const result = expandPath("file-<uuid>.json");
+        const match = /file-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.json/i.exec(result);
+        expect(match).not.toBeNull();
+    });
+
+    test("path with no placeholders is returned unchanged", () => {
+        const path = "/some/static/path.json";
+        expect(expandPath(path)).toBe(path);
+    });
+
+    test("combined placeholders: <tmpDir>/<uuid>-<ts>.json", () => {
+        const result = expandPath("<tmpDir>/<uuid>-<ts>.json");
+        expect(result.startsWith(tmpdir())).toBe(true);
+        const uuidMatch = /\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})-(\d+)\.json$/i.exec(result);
+        expect(uuidMatch).not.toBeNull();
     });
 });
