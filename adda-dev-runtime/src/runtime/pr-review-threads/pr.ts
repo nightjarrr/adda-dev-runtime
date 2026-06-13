@@ -11,15 +11,7 @@ type PrDeps = ShellDep & EnvDep & StdioDep & FileWriterDep;
 
 type PrResult = { header: PrFileHeader; resultsFile: string };
 
-/**
- * Handles pr mode: fetches all review threads for a PR, classifies/sorts/windows,
- * builds the detail file, and returns the result.
- */
 export async function runPr(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mode: "pr" }>): Promise<PrResult> {
-    return runPrInner(deps, args);
-}
-
-async function runPrInner(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mode: "pr" }>): Promise<PrResult> {
     const ceiling = readCeiling(deps);
     const { owner, repo } = requireOwnerRepo(deps);
 

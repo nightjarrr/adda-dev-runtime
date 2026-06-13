@@ -155,6 +155,10 @@ const mockStdio: Stdio = {
 
 `mock.module()` (top-level, before imports) is reserved for wrapping Bun built-in APIs in capability implementations when integration-testing those implementations in isolation.
 
+**Why `mock.module()` is banned from script descendant tests:** Bun's test runner executes all test files in the same process. The module registry is shared — a `mock.module()` in one file leaks into every file loaded afterward in the same run. Alias-based mocks (`mock.module("@adda/lib", ...)`) are additionally environment-sensitive: the alias may not resolve the same way locally and in CI, making the mock apply in one environment but not the other. The concrete failure mode: if a library function captures `defaultDeps` at module level and a test exercises a code path that reaches it, the real filesystem is written regardless of what mocks were passed to the script constructor.
+
+**Design constraint that makes constructor injection sufficient:** Every I/O operation must be a method on a capability interface — never a standalone function that captures `defaultDeps` at module level. If an operation belongs to a capability's responsibility (file writing, renaming, etc.), put it on that capability's interface so scripts access it through `this.deps`. This is what makes `mock.module()` unnecessary for script descendant tests: all I/O is injectable.
+
 ---
 
 ## Path alias

@@ -11,18 +11,10 @@ type ThreadDeps = ShellDep & EnvDep & FileWriterDep;
 
 type ThreadResult = { header: ThreadFileHeader; resultsFile: string };
 
-/**
- * Handles thread mode: fetches a single review thread and all its comments,
- * builds the detail file, and returns the result.
- */
 export async function runThread(
     deps: ThreadDeps,
     args: Extract<PrReviewThreadsArgs, { mode: "thread" }>,
 ): Promise<ThreadResult> {
-    return runThreadInner(deps, args);
-}
-
-async function runThreadInner(deps: ThreadDeps, args: Extract<PrReviewThreadsArgs, { mode: "thread" }>): Promise<ThreadResult> {
     const ceiling = readCeiling(deps);
 
     // Fetch first page for domain checks before full pagination
