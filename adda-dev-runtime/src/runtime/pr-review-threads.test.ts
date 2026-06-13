@@ -1385,7 +1385,7 @@ describe("PrThreadsModeError", () => {
 // ---------------------------------------------------------------
 
 describe("paginate", () => {
-    function makeShellDeps(runQueue: Array<{ stdout: string; exitCode?: number; stderr?: string }>): ShellDep & StdioDep {
+    function makeShellDeps(runQueue: Array<{ stdout: string; exitCode?: number; stderr?: string }>): ShellDep {
         const queue = [...runQueue];
         return {
             shell: {
@@ -1398,11 +1398,6 @@ describe("paginate", () => {
                     return { stdout: next.stdout, stderr: next.stderr ?? "", exitCode };
                 }),
                 runSh: mock(async () => ({ stdout: "", stderr: "", exitCode: 0 })),
-            },
-            stdio: {
-                stdin: { text: mock(async () => "") },
-                stdout: { write: mock(() => {}) },
-                stderr: { write: mock(() => {}) },
             },
         };
     }
