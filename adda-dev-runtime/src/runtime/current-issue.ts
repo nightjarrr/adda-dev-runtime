@@ -1,6 +1,6 @@
 import type { parseArgs } from "node:util";
-import type { EnvDep, FileReaderDep, FileSysDep, ShellDep, StdioDep } from "@adda/lib";
-import { atomicWriteFile, defaultDeps, parseJson, ScriptBase } from "@adda/lib";
+import type { EnvDep, FileReaderDep, FileSysDep, FileWriterDep, ShellDep, StdioDep } from "@adda/lib";
+import { defaultDeps, parseJson, ScriptBase } from "@adda/lib";
 
 import { executeBranchEnsure, executeBranchVerify } from "./current-issue/branch";
 import { executeClear } from "./current-issue/clear";
@@ -17,7 +17,7 @@ export type { IssueStateStore } from "./current-issue/types";
 
 // --- Types ---
 
-type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileReaderDep & FileSysDep;
+type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileReaderDep & FileWriterDep & FileSysDep;
 
 type CurrentIssueArgs =
     | { subcommand: "switch"; issueId: string; skipRepoInit: boolean }
@@ -208,7 +208,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
     }
 
     async writeState(state: IssueState): Promise<void> {
-        await atomicWriteFile(STATE_PATH, JSON.stringify(state));
+        await this.deps.fileWriter.atomicWriteFile(STATE_PATH, JSON.stringify(state));
     }
 
     async deleteState(): Promise<void> {

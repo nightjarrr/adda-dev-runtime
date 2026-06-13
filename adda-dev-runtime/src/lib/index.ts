@@ -30,4 +30,4 @@ export {
 } from "./errors";
 export type { EmptyArgs } from "./ScriptBase";
 export { ScriptBase } from "./ScriptBase";
-export { atomicWriteFile, parseJson, slugify } from "./util";
+export { parseJson, slugify } from "./util";

@@ -103,6 +103,7 @@ function makeMockDeps(options: MockDepsOptions = {}): {
         writeFile: mock(async (path: string, content: string): Promise<void> => {
             writtenFiles.set(path, content);
         }),
+        atomicWriteFile: mock(async (_pathPattern: string, _content: string): Promise<string> => FAKE_RESULT_PATH),
     };
 
     const mockTmp: Tmp = {

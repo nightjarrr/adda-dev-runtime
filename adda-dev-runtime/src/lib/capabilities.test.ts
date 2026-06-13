@@ -149,6 +149,71 @@ describe("BunFileWriter", () => {
         const readBack = await Bun.file(filePath).text();
         expect(readBack).toBe("written content");
     });
+
+    describe("atomicWriteFile", () => {
+        test("static path: file written at exact path, content correct, path returned", async () => {
+            tmpDir = await mkdtemp(join(tmpdir(), "adda-test-"));
+            const finalPath = join(tmpDir, "output.json");
+
+            const writer = new BunFileWriter();
+            const returned = await writer.atomicWriteFile(finalPath, '{"key":"value"}');
+
+            expect(returned).toBe(finalPath);
+            const content = await Bun.file(finalPath).text();
+            expect(content).toBe('{"key":"value"}');
+        });
+
+        test("<tmpDir> placeholder is replaced with os.tmpdir() value", async () => {
+            const writer = new BunFileWriter();
+            const returned = await writer.atomicWriteFile("<tmpDir>/adda-placeholder-test.json", "placeholder data");
+
+            expect(returned).toBe(join(tmpdir(), "adda-placeholder-test.json"));
+            const content = await Bun.file(returned).text();
+            expect(content).toBe("placeholder data");
+            await rm(returned, { force: true });
+        });
+
+        test("<ts> placeholder is expanded to a numeric string", async () => {
+            tmpDir = await mkdtemp(join(tmpdir(), "adda-test-"));
+            const writer = new BunFileWriter();
+            const returned = await writer.atomicWriteFile(join(tmpDir, "file-<ts>.json"), "ts data");
+
+            const match = /file-(\d+)\.json$/.exec(returned);
+            expect(match).not.toBeNull();
+            expect(Number(match![1])).toBeGreaterThan(0);
+            const content = await Bun.file(returned).text();
+            expect(content).toBe("ts data");
+        });
+
+        test("<uuid> placeholder is expanded to a UUID-format string", async () => {
+            tmpDir = await mkdtemp(join(tmpdir(), "adda-test-"));
+            const writer = new BunFileWriter();
+            const returned = await writer.atomicWriteFile(join(tmpDir, "file-<uuid>.json"), "uuid data");
+
+            const match = /file-([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})\.json$/i.exec(returned);
+            expect(match).not.toBeNull();
+            const content = await Bun.file(returned).text();
+            expect(content).toBe("uuid data");
+        });
+
+        test("no leftover temp files in same directory as final path after call", async () => {
+            tmpDir = await mkdtemp(join(tmpdir(), "adda-test-"));
+            const finalPath = join(tmpDir, "output.json");
+
+            const writer = new BunFileWriter();
+            await writer.atomicWriteFile(finalPath, "same-dir data");
+
+            // Final file is present
+            expect(await Bun.file(finalPath).exists()).toBe(true);
+            // No .tmp-* files remain in the same directory (temp file was renamed, not copied)
+            const { readdir } = await import("node:fs/promises");
+            const entries = await readdir(tmpDir);
+            const tmpFiles = entries.filter((e) => e.startsWith(".tmp-"));
+            expect(tmpFiles).toHaveLength(0);
+            // Only the final file is present
+            expect(entries.filter((e) => !e.startsWith("."))).toHaveLength(1);
+        });
+    });
 });
 
 // --- BunStdio ---
@@ -279,21 +344,6 @@ describe("BunFileSys", () => {
 
     afterEach(async () => {
         if (tmpDir) await rm(tmpDir, { recursive: true, force: true });
-    });
-
-    test("renameFile moves file — old path gone, content at new path", async () => {
-        tmpDir = await mkdtemp(join(tmpdir(), "adda-test-"));
-        const fromPath = join(tmpDir, "original.txt");
-        const toPath = join(tmpDir, "renamed.txt");
-        await Bun.write(fromPath, "rename-content");
-
-        const fileSys = new BunFileSys();
-        await fileSys.renameFile(fromPath, toPath);
-
-        const readBack = await Bun.file(toPath).text();
-        expect(readBack).toBe("rename-content");
-        const fromExists = await Bun.file(fromPath).exists();
-        expect(fromExists).toBe(false);
     });
 
     test("deleteFile removes the file", async () => {

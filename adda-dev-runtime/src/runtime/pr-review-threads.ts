@@ -12,7 +12,7 @@
 //   stdout: JSON envelope (mode-keyed: .pr or .thread)
 //   file:   detail file at /tmp/pr-review-threads-{pr|thread}-…-<epoch-ms>.json
 import type { parseArgs } from "node:util";
-import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
+import type { EnvDep, FileWriterDep, ShellDep, StdioDep } from "@adda/lib";
 import { defaultDeps, ScriptBase } from "@adda/lib";
 
 import { PrThreadsArgsError, PrThreadsModeError } from "./pr-review-threads/errors";
@@ -22,7 +22,7 @@ import type { PrReviewThreadsArgs } from "./pr-review-threads/types";
 
 const DEFAULT_MAX_UNRESOLVED = 50;
 
-type PrReviewThreadsDeps = ShellDep & EnvDep & StdioDep;
+type PrReviewThreadsDeps = ShellDep & EnvDep & StdioDep & FileWriterDep;
 
 export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrReviewThreadsArgs> {
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {

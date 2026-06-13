@@ -1,6 +1,8 @@
 import { mkdtempSync } from "node:fs";
 import { rename, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { dirname } from "node:path";
+import { randomUUID } from "node:crypto";
 import { ScriptShellError } from "./errors";
 
 // --- Interfaces ---
@@ -30,6 +32,7 @@ export interface FileReaderDep {
 
 export interface FileWriter {
     writeFile(path: string, content: string): Promise<void>;
+    atomicWriteFile(pathPattern: string, content: string): Promise<string>;
 }
 
 export interface FileWriterDep {
@@ -37,7 +40,6 @@ export interface FileWriterDep {
 }
 
 export interface FileSys {
-    renameFile(from: string, to: string): Promise<void>;
     deleteFile(path: string): Promise<void>;
     fileExists(path: string): Promise<boolean>;
 }
@@ -104,13 +106,21 @@ export class BunFileWriter implements FileWriter {
     async writeFile(path: string, content: string): Promise<void> {
         await Bun.write(path, content);
     }
+
+    async atomicWriteFile(pathPattern: string, content: string): Promise<string> {
+        const finalPath = pathPattern
+            .replace("<tmpDir>", tmpdir())
+            .replace("<ts>", String(Date.now()))
+            .replace("<uuid>", randomUUID());
+        const dir = dirname(finalPath);
+        const tmpPath = `${dir}/.tmp-${randomUUID()}`;
+        await Bun.write(tmpPath, content);
+        await rename(tmpPath, finalPath);
+        return finalPath;
+    }
 }
 
 export class BunFileSys implements FileSys {
-    async renameFile(from: string, to: string): Promise<void> {
-        await rename(from, to);
-    }
-
     async deleteFile(path: string): Promise<void> {
         await unlink(path);
     }

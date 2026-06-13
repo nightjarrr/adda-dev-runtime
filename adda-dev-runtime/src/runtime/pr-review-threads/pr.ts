@@ -1,13 +1,13 @@
 // pr mode handler for pr-review-threads.
-import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
-import { atomicWriteFile, ScriptError, ScriptZodValidationError } from "@adda/lib";
+import type { EnvDep, FileWriterDep, ShellDep, StdioDep } from "@adda/lib";
+import { ScriptError, ScriptZodValidationError } from "@adda/lib";
 import { PR_THREADS_QUERY, PrThreadsPageSchema } from "./graphql";
 import type { ThreadNode } from "./graphql";
 import { COMMENT_PREVIEW_DEPTH, FILE_PREFIX_PR, sortThreads, toThreadObject } from "./helpers";
 import { graphql, paginate, readCeiling, requireOwnerRepo } from "./fetch";
 import type { PrDetailFile, PrFileHeader, PrReviewThreadsArgs, ThreadObject } from "./types";
 
-type PrDeps = ShellDep & EnvDep & StdioDep;
+type PrDeps = ShellDep & EnvDep & StdioDep & FileWriterDep;
 
 type PrResult = { header: PrFileHeader; resultsFile: string };
 
@@ -100,7 +100,7 @@ async function runPrInner(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { mod
         maxUnresolved: args.maxUnresolved,
     };
 
-    const resultsFile = await atomicWriteFile(
+    const resultsFile = await deps.fileWriter.atomicWriteFile(
         `<tmpDir>/${FILE_PREFIX_PR}-${args.prNumber}-<ts>.json`,
         JSON.stringify({ pr: header, threads, hunks } satisfies PrDetailFile, null, 2),
     );

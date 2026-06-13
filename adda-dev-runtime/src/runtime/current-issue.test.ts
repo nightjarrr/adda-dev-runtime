@@ -12,12 +12,10 @@ import type {
     ShellDep,
     ShellResult,
     StdioDep,
-    Tmp,
-    TmpDep,
 } from "../lib/index";
 import { CurrentIssueScript, SilentStore, type IssueStateStore } from "./current-issue";
 
-type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep & TmpDep;
+type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep;
 
 // --- Helpers ---
 
@@ -44,7 +42,7 @@ interface MockDepsOptions {
     envVars?: Record<string, string>;
     fileReaderReadFile?: (path: string) => Promise<string>;
     fileWriterWriteFile?: (path: string, content: string) => Promise<void>;
-    fileSysRenameFile?: (from: string, to: string) => Promise<void>;
+    fileWriterAtomicWriteFile?: (pathPattern: string, content: string) => Promise<string>;
     fileSysDeleteFile?: (path: string) => Promise<void>;
     fileSysFileExists?: (path: string) => Promise<boolean>;
 }
@@ -102,18 +100,14 @@ function makeMockDeps(options: MockDepsOptions = {}): {
 
     const mockFileWriter: FileWriter = {
         writeFile: mock(options.fileWriterWriteFile ?? (async (_path: string, _content: string) => {})),
+        atomicWriteFile: mock(
+            options.fileWriterAtomicWriteFile ?? (async (_pathPattern: string, _content: string) => "/tmp/mock-state.json"),
+        ),
     };
 
     const mockFileSys: FileSys = {
-        renameFile: mock(options.fileSysRenameFile ?? (async (_from: string, _to: string) => {})),
         deleteFile: mock(options.fileSysDeleteFile ?? (async (_path: string) => {})),
         fileExists: mock(options.fileSysFileExists ?? (async (_path: string) => false)),
-    };
-
-    const mockTmp: Tmp = {
-        tmpDir: mock(() => "/tmp"),
-        tempFilePath: mock((p = "tmp", s = "") => `/tmp/${p}-uuid${s}`),
-        makeTempDir: mock(() => "/tmp/dir"),
     };
 
     const deps: CurrentIssueDeps = {
@@ -122,7 +116,6 @@ function makeMockDeps(options: MockDepsOptions = {}): {
         fileReader: mockFileReader,
         fileWriter: mockFileWriter,
         fileSys: mockFileSys,
-        tmp: mockTmp,
         stdio: {
             stdin: { text: mock(async () => "") },
             stdout: {
@@ -223,9 +216,6 @@ describe("CurrentIssueScript", () => {
 
     describe("switch — dirty tree", () => {
         test("dirty tree — exits 1, error envelope, state file not written", async () => {
-            const writeFileMock = mock(async (_path: string, _content: string) => {});
-            const renameMock = mock(async (_from: string, _to: string) => {});
-
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") {
@@ -233,16 +223,13 @@ describe("CurrentIssueScript", () => {
                     }
                     return makeShellResult();
                 },
-                fileWriterWriteFile: writeFileMock,
-                fileSysRenameFile: renameMock,
             });
 
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("error");
-            expect(writeFileMock).not.toHaveBeenCalled();
-            expect(renameMock).not.toHaveBeenCalled();
+            expect(deps.fileWriter.atomicWriteFile).not.toHaveBeenCalled();
         });
     });
 
@@ -412,9 +399,6 @@ describe("CurrentIssueScript", () => {
 
     describe("switch — git checkout failure", () => {
         test("git checkout fails — exits 1, error envelope, state file not written", async () => {
-            const writeFileMock = mock(async (_path: string, _content: string) => {});
-            const renameMock = mock(async (_from: string, _to: string) => {});
-
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -427,16 +411,13 @@ describe("CurrentIssueScript", () => {
                     }
                     return makeShellResult();
                 },
-                fileWriterWriteFile: writeFileMock,
-                fileSysRenameFile: renameMock,
             });
 
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("error");
-            expect(writeFileMock).not.toHaveBeenCalled();
-            expect(renameMock).not.toHaveBeenCalled();
+            expect(deps.fileWriter.atomicWriteFile).not.toHaveBeenCalled();
         });
     });
 

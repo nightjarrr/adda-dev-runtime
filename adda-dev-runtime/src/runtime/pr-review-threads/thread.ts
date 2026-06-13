@@ -1,13 +1,13 @@
 // thread mode handler for pr-review-threads.
-import type { EnvDep, ShellDep } from "@adda/lib";
-import { atomicWriteFile, ScriptError, ScriptZodValidationError } from "@adda/lib";
+import type { EnvDep, FileWriterDep, ShellDep } from "@adda/lib";
+import { ScriptError, ScriptZodValidationError } from "@adda/lib";
 import { THREAD_NODE_QUERY, ThreadNodeQuerySchema } from "./graphql";
 import type { CommentNode } from "./graphql";
 import { FILE_PREFIX_THREAD, toThreadObjectFull } from "./helpers";
 import { graphql, paginate, readCeiling } from "./fetch";
 import type { PrReviewThreadsArgs, ThreadDetailFile, ThreadFileHeader } from "./types";
 
-type ThreadDeps = ShellDep & EnvDep;
+type ThreadDeps = ShellDep & EnvDep & FileWriterDep;
 
 type ThreadResult = { header: ThreadFileHeader; resultsFile: string };
 
@@ -106,7 +106,7 @@ async function runThreadInner(deps: ThreadDeps, args: Extract<PrReviewThreadsArg
         commentCount,
     };
 
-    const resultsFile = await atomicWriteFile(
+    const resultsFile = await deps.fileWriter.atomicWriteFile(
         `<tmpDir>/${FILE_PREFIX_THREAD}-<ts>.json`,
         JSON.stringify({ thread: header, threads: [threadObj], hunks } satisfies ThreadDetailFile, null, 2),
     );
