@@ -72,12 +72,15 @@ export class ScriptShellError extends ScriptError {
 }
 
 export class ScriptZodValidationError extends ScriptError {
-    constructor(context: string, error: z.ZodError, rawInput?: unknown) {
+    override readonly verboseStderr: string;
+
+    constructor(context: string, error: z.ZodError, rawInput: unknown) {
         const issues = error.issues.map((i) => `${i.path.length > 0 ? i.path.join(".") : "(root)"}: ${i.message}`).join("; ");
-        const raw = rawInput !== undefined ? `\nraw data:\n\n${JSON.stringify(rawInput)}` : "";
+        const raw = `\nraw data:\n\n${JSON.stringify(rawInput)}`;
         const shortSummary = `${context}: ${issues}`;
-        const verboseStderr = rawInput !== undefined ? `${shortSummary}${raw}` : undefined;
+        const verboseStderr = `${shortSummary}${raw}`;
         super(shortSummary, 1, "validation_error", {}, verboseStderr);
+        this.verboseStderr = verboseStderr;
         this.name = "ScriptZodValidationError";
     }
 }

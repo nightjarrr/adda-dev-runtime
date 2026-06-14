@@ -51,7 +51,7 @@ export async function executeSwitch(
     const ghParsed = GhIssueSchema.safeParse(ghRaw);
     if (!ghParsed.success) {
         const err = new ScriptZodValidationError("unexpected gh issue response", ghParsed.error, ghRaw);
-        throw new CurrentIssueError("validation_error", err.message, err.verboseStderr!);
+        throw new CurrentIssueError("validation_error", err.message, err.verboseStderr);
     }
 
     const { title, labels, state } = ghParsed.data;

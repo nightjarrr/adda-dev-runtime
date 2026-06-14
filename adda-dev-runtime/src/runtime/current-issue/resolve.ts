@@ -38,7 +38,7 @@ export async function resolveIssueBranch(deps: ShellDep, issueId: string): Promi
     const resolveParsed = ResolveIssueBranchOutputSchema.safeParse(resolveRaw);
     if (!resolveParsed.success) {
         const err = new ScriptZodValidationError("unexpected resolve-issue-branch output", resolveParsed.error, resolveRaw);
-        throw new CurrentIssueError("validation_error", err.message, err.verboseStderr!);
+        throw new CurrentIssueError("validation_error", err.message, err.verboseStderr);
     }
 
     const data = resolveParsed.data;
