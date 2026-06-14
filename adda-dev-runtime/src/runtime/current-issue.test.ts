@@ -1175,7 +1175,7 @@ describe("CurrentIssueScript", () => {
                 expect(result?.pr).toBe("99");
             });
 
-            test("fileReader returns invalid JSON — throws ScriptStructuredError with 'state file is corrupt'", async () => {
+            test("fileReader returns invalid JSON — throws ScriptError with 'state file is corrupt'", async () => {
                 const { deps } = makeMockDeps({
                     fileReaderReadFile: async (_path: string) => "not valid json {{{",
                 });
@@ -1185,7 +1185,7 @@ describe("CurrentIssueScript", () => {
                 });
             });
 
-            test("fileReader returns valid JSON but wrong schema — throws ScriptStructuredError with 'state file is corrupt'", async () => {
+            test("fileReader returns valid JSON but wrong schema — throws ScriptError with 'state file is corrupt'", async () => {
                 const { deps } = makeMockDeps({
                     fileReaderReadFile: async (_path: string) => JSON.stringify({ foo: "bar" }),
                 });

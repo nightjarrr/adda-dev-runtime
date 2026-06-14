@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Shell, ShellDep, ShellResult } from "../../lib/index";
-import { ScriptStructuredError } from "../../lib/index";
+import { ScriptError } from "../../lib/index";
 import type { IssueState, IssueStateStore } from "./types";
 import { executeBranchEnsure, executeBranchVerify } from "./branch";
 
@@ -70,15 +70,15 @@ function makeMockDeps(shellRun?: (command: string[]) => Promise<ShellResult>): {
 // --- executeBranchEnsure tests ---
 
 describe("executeBranchEnsure", () => {
-    test("no stored issue — throws ScriptStructuredError with 'no current issue set'", async () => {
+    test("no stored issue — throws ScriptError with 'no current issue set'", async () => {
         const { deps } = makeMockDeps();
         const store = makeMockStore(null);
         const err = await executeBranchEnsure(deps, store).catch((e) => e);
-        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err).toBeInstanceOf(ScriptError);
         expect(err.message).toContain("no current issue set");
     });
 
-    test("resolve-issue-branch exits non-zero — throws ScriptStructuredError", async () => {
+    test("resolve-issue-branch exits non-zero — throws ScriptError", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: "", stderr: "some error", exitCode: 1 });
@@ -86,10 +86,10 @@ describe("executeBranchEnsure", () => {
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchEnsure(deps, store)).rejects.toBeInstanceOf(ScriptStructuredError);
+        await expect(executeBranchEnsure(deps, store)).rejects.toBeInstanceOf(ScriptError);
     });
 
-    test("resolve-issue-branch returns invalid JSON — throws ScriptStructuredError", async () => {
+    test("resolve-issue-branch returns invalid JSON — throws ScriptError", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: "not valid json{{", exitCode: 0 });
@@ -97,10 +97,10 @@ describe("executeBranchEnsure", () => {
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchEnsure(deps, store)).rejects.toBeInstanceOf(ScriptStructuredError);
+        await expect(executeBranchEnsure(deps, store)).rejects.toBeInstanceOf(ScriptError);
     });
 
-    test("resolve-issue-branch returns fail with reason ambiguous — throws ScriptStructuredError with 'ambiguous'", async () => {
+    test("resolve-issue-branch returns fail with reason ambiguous — throws ScriptError with 'ambiguous'", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({
@@ -112,8 +112,8 @@ describe("executeBranchEnsure", () => {
         });
         const store = makeMockStore();
         const err = await executeBranchEnsure(deps, store).catch((e) => e);
-        expect(err).toBeInstanceOf(ScriptStructuredError);
-        const envelope = (err as ScriptStructuredError).envelope;
+        expect(err).toBeInstanceOf(ScriptError);
+        const envelope = (err as ScriptError).envelope;
         expect(envelope.status).toBe("fail");
         expect(envelope.error?.reason).toBe("ambiguous_result");
     });
@@ -134,7 +134,7 @@ describe("executeBranchEnsure", () => {
         expect(result.details.branch).toBe("chore/270-my-branch");
     });
 
-    test("feature_branch + current doesn't match — throws ScriptStructuredError with expected branch info", async () => {
+    test("feature_branch + current doesn't match — throws ScriptError with expected branch info", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeOkResponse("feature_branch", "chore/270-my-branch") });
@@ -146,12 +146,12 @@ describe("executeBranchEnsure", () => {
         });
         const store = makeMockStore();
         const err = await executeBranchEnsure(deps, store).catch((e) => e);
-        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err).toBeInstanceOf(ScriptError);
         expect(err.message).toContain("chore/270-my-branch");
         expect(err.message).toContain("some-other-branch");
     });
 
-    test("main + current is not main — throws ScriptStructuredError with expected/actual branch info", async () => {
+    test("main + current is not main — throws ScriptError with expected/actual branch info", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeOkResponse("main") });
@@ -163,7 +163,7 @@ describe("executeBranchEnsure", () => {
         });
         const store = makeMockStore();
         const err = await executeBranchEnsure(deps, store).catch((e) => e);
-        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err).toBeInstanceOf(ScriptError);
         expect(err.message).toContain("some-other-branch");
     });
 
@@ -209,7 +209,7 @@ describe("executeBranchEnsure", () => {
         expect(String(result.details.branch)).toMatch(/^chore\/270-[a-z0-9]{8}$/);
     });
 
-    test("gh issue develop fails — error carries verboseStderr and throws ScriptStructuredError", async () => {
+    test("gh issue develop fails — error carries verboseStderr and throws ScriptError", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeOkResponse("main") });
@@ -224,11 +224,11 @@ describe("executeBranchEnsure", () => {
         });
         const store = makeMockStore();
         const err = await executeBranchEnsure(deps, store).catch((e) => e);
-        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err).toBeInstanceOf(ScriptError);
         expect(err.verboseStderr).toContain("gh error output");
     });
 
-    test("git branch --show-current fails — error carries verboseStderr and throws ScriptStructuredError", async () => {
+    test("git branch --show-current fails — error carries verboseStderr and throws ScriptError", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeOkResponse("feature_branch", "chore/270-my-branch") });
@@ -240,7 +240,7 @@ describe("executeBranchEnsure", () => {
         });
         const store = makeMockStore();
         const err = await executeBranchEnsure(deps, store).catch((e) => e);
-        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err).toBeInstanceOf(ScriptError);
         expect(err.verboseStderr).toContain("fatal: not a git repository");
         expect(err.message).toContain("git branch --show-current failed");
     });
@@ -249,15 +249,15 @@ describe("executeBranchEnsure", () => {
 // --- executeBranchVerify tests ---
 
 describe("executeBranchVerify", () => {
-    test("no stored issue — throws ScriptStructuredError with 'no current issue set'", async () => {
+    test("no stored issue — throws ScriptError with 'no current issue set'", async () => {
         const { deps } = makeMockDeps();
         const store = makeMockStore(null);
         const err = await executeBranchVerify(deps, store).catch((e) => e);
-        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err).toBeInstanceOf(ScriptError);
         expect(err.message).toContain("no current issue set");
     });
 
-    test("resolve-issue-branch exits non-zero — throws ScriptStructuredError", async () => {
+    test("resolve-issue-branch exits non-zero — throws ScriptError", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: "", stderr: "some error", exitCode: 1 });
@@ -265,10 +265,10 @@ describe("executeBranchVerify", () => {
             return makeShellResult();
         });
         const store = makeMockStore();
-        await expect(executeBranchVerify(deps, store)).rejects.toBeInstanceOf(ScriptStructuredError);
+        await expect(executeBranchVerify(deps, store)).rejects.toBeInstanceOf(ScriptError);
     });
 
-    test("resolve-issue-branch returns ok with resolution main — throws ScriptStructuredError with 'no feature branch linked'", async () => {
+    test("resolve-issue-branch returns ok with resolution main — throws ScriptError with 'no feature branch linked'", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeOkResponse("main") });
@@ -277,7 +277,7 @@ describe("executeBranchVerify", () => {
         });
         const store = makeMockStore();
         const err = await executeBranchVerify(deps, store).catch((e) => e);
-        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err).toBeInstanceOf(ScriptError);
         expect(err.message).toContain("no feature branch linked");
     });
 
@@ -296,7 +296,7 @@ describe("executeBranchVerify", () => {
         expect(result.details.branch).toBe("chore/270-my-branch");
     });
 
-    test("feature_branch + doesn't match current — throws ScriptStructuredError with expected/actual branch", async () => {
+    test("feature_branch + doesn't match current — throws ScriptError with expected/actual branch", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeOkResponse("feature_branch", "chore/270-my-branch") });
@@ -308,12 +308,12 @@ describe("executeBranchVerify", () => {
         });
         const store = makeMockStore();
         const err = await executeBranchVerify(deps, store).catch((e) => e);
-        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err).toBeInstanceOf(ScriptError);
         expect(err.message).toContain("chore/270-my-branch");
         expect(err.message).toContain("some-other-branch");
     });
 
-    test("resolve-issue-branch returns fail with reason ambiguous — throws ScriptStructuredError", async () => {
+    test("resolve-issue-branch returns fail with reason ambiguous — throws ScriptError", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({
@@ -325,8 +325,8 @@ describe("executeBranchVerify", () => {
         });
         const store = makeMockStore();
         const err = await executeBranchVerify(deps, store).catch((e) => e);
-        expect(err).toBeInstanceOf(ScriptStructuredError);
-        const envelope = (err as ScriptStructuredError).envelope;
+        expect(err).toBeInstanceOf(ScriptError);
+        const envelope = (err as ScriptError).envelope;
         expect(envelope.status).toBe("fail");
         expect(envelope.error?.reason).toBe("ambiguous_result");
     });

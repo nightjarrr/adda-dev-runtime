@@ -1,6 +1,6 @@
 import type { parseArgs } from "node:util";
 import type { EnvDep, FileReaderDep, FileSysDep, FileWriterDep, ShellDep, StdioDep } from "@adda/lib";
-import { defaultDeps, parseJson, ScriptBase } from "@adda/lib";
+import { defaultDeps, parseJson, ScriptArgsError, ScriptBase } from "@adda/lib";
 
 import { executeBranchEnsure, executeBranchVerify } from "./current-issue/branch";
 import { executeClear } from "./current-issue/clear";
@@ -80,34 +80,32 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
         const subcommand = positionals[0];
 
         if (!subcommand) {
-            throw new CurrentIssueError("invalid_args", "usage: current-issue <subcommand> [args]", { exitCode: 2 });
+            throw new ScriptArgsError("usage: current-issue <subcommand> [args]");
         }
 
         const skipRepoInit = (parsed.values["skip-repo-init"] as boolean | undefined) ?? false;
         if (skipRepoInit && (subcommand === "show" || subcommand === "get")) {
-            throw new CurrentIssueError("invalid_args", `--skip-repo-init is not valid for '${subcommand}'`, {
-                exitCode: 2,
-            });
+            throw new ScriptArgsError(`--skip-repo-init is not valid for '${subcommand}'`);
         }
 
         const ensure = (parsed.values["ensure"] as boolean | undefined) ?? false;
         const verify = (parsed.values["verify"] as boolean | undefined) ?? false;
         if ((ensure || verify) && subcommand !== "branch") {
             const flag = ensure ? "--ensure" : "--verify";
-            throw new CurrentIssueError("invalid_args", `${flag} is not valid for '${subcommand}'`, { exitCode: 2 });
+            throw new ScriptArgsError(`${flag} is not valid for '${subcommand}'`);
         }
 
         if (subcommand === "switch") {
             const issueId = positionals[1];
             if (!issueId) {
-                throw new CurrentIssueError("invalid_args", "usage: current-issue switch <id>", { exitCode: 2 });
+                throw new ScriptArgsError("usage: current-issue switch <id>");
             }
             return { subcommand: "switch", issueId, skipRepoInit };
         }
 
         if (subcommand === "show") {
             if (positionals.length > 1) {
-                throw new CurrentIssueError("invalid_args", "usage: current-issue show", { exitCode: 2 });
+                throw new ScriptArgsError("usage: current-issue show");
             }
             return { subcommand: "show" };
         }
@@ -123,26 +121,20 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
         if (subcommand === "get") {
             const field = positionals[1];
             if (!field) {
-                throw new CurrentIssueError("invalid_args", "usage: current-issue get <field>", { exitCode: 2 });
+                throw new ScriptArgsError("usage: current-issue get <field>");
             }
             return { subcommand: "get", field };
         }
 
         if (subcommand === "branch") {
             if (skipRepoInit) {
-                throw new CurrentIssueError("invalid_args", "--skip-repo-init is not valid for 'branch'", {
-                    exitCode: 2,
-                });
+                throw new ScriptArgsError("--skip-repo-init is not valid for 'branch'");
             }
             if (ensure && verify) {
-                throw new CurrentIssueError("invalid_args", "--ensure and --verify are mutually exclusive", {
-                    exitCode: 2,
-                });
+                throw new ScriptArgsError("--ensure and --verify are mutually exclusive");
             }
             if (!ensure && !verify) {
-                throw new CurrentIssueError("invalid_args", "usage: current-issue branch --ensure | --verify", {
-                    exitCode: 2,
-                });
+                throw new ScriptArgsError("usage: current-issue branch --ensure | --verify");
             }
             return { subcommand: "branch", mode: ensure ? "ensure" : "verify" };
         }
@@ -177,7 +169,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
                 else this.emitOk(await executeBranchVerify(this.deps, this));
                 return;
             default: {
-                throw new CurrentIssueError("invalid_args", `unknown subcommand: ${args.name}`, { exitCode: 2 });
+                throw new ScriptArgsError(`unknown subcommand: ${args.name}`);
             }
         }
     }

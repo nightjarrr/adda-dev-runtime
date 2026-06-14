@@ -4,7 +4,7 @@ import { ConfigError, ScriptArgsError, ScriptError, ScriptShellError, ScriptZodV
 
 describe("ScriptError", () => {
     test("stores exit code and message", () => {
-        const err = new ScriptError("test message", 7);
+        const err = new ScriptError("internal_error", "test message", { exitCode: 7 });
         expect(err.message).toBe("test message");
         expect(err.exitCode).toBe(7);
         expect(err.name).toBe("ScriptError");
@@ -12,22 +12,50 @@ describe("ScriptError", () => {
     });
 
     test("defaults exit code to 1 when not provided", () => {
-        const err = new ScriptError("default code");
+        const err = new ScriptError("internal_error", "default code");
         expect(err.exitCode).toBe(1);
     });
 
     test("throws RangeError when exitCode is 0", () => {
-        expect(() => new ScriptError("msg", 0)).toThrow(RangeError);
+        expect(() => new ScriptError("internal_error", "msg", { exitCode: 0 })).toThrow(RangeError);
     });
 
     test("verboseStderr is undefined when not provided", () => {
-        const err = new ScriptError("msg");
+        const err = new ScriptError("internal_error", "msg");
         expect(err.verboseStderr).toBeUndefined();
     });
 
     test("verboseStderr stores provided value", () => {
-        const err = new ScriptError("msg", 1, "reason", {}, "raw stderr output");
+        const err = new ScriptError("internal_error", "msg", { verboseStderr: "raw stderr output" });
         expect(err.verboseStderr).toBe("raw stderr output");
+    });
+
+    test("carries envelope with status:fail and correct reason and message", () => {
+        const err = new ScriptError("api_error", "something went wrong");
+        expect(err.envelope.status).toBe("fail");
+        expect(err.envelope.result).toBeNull();
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.reason).toBe("api_error");
+        expect(err.envelope.error.message).toBe("something went wrong");
+    });
+
+    test("carries envelope with provided details", () => {
+        const err = new ScriptError("api_error", "msg", { details: { foo: "bar" } });
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.details).toEqual({ foo: "bar" });
+    });
+
+    test("carries envelope with empty details when none provided", () => {
+        const err = new ScriptError("internal_error", "msg");
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.details).toEqual({});
+    });
+
+    test("accepts TExtra reason string", () => {
+        const err = new ScriptError<"gates_failed">("gates_failed", "Quality gates failed", { exitCode: 1 });
+        expect(err.reason).toBe("gates_failed");
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.reason).toBe("gates_failed");
     });
 });
 
@@ -51,6 +79,13 @@ describe("ScriptArgsError", () => {
         const err = new ScriptArgsError("bad input");
         expect(err.name).toBe("ScriptArgsError");
     });
+
+    test("carries envelope with reason invalid_args", () => {
+        const err = new ScriptArgsError("bad input");
+        expect(err.envelope.status).toBe("fail");
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.reason).toBe("invalid_args");
+    });
 });
 
 describe("ConfigError", () => {
@@ -72,6 +107,13 @@ describe("ConfigError", () => {
     test("name is 'ConfigError'", () => {
         const err = new ConfigError("file not found");
         expect(err.name).toBe("ConfigError");
+    });
+
+    test("carries envelope with reason invalid_config", () => {
+        const err = new ConfigError("file not found");
+        expect(err.envelope.status).toBe("fail");
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.reason).toBe("invalid_config");
     });
 });
 
@@ -142,6 +184,13 @@ describe("ScriptShellError", () => {
         const rawStderr = "fatal: not a git repository\n";
         const err = new ScriptShellError("git status", 128, "", rawStderr);
         expect(err.verboseStderr).toBe(rawStderr);
+    });
+
+    test("carries envelope with reason shell_error", () => {
+        const err = new ScriptShellError("git status", 1, "", "");
+        expect(err.envelope.status).toBe("fail");
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.reason).toBe("shell_error");
     });
 });
 
@@ -226,5 +275,13 @@ describe("ScriptZodValidationError", () => {
         const zodErr = makeZodError([{ path: ["x"], message: "bad" }]);
         const err = new ScriptZodValidationError("ctx", zodErr, null);
         expect(err.exitCode).toBe(1);
+    });
+
+    test("carries envelope with reason validation_error", () => {
+        const zodErr = makeZodError([{ path: ["x"], message: "bad" }]);
+        const err = new ScriptZodValidationError("ctx", zodErr, null);
+        expect(err.envelope.status).toBe("fail");
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.reason).toBe("validation_error");
     });
 });

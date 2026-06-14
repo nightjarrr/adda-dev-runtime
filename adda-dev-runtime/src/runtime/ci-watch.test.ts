@@ -483,7 +483,7 @@ describe("CiWatchScript", () => {
             expect(errLines.join("")).toContain("gh pr checks");
         });
 
-        test("gh pr checks --json returns valid JSON with wrong schema — exits 1 with message on stderr, no envelope", async () => {
+        test("gh pr checks --json returns valid JSON with wrong schema — exits 1 with message on stderr, validation_error envelope", async () => {
             const { deps, outLines, errLines } = makeMockDeps({
                 runQueue: [
                     makeShellResult(""), // gh pr checks --watch
@@ -494,7 +494,10 @@ describe("CiWatchScript", () => {
             const code = await script.run(["bun", "ci-watch.ts", "pr", "42"]);
             expect(code).toBe(1);
             expect(errLines.join("")).toContain("unexpected gh pr checks output");
-            expect(outLines).toHaveLength(0);
+            const out = getStdoutJson(outLines);
+            expect(out.status).toBe("fail");
+            if (out.status !== "fail") throw new Error("expected fail");
+            expect(out.error.reason).toBe("validation_error");
         });
     });
 
@@ -732,7 +735,7 @@ describe("CiWatchScript", () => {
             expect(stderr).toContain("Error:");
         });
 
-        test("valid JSON that fails RunListSchema — exits 1 with message on stderr, no envelope", async () => {
+        test("valid JSON that fails RunListSchema — exits 1 with message on stderr, validation_error envelope", async () => {
             // An object instead of an array fails the schema
             const { deps, errLines, outLines } = makeMockDeps({
                 runQueue: [
@@ -743,7 +746,10 @@ describe("CiWatchScript", () => {
             const code = await script.run(["bun", "ci-watch.ts", "push", "--commit", "sha-bad-schema"]);
             expect(code).toBe(1);
             expect(errLines.join("")).toContain("unexpected gh run list output");
-            expect(outLines).toHaveLength(0);
+            const out = getStdoutJson(outLines);
+            expect(out.status).toBe("fail");
+            if (out.status !== "fail") throw new Error("expected fail");
+            expect(out.error.reason).toBe("validation_error");
         });
 
         test("empty string run list — returns empty array without throwing (exits 1 from timeout, not parse error)", async () => {
