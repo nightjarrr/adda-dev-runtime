@@ -44,10 +44,12 @@ if (import.meta.main)
 
 **`run(argv)`** (implemented in `ScriptBase`):
 1. Slices `argv` past the interpreter/script entries
-2. Parses args via `util.parseArgs` using `argDefinitions()`
+2. Parses args via `util.parseArgs` using `argDefinitions()`; on failure wraps the error in `ScriptArgsError`, emits its envelope, and returns 2
 3. Calls `validateArgs()` to produce typed `TArgs`
 4. Calls `execute(args)` with the validated result
-5. Returns exit code
+5. On any `ScriptError` (including from steps 3–4): emits its envelope and returns its exit code
+6. On any other exception: emits an `internal_error` envelope and returns 1
+7. On success: returns 0
 
 **`import.meta.main` convention:** The `import.meta.main` block cannot be exercised in unit tests and will appear as uncovered in coverage reports.
 
@@ -101,7 +103,8 @@ const parsed = EnvelopeSchema.safeParse(parseJson(stdout));
 
 ### Dual signal: exit code and status
 
-Exit code and `status` always agree and serve different consumers:
+Every code path through `run()` emits exactly one envelope. Exit code and `status` always
+agree and serve different consumers:
 - Exit code → shell / subprocess layer (`exitCode !== 0` pre-check before parsing)
 - `status` → JSON schema layer (Zod discriminated union, TypeScript narrowing)
 
@@ -109,17 +112,25 @@ Exit code and `status` always agree and serve different consumers:
 
 Scripts implement domain errors as a `ScriptError<TReason>` subclass. `ScriptBase.run()`
 catches any `ScriptError` and auto-emits its envelope — no manual emit at error sites.
+Unexpected non-`ScriptError` exceptions are caught and emitted as `reason: "internal_error"`.
 Success paths call `this.emitOk(...)` once and return.
+
+**Reason types:** `BaseReason` covers general error categories (`invalid_args`, `missing_env`,
+`api_error`, `validation_error`, `shell_error`, `internal_error`, `invalid_config`,
+`ambiguous_result`). `GithubReason` covers GitHub API errors (`repo_not_found`,
+`issue_not_found`, `pr_not_found`, `thread_not_found`, `not_a_thread`) — use it in any
+script that calls the GitHub API. Both are exported from `@adda/lib`.
 
 ```typescript
 import { ScriptError } from "@adda/lib";
-import type { BaseReason } from "@adda/lib";
+import type { BaseReason, GithubReason } from "@adda/lib";
 
-type MyReason = BaseReason | "repo_not_found";
+type MyReason = BaseReason | GithubReason | "quota_exceeded";
 class MyScriptError extends ScriptError<MyReason> {}
 
-// Error sites — throw the subclass directly:
+// Error sites — throw the subclass directly; pass details for structured extra context:
 throw new MyScriptError("repo_not_found", `repo ${owner}/${repo} not found`);
+throw new MyScriptError("quota_exceeded", "rate limit hit", { details: { retryAfter: 60 } });
 // Success sites — pass the result object:
 this.emitOk<MyResult>({ id: "...", name: "..." });
 return;
