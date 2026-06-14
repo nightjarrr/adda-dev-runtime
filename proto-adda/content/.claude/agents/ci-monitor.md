@@ -37,12 +37,12 @@ Run the exact invocation from Step 1. Call the Bash tool immediately — permiss
 ci-watch stdout (all modes, JSON — unified envelope):
 ```
 // exit 0 — CI passed
-{ "status": "ok", "result": { "conclusion": "success", "elapsed_seconds": 42 }, "error": null }
+{ "status": "ok", "result": { "elapsed_seconds": 42 }, "error": null }
 
 // exit 1 — CI failed (runs data in error.details)
 { "status": "fail", "result": null,
   "error": { "reason": "ci_failed", "message": "CI runs failed",
-             "details": { "conclusion": "failure", "elapsed_seconds": 42,
+             "details": { "elapsed_seconds": 42,
                           "runs": [{ "runId": "...", "event": "...", "url": "...", "conclusion": "...", "logFile": "/tmp/..." }] } } }
 
 // exit 1 or 2 — script error (arg/infra)
@@ -50,9 +50,11 @@ ci-watch stdout (all modes, JSON — unified envelope):
   "error": { "reason": "invalid_args"|"api_error"|"validation_error"|..., "message": "...", "details": {} } }
 ```
 
+Note: `runs[].conclusion` carries the per-run GitHub terminal state (e.g. `"failure"`, `"cancelled"`, `"timed_out"`).
+
 ### Step 3 — On exit 0
 
-Parse envelope. If `status: "ok"` and `result.conclusion === "success"`, emit the success result (see Output section) and terminate. If stdout is not valid envelope JSON, emit the stderr content as a dispatch error and terminate.
+Parse envelope. If `status: "ok"`, emit the success result (see Output section) and terminate. If stdout is not valid envelope JSON, emit the stderr content as a dispatch error and terminate.
 
 ### Step 4 — On non-zero exit
 

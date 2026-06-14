@@ -102,7 +102,7 @@ interface RunRecordShape {
 }
 
 type CiWatchEnvelope =
-    | { status: "ok"; result: { conclusion: "success"; elapsed_seconds: number }; error: null }
+    | { status: "ok"; result: { elapsed_seconds: number }; error: null }
     | {
           status: "fail";
           result: null;
@@ -194,8 +194,6 @@ describe("CiWatchScript", () => {
             expect(runCalls[1]).toContain(sha);
             const out = getStdoutJson(outLines);
             expect(out.status).toBe("ok");
-            if (out.status !== "ok") throw new Error("expected ok");
-            expect(out.result.conclusion).toBe("success");
         });
 
         test("--branch returns empty SHA — exits 2", async () => {
@@ -416,7 +414,6 @@ describe("CiWatchScript", () => {
             const out = getStdoutJson(outLines);
             expect(out.status).toBe("ok");
             if (out.status !== "ok") throw new Error("expected ok");
-            expect(out.result.conclusion).toBe("success");
             expect(out.result.elapsed_seconds).toBeGreaterThanOrEqual(0);
         });
     });
@@ -447,7 +444,6 @@ describe("CiWatchScript", () => {
             expect(out.status).toBe("fail");
             if (out.status !== "fail") throw new Error("expected fail");
             expect(out.error.reason).toBe("ci_failed");
-            expect(out.error.details.conclusion).toBe("failure");
             expect(typeof out.error.details.elapsed_seconds).toBe("number");
 
             const runs = out.error.details.runs as RunRecordShape[];
@@ -530,7 +526,6 @@ describe("CiWatchScript", () => {
             const out = getStdoutJson(outLines);
             expect(out.status).toBe("ok");
             if (out.status !== "ok") throw new Error("expected ok");
-            expect(out.result.conclusion).toBe("success");
             expect(out.result.elapsed_seconds).toBeGreaterThanOrEqual(0);
         });
     });
@@ -564,7 +559,6 @@ describe("CiWatchScript", () => {
             expect(out.status).toBe("fail");
             if (out.status !== "fail") throw new Error("expected fail");
             expect(out.error.reason).toBe("ci_failed");
-            expect(out.error.details.conclusion).toBe("failure");
             expect(typeof out.error.details.elapsed_seconds).toBe("number");
             const runs = out.error.details.runs as RunRecordShape[];
             expect(runs).toHaveLength(1);
@@ -652,7 +646,6 @@ describe("CiWatchScript", () => {
             expect(out.status).toBe("fail");
             if (out.status !== "fail") throw new Error("expected fail");
             expect(out.error.reason).toBe("ci_failed");
-            expect(out.error.details.conclusion).toBe("failure");
             const runs = out.error.details.runs as RunRecordShape[];
             expect(runs).toHaveLength(0);
         });
@@ -686,7 +679,6 @@ describe("CiWatchScript", () => {
             const out = getStdoutJson(outLines);
             expect(out.status).toBe("ok");
             if (out.status !== "ok") throw new Error("expected ok");
-            expect(out.result.conclusion).toBe("success");
             expect(out.result.elapsed_seconds).toBeGreaterThanOrEqual(0);
         });
 

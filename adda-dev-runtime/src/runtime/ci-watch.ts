@@ -19,11 +19,11 @@ interface RunRecord {
     logFile: string;
 }
 
-// On success, result carries conclusion and elapsed_seconds.
+// On success, result carries elapsed_seconds.
 // On CI failure, the data moves to error.details (reason: "ci_failed").
 // Known gap: ScriptShellError from strict:true shell calls remains unstructured stderr — wrapping
 // every shell call is out of scope for this migration.
-type CiWatchResult = { conclusion: "success"; elapsed_seconds: number };
+type CiWatchResult = { elapsed_seconds: number };
 
 type CiWatchReason = BaseReason | "ci_failed";
 export class CiWatchError extends ScriptStructuredError<CiWatchReason> {}
@@ -167,13 +167,13 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         const getElapsed = () => Math.round((Date.now() - startMs) / 1000);
 
         if (failingRuns.length === 0) {
-            this.emitOk<CiWatchResult>({ conclusion: "success", elapsed_seconds: getElapsed() });
+            this.emitOk<CiWatchResult>({ elapsed_seconds: getElapsed() });
             return;
         }
 
         const runs = await this.collectFailingRuns(failingRuns);
         throw new CiWatchError("ci_failed", "CI runs failed", {
-            details: { conclusion: "failure", elapsed_seconds: getElapsed(), runs },
+            details: { elapsed_seconds: getElapsed(), runs },
         });
     }
 
@@ -215,7 +215,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
 
         // Phase 4 — emit result
         if (failingRunIdSet.size === 0 && !hasUnresolvableFailure) {
-            this.emitOk<CiWatchResult>({ conclusion: "success", elapsed_seconds: getElapsed() });
+            this.emitOk<CiWatchResult>({ elapsed_seconds: getElapsed() });
             return;
         }
 
@@ -223,7 +223,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         const runsWithConclusion = await Promise.all(failingRunIds.map((id) => this.fetchRunConclusion(id)));
         const runs = await this.collectFailingRuns(runsWithConclusion);
         throw new CiWatchError("ci_failed", "CI runs failed", {
-            details: { conclusion: "failure", elapsed_seconds: getElapsed(), runs },
+            details: { elapsed_seconds: getElapsed(), runs },
         });
     }
 
