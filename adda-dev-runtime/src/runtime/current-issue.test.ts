@@ -343,17 +343,13 @@ describe("CurrentIssueScript", () => {
     });
 
     describe("switch — resolve-issue-branch failures", () => {
-        test("resolve-issue-branch returns ambiguous (exit 1) — exits 1, fail envelope, subprocess stderr forwarded", async () => {
+        test("resolve-issue-branch exits non-zero — exits 1, shell_error envelope, subprocess stderr forwarded", async () => {
             const { deps, outLines, errLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
                     if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
                     if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
-                        return makeShellResult({
-                            stdout: makeResolveFailResponse("ambiguous_result", "multiple linked branches: a, b"),
-                            stderr: "ambiguity warning from resolve\n",
-                            exitCode: 1,
-                        });
+                        throw new ScriptShellError(command.join(" "), 1, "", "ambiguity warning from resolve\n");
                     }
                     return makeShellResult();
                 },
@@ -363,6 +359,7 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("fail");
+            expect(out.error as Record<string, unknown>).toMatchObject({ reason: "shell_error" });
             expect(errLines.join("")).toContain("ambiguity warning from resolve");
         });
 
@@ -875,7 +872,9 @@ describe("CurrentIssueScript", () => {
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("fail");
             const error = out.error as Record<string, unknown>;
-            expect(String(error.message)).toContain("shell command failed");
+            const details = error.details as Record<string, unknown>;
+            expect(String(details.cmd)).toContain("git checkout");
+            expect(String(details.stderr)).toContain("pathspec");
             expect(deleteFileMock).not.toHaveBeenCalled();
         });
 
