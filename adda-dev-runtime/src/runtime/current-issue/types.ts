@@ -59,6 +59,7 @@ export type CurrentIssueReason =
     | GithubReason
     | "dirty_tree"
     | "checkout_failed"
+    | "pull_failed"
     | "no_active_issue"
     | "hook_failed"
     | "resolve_failed"

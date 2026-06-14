@@ -75,6 +75,16 @@ export async function executeSwitch(
         );
     }
 
+    // Step 6a: Pull from origin to ensure local branch is up to date
+    const pullResult = await deps.shell.run(["git", "pull"], { strict: false });
+    if (pullResult.exitCode !== 0) {
+        throw new CurrentIssueError(
+            "pull_failed",
+            `git pull failed on '${branch}': ${pullResult.stderr.trim() || pullResult.stdout.trim()}`,
+            { verboseStderr: pullResult.stderr },
+        );
+    }
+
     // Step 7: Write state and emit success
     const issueState: IssueState = {
         id: issueId,
