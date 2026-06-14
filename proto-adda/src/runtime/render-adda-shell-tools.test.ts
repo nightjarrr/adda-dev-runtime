@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { FileReader, FileReaderDep, Shell, ShellDep, ShellResult, StdioDep } from "@adda/lib";
+import type { FileReader, FileReaderDep, FileWriter, FileWriterDep, Shell, ShellDep, ShellResult, StdioDep } from "@adda/lib";
 import {
     CONSTRAINED_PROBES,
     FALLBACK,
@@ -15,7 +15,9 @@ import {
 
 // --- Mock helpers ---
 
-type RenderAddaShellToolsDeps = FileReaderDep & ShellDep & StdioDep;
+type RenderAddaShellToolsDeps = FileReaderDep & FileWriterDep & ShellDep & StdioDep;
+
+const FAKE_OUTPUT_PATH = "/tmp/test-shell-tools.md";
 
 /**
  * All known probe names: used by tests that want a specific set to be present or absent.
@@ -27,14 +29,23 @@ function makeMockDeps(options: { fileContent?: string | Error; whichResults?: Re
     deps: RenderAddaShellToolsDeps;
     outLines: string[];
     errLines: string[];
+    writtenContent: { value: string };
 } {
     const outLines: string[] = [];
     const errLines: string[] = [];
+    const writtenContent = { value: "" };
 
     const mockFileReader: FileReader = {
         readFile: mock(async (_path: string): Promise<string> => {
             if (options.fileContent instanceof Error) throw options.fileContent;
             return options.fileContent ?? "";
+        }),
+    };
+
+    const mockFileWriter: FileWriter = {
+        writeFile: mock(async (_pattern: string, content: string): Promise<string> => {
+            writtenContent.value = content;
+            return FAKE_OUTPUT_PATH;
         }),
     };
 
@@ -57,6 +68,7 @@ function makeMockDeps(options: { fileContent?: string | Error; whichResults?: Re
 
     const deps: RenderAddaShellToolsDeps = {
         fileReader: mockFileReader,
+        fileWriter: mockFileWriter,
         shell: mockShell,
         stdio: {
             stdin: { text: mock(async () => "") },
@@ -73,7 +85,7 @@ function makeMockDeps(options: { fileContent?: string | Error; whichResults?: Re
         },
     };
 
-    return { deps, outLines, errLines };
+    return { deps, outLines, errLines, writtenContent };
 }
 
 /** All probes present (exit code 0). */
@@ -274,69 +286,93 @@ describe("RenderAddaShellTools", () => {
     test("scripting alternatives — bun in tools, python absent — renders updated use-bun section", async () => {
         const jsonl = '{"name":"bun","cmd":"bun run <file>","desc":"Scripting"}';
         // python absent (exit 1), everything else present
-        const { deps, outLines } = makeMockDeps({
+        const { deps, outLines, writtenContent } = makeMockDeps({
             fileContent: jsonl,
             whichResults: { ...allPresent(), python: 1 },
         });
-        const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
+        const code = await new RenderAddaShellTools(deps).run([
+            "bun",
+            "render-adda-shell-tools.ts",
+            "--output",
+            FAKE_OUTPUT_PATH,
+        ]);
         expect(code).toBe(0);
-        const out = outLines.join("");
-        expect(out).toContain(
+        expect(writtenContent.value).toContain(
             "**The following scripting runtimes are not available in this container — see the suggested alternative for each:**",
         );
-        expect(out).toContain("- `python`:");
-        expect(out).not.toContain("**Not available** (calls will result in `command not found`): `python`");
+        expect(writtenContent.value).toContain("- `python`:");
+        expect(writtenContent.value).not.toContain("**Not available** (calls will result in `command not found`): `python`");
+        const envelope = JSON.parse(outLines.join(""));
+        expect(envelope).toMatchObject({ status: "ok", result: { path: FAKE_OUTPUT_PATH }, error: null });
     });
 
     test("scripting absent grouped — bun not in tools, python+node absent — updated compact not-available line", async () => {
         // No bun in tools table, python and node absent
         const jsonl = '{"name":"rg","cmd":"rg <pattern>","desc":"Fast search"}';
-        const { deps, outLines } = makeMockDeps({
+        const { deps, outLines, writtenContent } = makeMockDeps({
             fileContent: jsonl,
             whichResults: { ...allPresent(), python: 1, node: 1 },
         });
-        const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
+        const code = await new RenderAddaShellTools(deps).run([
+            "bun",
+            "render-adda-shell-tools.ts",
+            "--output",
+            FAKE_OUTPUT_PATH,
+        ]);
         expect(code).toBe(0);
-        const out = outLines.join("");
-        expect(out).not.toContain("scripting runtimes are not available");
-        expect(out).toContain("**Not available** (calls will result in `command not found`):");
-        expect(out).toContain("`python`");
-        expect(out).toContain("`node`");
+        expect(writtenContent.value).not.toContain("scripting runtimes are not available");
+        expect(writtenContent.value).toContain("**Not available** (calls will result in `command not found`):");
+        expect(writtenContent.value).toContain("`python`");
+        expect(writtenContent.value).toContain("`node`");
+        const envelope = JSON.parse(outLines.join(""));
+        expect(envelope).toMatchObject({ status: "ok", result: { path: FAKE_OUTPUT_PATH }, error: null });
     });
 
     test("constrained present — su present — renders updated do-not-use section", async () => {
         const jsonl = '{"name":"rg","cmd":"rg <pattern>","desc":"Fast search"}';
         // su present (0), everything else absent (1) for constrained probes
-        const { deps, outLines } = makeMockDeps({
+        const { deps, outLines, writtenContent } = makeMockDeps({
             fileContent: jsonl,
             whichResults: { ...allAbsent(), su: 0 },
         });
-        const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
+        const code = await new RenderAddaShellTools(deps).run([
+            "bun",
+            "render-adda-shell-tools.ts",
+            "--output",
+            FAKE_OUTPUT_PATH,
+        ]);
         expect(code).toBe(0);
-        const out = outLines.join("");
-        expect(out).toContain("**The following tools will not work in this container environment:**");
-        expect(out).toContain("- `su`:");
-        expect(out).toContain("privilege escalation is disabled by container security policy");
+        expect(writtenContent.value).toContain("**The following tools will not work in this container environment:**");
+        expect(writtenContent.value).toContain("- `su`:");
+        expect(writtenContent.value).toContain("privilege escalation is disabled by container security policy");
+        const envelope = JSON.parse(outLines.join(""));
+        expect(envelope).toMatchObject({ status: "ok", result: { path: FAKE_OUTPUT_PATH }, error: null });
     });
 
     test("constrained absent — docker absent — updated compact not-available line includes docker", async () => {
         const jsonl = '{"name":"bun","cmd":"bun run <file>","desc":"Scripting"}';
         // docker absent, everything else present
-        const { deps, outLines } = makeMockDeps({
+        const { deps, outLines, writtenContent } = makeMockDeps({
             fileContent: jsonl,
             whichResults: { ...allPresent(), docker: 1 },
         });
-        const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
+        const code = await new RenderAddaShellTools(deps).run([
+            "bun",
+            "render-adda-shell-tools.ts",
+            "--output",
+            FAKE_OUTPUT_PATH,
+        ]);
         expect(code).toBe(0);
-        const out = outLines.join("");
-        expect(out).toContain("**Not available** (calls will result in `command not found`):");
-        expect(out).toContain("`docker`");
+        expect(writtenContent.value).toContain("**Not available** (calls will result in `command not found`):");
+        expect(writtenContent.value).toContain("`docker`");
+        const envelope = JSON.parse(outLines.join(""));
+        expect(envelope).toMatchObject({ status: "ok", result: { path: FAKE_OUTPUT_PATH }, error: null });
     });
 
     test("nominal container — bun+tools present, python/node absent, su/sudo/apt present, docker absent — all sections", async () => {
         const jsonl =
             '{"name":"bun","cmd":"bun run <file>","desc":"Scripting"}\n{"name":"rg","cmd":"rg <pattern>","desc":"Fast search"}';
-        const { deps, outLines } = makeMockDeps({
+        const { deps, outLines, writtenContent } = makeMockDeps({
             fileContent: jsonl,
             whichResults: {
                 // scripting probes: python, node absent; python3, pip, npm present
@@ -352,26 +388,32 @@ describe("RenderAddaShellTools", () => {
                 docker: 1,
             },
         });
-        const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
+        const code = await new RenderAddaShellTools(deps).run([
+            "bun",
+            "render-adda-shell-tools.ts",
+            "--output",
+            FAKE_OUTPUT_PATH,
+        ]);
         expect(code).toBe(0);
-        const out = outLines.join("");
         // tools table with intro
-        expect(out).toContain("Use the following tools — they are available in this container:");
-        expect(out).toContain("| `bun`");
-        expect(out).toContain("| `rg`");
+        expect(writtenContent.value).toContain("Use the following tools — they are available in this container:");
+        expect(writtenContent.value).toContain("| `bun`");
+        expect(writtenContent.value).toContain("| `rg`");
         // use-bun section for absent scripting tools
-        expect(out).toContain(
+        expect(writtenContent.value).toContain(
             "**The following scripting runtimes are not available in this container — see the suggested alternative for each:**",
         );
-        expect(out).toContain("- `python`:");
-        expect(out).toContain("- `node`:");
+        expect(writtenContent.value).toContain("- `python`:");
+        expect(writtenContent.value).toContain("- `node`:");
         // do-not-use section for present constrained tools
-        expect(out).toContain("**The following tools will not work in this container environment:**");
-        expect(out).toContain("- `su`:");
-        expect(out).toContain("- `sudo`:");
-        expect(out).toContain("- `apt`:");
+        expect(writtenContent.value).toContain("**The following tools will not work in this container environment:**");
+        expect(writtenContent.value).toContain("- `su`:");
+        expect(writtenContent.value).toContain("- `sudo`:");
+        expect(writtenContent.value).toContain("- `apt`:");
         // compact absent line for docker
-        expect(out).toContain("**Not available** (calls will result in `command not found`): `docker`");
+        expect(writtenContent.value).toContain("**Not available** (calls will result in `command not found`): `docker`");
+        const envelope = JSON.parse(outLines.join(""));
+        expect(envelope).toMatchObject({ status: "ok", result: { path: FAKE_OUTPUT_PATH }, error: null });
     });
 
     test("FALLBACK constant has expected value", () => {
@@ -382,69 +424,99 @@ describe("RenderAddaShellTools", () => {
 
     test("silent scripting — bun in tools, python present — no scripting section in output", async () => {
         const jsonl = '{"name":"bun","cmd":"bun run <file>","desc":"Scripting"}';
-        const { deps, outLines } = makeMockDeps({
+        const { deps, outLines, writtenContent } = makeMockDeps({
             fileContent: jsonl,
             whichResults: allPresent(),
         });
-        const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
+        const code = await new RenderAddaShellTools(deps).run([
+            "bun",
+            "render-adda-shell-tools.ts",
+            "--output",
+            FAKE_OUTPUT_PATH,
+        ]);
         expect(code).toBe(0);
-        const out = outLines.join("");
-        expect(out).not.toContain("scripting runtimes are not available");
+        expect(writtenContent.value).not.toContain("scripting runtimes are not available");
+        const envelope = JSON.parse(outLines.join(""));
+        expect(envelope).toMatchObject({ status: "ok", result: { path: FAKE_OUTPUT_PATH }, error: null });
     });
 
     test("renders tools table and absent section when both are present", async () => {
         const jsonl = '{"name":"rg","cmd":"rg <pattern>","desc":"Fast search"}';
-        const { deps, outLines } = makeMockDeps({
+        const { deps, outLines, writtenContent } = makeMockDeps({
             fileContent: jsonl,
             whichResults: { ...allAbsent(), ...Object.fromEntries(Object.keys(CONSTRAINED_PROBES).map((k) => [k, 0])) },
         });
-        const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
+        const code = await new RenderAddaShellTools(deps).run([
+            "bun",
+            "render-adda-shell-tools.ts",
+            "--output",
+            FAKE_OUTPUT_PATH,
+        ]);
         expect(code).toBe(0);
-        const out = outLines.join("");
-        expect(out).toContain("| `rg`");
+        expect(writtenContent.value).toContain("| `rg`");
         // scripting absent (no bun in tools) → compact line
-        expect(out).toContain("**Not available** (calls will result in `command not found`):");
+        expect(writtenContent.value).toContain("**Not available** (calls will result in `command not found`):");
+        const envelope = JSON.parse(outLines.join(""));
+        expect(envelope).toMatchObject({ status: "ok", result: { path: FAKE_OUTPUT_PATH }, error: null });
     });
 
     test("skips malformed lines in JSONL and renders valid entries", async () => {
         const jsonl =
             '{"name":"rg","cmd":"rg <pattern>","desc":"Fast search"}\nbad-line\n{"name":"jq","cmd":"jq .","desc":"JSON"}';
-        const { deps, outLines } = makeMockDeps({
+        const { deps, outLines, writtenContent } = makeMockDeps({
             fileContent: jsonl,
             whichResults: allPresent(),
         });
-        const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
+        const code = await new RenderAddaShellTools(deps).run([
+            "bun",
+            "render-adda-shell-tools.ts",
+            "--output",
+            FAKE_OUTPUT_PATH,
+        ]);
         expect(code).toBe(0);
-        const out = outLines.join("");
-        expect(out).toContain("| `rg`");
-        expect(out).toContain("| `jq`");
+        expect(writtenContent.value).toContain("| `rg`");
+        expect(writtenContent.value).toContain("| `jq`");
+        const envelope = JSON.parse(outLines.join(""));
+        expect(envelope).toMatchObject({ status: "ok", result: { path: FAKE_OUTPUT_PATH }, error: null });
     });
 
-    test("readFile failure produces warning text in stdout", async () => {
-        const { deps, outLines } = makeMockDeps({
+    test("readFile failure produces warning text in file", async () => {
+        const { deps, outLines, writtenContent } = makeMockDeps({
             fileContent: new Error("ENOENT"),
             whichResults: allPresent(),
         });
-        const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
+        const code = await new RenderAddaShellTools(deps).run([
+            "bun",
+            "render-adda-shell-tools.ts",
+            "--output",
+            FAKE_OUTPUT_PATH,
+        ]);
         expect(code).toBe(0);
-        const out = outLines.join("");
         const expectedWarning =
             "Warning: /run/adda/.adda-shell-tools.jsonl could not be read — the container may not have bootstrapped correctly. If you encounter unexpected tool availability issues, consider mentioning this to PO.";
-        expect(out).toContain(expectedWarning);
+        expect(writtenContent.value).toContain(expectedWarning);
+        const envelope = JSON.parse(outLines.join(""));
+        expect(envelope).toMatchObject({ status: "ok", result: { path: FAKE_OUTPUT_PATH }, error: null });
     });
 
-    test("malformed JSONL produces warning text in stdout", async () => {
+    test("malformed JSONL produces warning text in file", async () => {
         const jsonl =
             '{"name":"rg","cmd":"rg <pattern>","desc":"Fast search"}\nnot-valid-json\n{"name":"jq","cmd":"jq .","desc":"JSON"}';
-        const { deps, outLines } = makeMockDeps({
+        const { deps, outLines, writtenContent } = makeMockDeps({
             fileContent: jsonl,
             whichResults: allPresent(),
         });
-        const code = await new RenderAddaShellTools(deps).run(["bun", "render-adda-shell-tools.ts"]);
+        const code = await new RenderAddaShellTools(deps).run([
+            "bun",
+            "render-adda-shell-tools.ts",
+            "--output",
+            FAKE_OUTPUT_PATH,
+        ]);
         expect(code).toBe(0);
-        const out = outLines.join("");
         const expectedWarning =
             "Warning: some entries in /run/adda/.adda-shell-tools.jsonl were skipped due to malformed content. If tool availability seems incorrect, consider asking PO for guidance.";
-        expect(out).toContain(expectedWarning);
+        expect(writtenContent.value).toContain(expectedWarning);
+        const envelope = JSON.parse(outLines.join(""));
+        expect(envelope).toMatchObject({ status: "ok", result: { path: FAKE_OUTPUT_PATH }, error: null });
     });
 });
