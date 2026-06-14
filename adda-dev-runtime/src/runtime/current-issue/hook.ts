@@ -1,6 +1,6 @@
 import type { FileSysDep, ShellDep } from "@adda/lib";
-import { ScriptStructuredError } from "@adda/lib";
 
+import { CurrentIssueError } from "./types";
 import type { HookResult } from "./types";
 
 export const ADDA_INIT_HOOK_PATH = "/workspace/.adda-init.sh";
@@ -14,7 +14,7 @@ export async function runRepoInitHook(
     const result = await deps.shell.run(["bash", ADDA_INIT_HOOK_PATH], { strict: false });
     const hookOutput = result.stdout + result.stderr;
     if (result.exitCode !== 0)
-        throw new ScriptStructuredError("hook_failed", "repo init hook failed", {
+        throw new CurrentIssueError("hook_failed", "repo init hook failed", {
             details: { hook: { status: "failed" as const, output: hookOutput } },
         });
     return { status: "ok", output: hookOutput };

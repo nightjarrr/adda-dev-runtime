@@ -349,7 +349,7 @@ describe("CurrentIssueScript", () => {
                     if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
                     if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({
-                            stdout: makeResolveFailResponse("ambiguous", "multiple linked branches: a, b"),
+                            stdout: makeResolveFailResponse("ambiguous_result", "multiple linked branches: a, b"),
                             stderr: "ambiguity warning from resolve\n",
                             exitCode: 1,
                         });

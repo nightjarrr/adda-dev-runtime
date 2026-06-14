@@ -427,7 +427,7 @@ describe("PrReviewThreadsScript", () => {
     // pr mode: graphql failure
     // ---------------------------------------------------------------
     describe("pr mode: graphql failure", () => {
-        test("graphql returns non-zero exit — exits 1, graphql_error envelope on stdout, no file", async () => {
+        test("graphql returns non-zero exit — exits 1, api_error envelope on stdout, no file", async () => {
             const { deps, outLines, errLines } = makeMockDeps({
                 runQueue: [makeShellResult("", 1, "Could not resolve to a PullRequest with the number of 999999")],
             });
@@ -435,13 +435,13 @@ describe("PrReviewThreadsScript", () => {
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("fail");
-            expect((out.error as Record<string, unknown>)?.reason).toBe("graphql_error");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("api_error");
             expect(out).not.toHaveProperty("pr");
             // gh's stderr must be forwarded to the script's stderr
             expect(errLines.join("")).toContain("Could not resolve to a PullRequest with the number of 999999");
         });
 
-        test("graphql failure on pagination page — exits 1, graphql_error envelope on stdout", async () => {
+        test("graphql failure on pagination page — exits 1, api_error envelope on stdout", async () => {
             const page1 = makePrThreadsResponse([makeThread()], 2, true, "cursor1");
             const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(page1), makeShellResult("", 1, "GraphQL error on page 2")],
@@ -450,7 +450,7 @@ describe("PrReviewThreadsScript", () => {
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("fail");
-            expect((out.error as Record<string, unknown>)?.reason).toBe("graphql_error");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("api_error");
         });
     });
 
@@ -458,7 +458,7 @@ describe("PrReviewThreadsScript", () => {
     // thread mode: graphql failure
     // ---------------------------------------------------------------
     describe("thread mode: graphql failure", () => {
-        test("graphql returns non-zero exit — exits 1, graphql_error envelope on stdout, no file", async () => {
+        test("graphql returns non-zero exit — exits 1, api_error envelope on stdout, no file", async () => {
             const { deps, outLines, errLines } = makeMockDeps({
                 envVars: {},
                 runQueue: [makeShellResult("", 1, "Could not resolve to a node")],
@@ -467,7 +467,7 @@ describe("PrReviewThreadsScript", () => {
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("fail");
-            expect((out.error as Record<string, unknown>)?.reason).toBe("graphql_error");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("api_error");
             expect(out).not.toHaveProperty("thread");
             // gh's stderr must be forwarded to the script's stderr
             expect(errLines.join("")).toContain("Could not resolve to a node");

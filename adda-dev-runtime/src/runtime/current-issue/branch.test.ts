@@ -104,7 +104,7 @@ describe("executeBranchEnsure", () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({
-                    stdout: makeFailResponse("ambiguous", "multiple linked branches: a, b"),
+                    stdout: makeFailResponse("ambiguous_result", "multiple linked branches: a, b"),
                     exitCode: 0,
                 });
             }
@@ -115,7 +115,7 @@ describe("executeBranchEnsure", () => {
         expect(err).toBeInstanceOf(ScriptStructuredError);
         const envelope = (err as ScriptStructuredError).envelope;
         expect(envelope.status).toBe("fail");
-        expect(envelope.error?.reason).toBe("ambiguous");
+        expect(envelope.error?.reason).toBe("ambiguous_result");
     });
 
     test("feature_branch + current matches — returns success envelope with action: none", async () => {
@@ -325,7 +325,7 @@ describe("executeBranchVerify", () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({
-                    stdout: makeFailResponse("ambiguous", "multiple linked branches: a, b"),
+                    stdout: makeFailResponse("ambiguous_result", "multiple linked branches: a, b"),
                     exitCode: 0,
                 });
             }
@@ -336,6 +336,6 @@ describe("executeBranchVerify", () => {
         expect(err).toBeInstanceOf(ScriptStructuredError);
         const envelope = (err as ScriptStructuredError).envelope;
         expect(envelope.status).toBe("fail");
-        expect(envelope.error?.reason).toBe("ambiguous");
+        expect(envelope.error?.reason).toBe("ambiguous_result");
     });
 });

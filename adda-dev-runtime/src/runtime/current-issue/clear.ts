@@ -1,7 +1,7 @@
 import type { FileSysDep, ScriptEnvelope, ShellDep } from "@adda/lib";
-import { ScriptStructuredError } from "@adda/lib";
 
 import { runRepoInitHook } from "./hook";
+import { CurrentIssueError } from "./types";
 import type { CurrentIssueResult, IssueStateStore } from "./types";
 import { EMPTY_ISSUE_VIEW } from "./types";
 
@@ -16,12 +16,12 @@ export async function executeClear(
 
     const statusResult = await deps.shell.run(["git", "status", "--porcelain"], { strict: false });
     if (statusResult.stdout.trim()) {
-        throw new ScriptStructuredError("dirty_tree", "working tree is dirty — commit or stash changes before clearing");
+        throw new CurrentIssueError("dirty_tree", "working tree is dirty — commit or stash changes before clearing");
     }
 
     const checkoutResult = await deps.shell.run(["git", "checkout", "main"], { strict: false });
     if (checkoutResult.exitCode !== 0) {
-        throw new ScriptStructuredError("checkout_failed", checkoutResult.stderr.trim() || "git checkout main failed");
+        throw new CurrentIssueError("checkout_failed", checkoutResult.stderr.trim() || "git checkout main failed");
     }
 
     await store.deleteState();

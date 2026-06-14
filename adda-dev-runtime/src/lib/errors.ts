@@ -8,7 +8,12 @@ export type BaseReason =
     | "api_error"
     | "validation_error"
     | "shell_error"
-    | "internal_error";
+    | "internal_error"
+    | "ambiguous_result";
+
+// GitHub bounded context — all domain-level errors arising from the GitHub API/graph,
+// not just the current intersection across scripts.
+export type GithubReason = "repo_not_found" | "issue_not_found" | "pr_not_found" | "thread_not_found" | "not_a_thread";
 
 export class ScriptError extends Error {
     readonly exitCode: number;
@@ -33,11 +38,11 @@ export class ScriptError extends Error {
     }
 }
 
-export class ScriptStructuredError extends ScriptError {
-    readonly envelope: ScriptEnvelope<never>;
+export class ScriptStructuredError<TExtra extends string = never> extends ScriptError {
+    readonly envelope: ScriptEnvelope<never, BaseReason | TExtra>;
 
     constructor(
-        reason: string,
+        reason: BaseReason | TExtra,
         message: string,
         {
             details = {},

@@ -385,7 +385,7 @@ describe("ResolveIssueBranchScript", () => {
             expect(out.status).toBe("fail");
             expect(out.result).toBeNull();
             const error = out.error as Record<string, unknown>;
-            expect(error.reason).toBe("ambiguous");
+            expect(error.reason).toBe("ambiguous_result");
         });
     });
 
@@ -481,7 +481,7 @@ describe("ResolveIssueBranchScript", () => {
             expect(out.status).toBe("fail");
             expect(out.result).toBeNull();
             const error = out.error as Record<string, unknown>;
-            expect(error.reason).toBe("ambiguous");
+            expect(error.reason).toBe("ambiguous_result");
         });
 
         test("closed PRs in timelineItems are ignored when counting open PRs", async () => {

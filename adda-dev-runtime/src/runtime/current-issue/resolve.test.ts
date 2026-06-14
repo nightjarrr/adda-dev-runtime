@@ -71,7 +71,7 @@ describe("resolveIssueBranch", () => {
     test("fail status with reason ambiguous carries verboseStderr and throws ScriptStructuredError", async () => {
         const { deps } = makeMockDeps(async () =>
             makeShellResult({
-                stdout: makeFailResponse("ambiguous", "multiple linked branches: a, b", { branches: ["a", "b"] }),
+                stdout: makeFailResponse("ambiguous_result", "multiple linked branches: a, b", { branches: ["a", "b"] }),
                 stderr: "ambiguous detail",
                 exitCode: 0,
             }),
