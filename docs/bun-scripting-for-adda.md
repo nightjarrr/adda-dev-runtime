@@ -84,20 +84,6 @@ errors, 1 for all others). `result` is always `null`. `error` carries:
 - `message` — human-readable description
 - `details` — script-specific extra context (may be empty `{}`)
 
-### Standard reason codes
-
-| Reason | Meaning | Exit |
-|---|---|---|
-| `invalid_args` | Argument validation failure | 2 |
-| `missing_env` | Required env var not set | 1 |
-| `api_error` | External API / shell call failed | 1 |
-| `repo_not_found` | GitHub repository not found | 1 |
-| `issue_not_found` | GitHub issue not found | 1 |
-| `validation_error` | Unexpected API response shape | 1 |
-| `ambiguous` | Multiple valid resolutions — caller cannot proceed | 1 |
-
-Scripts may define additional script-specific reason codes.
-
 ### Parsing
 
 Use `makeEnvelopeSchema` (from `@adda/lib`) with a Zod `discriminatedUnion` on `"status"` for one-step type-safe parsing:

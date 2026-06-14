@@ -15,12 +15,7 @@ const ResolveResultSchema = z.object({
 
 export const ResolveIssueBranchOutputSchema = makeEnvelopeSchema(ResolveResultSchema);
 
-export type ResolveIssueBranchData = {
-    issue_id: string;
-    resolution: "feature_branch" | "main";
-    branch: string;
-    pr: string;
-};
+export type ResolveIssueBranchData = z.infer<typeof ResolveResultSchema>;
 
 export async function resolveIssueBranch(deps: ShellDep, issueId: string): Promise<ResolveIssueBranchData> {
     const resolveResult = await deps.shell.run([RESOLVE_ISSUE_BRANCH_BIN, issueId], { strict: false });
