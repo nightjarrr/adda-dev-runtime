@@ -12,18 +12,18 @@ effort="$(printf '%s' "$stdin_json" | jq -r '.effort.level // empty' 2>/dev/null
 ctx_pct="$(printf '%s' "$stdin_json" | jq -r 'if .context_window.used_percentage then (.context_window.used_percentage | round | tostring) else empty end' 2>/dev/null)"
 
 output="$(/usr/local/libexec/adda-dev-runtime/bin/current-issue show 2>/dev/null)"
-id="$(printf '%s' "$output" | jq -r '.issue.id // empty' 2>/dev/null)"
+id="$(printf '%s' "$output" | jq -r '.result.issue.id // empty' 2>/dev/null)"
 
 if [[ -z "$id" ]]; then
     printf '\033[2;36m(no current issue)\033[0m\n'
     exit 0
 fi
 
-title="$(printf '%s' "$output" | jq -r '.issue.title // empty')"
-issue_type="$(printf '%s' "$output" | jq -r '.issue.type // empty')"
-phase="$(printf '%s' "$output" | jq -r '.issue.phase // empty')"
-state="$(printf '%s' "$output" | jq -r '.issue.state // empty')"
-pr="$(printf '%s' "$output" | jq -r '.issue.pr // empty')"
+title="$(printf '%s' "$output" | jq -r '.result.issue.title // empty')"
+issue_type="$(printf '%s' "$output" | jq -r '.result.issue.type // empty')"
+phase="$(printf '%s' "$output" | jq -r '.result.issue.phase // empty')"
+state="$(printf '%s' "$output" | jq -r '.result.issue.state // empty')"
+pr="$(printf '%s' "$output" | jq -r '.result.issue.pr // empty')"
 
 # Build right-side: model/effort part (always dark) + ctx part (colored by threshold)
 if [[ -n "$effort" ]]; then
