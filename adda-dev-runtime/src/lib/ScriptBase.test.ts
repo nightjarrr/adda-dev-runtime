@@ -244,4 +244,31 @@ describe("ScriptBase", () => {
             expect(code).toBe(2);
         });
     });
+
+    describe("emitOk", () => {
+        test("writes status:ok envelope JSON with result to stdout", async () => {
+            class EmitOkScript extends ScriptBase<StdioDep, ParsedArgs> {
+                protected argDefinitions(): Parameters<typeof parseArgs>[0] {
+                    return { options: {} };
+                }
+
+                protected validateArgs(parsed: ParsedArgs): ParsedArgs {
+                    return parsed;
+                }
+
+                protected async execute(_args: ParsedArgs): Promise<void> {
+                    this.emitOk<{ id: string; count: number }>({ id: "abc", count: 42 });
+                }
+            }
+
+            const { deps, outLines } = makeMockDeps();
+            const script = new EmitOkScript(deps);
+            const code = await script.run(["bun", "script.ts"]);
+            expect(code).toBe(0);
+            const out = JSON.parse(outLines.join("").trim());
+            expect(out.status).toBe("ok");
+            expect(out.result).toEqual({ id: "abc", count: 42 });
+            expect(out.error).toBeNull();
+        });
+    });
 });

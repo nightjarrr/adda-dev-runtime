@@ -153,28 +153,28 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
     protected async execute(args: CurrentIssueArgs): Promise<void> {
         switch (args.subcommand) {
             case "switch":
-                this.emit(await executeSwitch(args.issueId, args.skipRepoInit, this.deps, this));
+                this.emitOk(await executeSwitch(args.issueId, args.skipRepoInit, this.deps, this));
                 return;
             case "show":
-                this.emit(await executeShow(this));
+                this.emitOk(await executeShow(this));
                 return;
             case "sync":
-                this.emit(await executeSync(args.skipRepoInit, this.deps, this));
+                this.emitOk(await executeSync(args.skipRepoInit, this.deps, this));
                 return;
             case "clear":
-                this.emit(await executeClear(args.skipRepoInit, this.deps, this));
+                this.emitOk(await executeClear(args.skipRepoInit, this.deps, this));
                 return;
             case "get": {
-                const envelope = await executeShow(new SilentStore(this.deps)).catch(() => null);
-                if (envelope?.status === "ok" && envelope.result.issue) {
-                    const value = (envelope.result.issue as unknown as Record<string, string>)[args.field] ?? "";
+                const result = await executeShow(new SilentStore(this.deps)).catch(() => null);
+                if (result?.issue) {
+                    const value = (result.issue as unknown as Record<string, string>)[args.field] ?? "";
                     if (value) this.deps.stdio.stdout.write(value + "\n");
                 }
                 return;
             }
             case "branch":
-                if (args.mode === "ensure") this.emit(await executeBranchEnsure(this.deps, this));
-                else this.emit(await executeBranchVerify(this.deps, this));
+                if (args.mode === "ensure") this.emitOk(await executeBranchEnsure(this.deps, this));
+                else this.emitOk(await executeBranchVerify(this.deps, this));
                 return;
             default: {
                 throw new CurrentIssueError("invalid_args", `unknown subcommand: ${args.name}`, { exitCode: 2 });

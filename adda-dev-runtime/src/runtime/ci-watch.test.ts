@@ -93,10 +93,6 @@ function makeMockDeps(options: MockDepsOptions = {}): {
     return { deps, outLines, errLines, runCalls, runShCalls, sleepCalls, writtenFiles };
 }
 
-function getStdoutJson(outLines: string[]): CiWatchOutputShape {
-    return JSON.parse(outLines.join("").trim()) as CiWatchOutputShape;
-}
-
 interface RunRecordShape {
     runId: string;
     event: string;
@@ -105,9 +101,17 @@ interface RunRecordShape {
     logFile: string;
 }
 
-type CiWatchOutputShape =
-    | { conclusion: "success"; elapsed_seconds: number }
-    | { conclusion: "failure"; elapsed_seconds: number; runs: RunRecordShape[] };
+type CiWatchEnvelope =
+    | { status: "ok"; result: { conclusion: "success"; elapsed_seconds: number }; error: null }
+    | {
+          status: "fail";
+          result: null;
+          error: { reason: string; message: string; details: Record<string, unknown> };
+      };
+
+function getStdoutJson(outLines: string[]): CiWatchEnvelope {
+    return JSON.parse(outLines.join("").trim()) as CiWatchEnvelope;
+}
 
 // --- Reusable run data builders ---
 
@@ -122,18 +126,22 @@ describe("CiWatchScript", () => {
     // Argument validation
     // ---------------------------------------------------------------
     describe("argument validation", () => {
-        test("no args — exits 2", async () => {
-            const { deps } = makeMockDeps();
+        test("no args — exits 2 with invalid_args envelope", async () => {
+            const { deps, outLines } = makeMockDeps();
             const script = new CiWatchScript(deps);
             const code = await script.run(["bun", "ci-watch.ts"]);
             expect(code).toBe(2);
+            expect(outLines.join("")).toContain('"status":"fail"');
+            expect(outLines.join("")).toContain('"reason":"invalid_args"');
         });
 
-        test("unknown mode — exits 2", async () => {
-            const { deps } = makeMockDeps();
+        test("unknown mode — exits 2 with invalid_args envelope", async () => {
+            const { deps, outLines } = makeMockDeps();
             const script = new CiWatchScript(deps);
             const code = await script.run(["bun", "ci-watch.ts", "deploy"]);
             expect(code).toBe(2);
+            expect(outLines.join("")).toContain('"status":"fail"');
+            expect(outLines.join("")).toContain('"reason":"invalid_args"');
         });
 
         test("push with no option — exits 2", async () => {
@@ -185,7 +193,9 @@ describe("CiWatchScript", () => {
             expect(runCalls[0]).toEqual(["git", "ls-remote", "origin", "main"]);
             expect(runCalls[1]).toContain(sha);
             const out = getStdoutJson(outLines);
-            expect(out.conclusion).toBe("success");
+            expect(out.status).toBe("ok");
+            if (out.status !== "ok") throw new Error("expected ok");
+            expect(out.result.conclusion).toBe("success");
         });
 
         test("--branch returns empty SHA — exits 2", async () => {
@@ -353,15 +363,17 @@ describe("CiWatchScript", () => {
             expect(sleepCalls[0]).toBe(2000);
         });
 
-        test("poll timeout reached — exits 1 with error on stderr", async () => {
+        test("poll timeout reached — exits 1 with error on stderr and api_error envelope on stdout", async () => {
             // Need enough empty results to exhaust the timeout
             // POLL_TIMEOUT_MS=10000, POLL_INTERVAL_MS=2000 → 5 retries
             const emptyPolls = Array.from({ length: 6 }, () => makeShellResult("[]"));
-            const { deps, errLines } = makeMockDeps({ runQueue: emptyPolls });
+            const { deps, errLines, outLines } = makeMockDeps({ runQueue: emptyPolls });
             const script = new CiWatchScript(deps);
             const code = await script.run(["bun", "ci-watch.ts", "push", "--commit", "sha3"]);
             expect(code).toBe(1);
             expect(errLines.join("")).toContain("Error:");
+            expect(outLines.join("")).toContain('"status":"fail"');
+            expect(outLines.join("")).toContain('"reason":"api_error"');
         });
 
         test("run list returns malformed JSON — exits 1 with ScriptError", async () => {
@@ -402,8 +414,10 @@ describe("CiWatchScript", () => {
             expect(watchCalls[1]).toContain("222");
 
             const out = getStdoutJson(outLines);
-            expect(out.conclusion).toBe("success");
-            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
+            expect(out.status).toBe("ok");
+            if (out.status !== "ok") throw new Error("expected ok");
+            expect(out.result.conclusion).toBe("success");
+            expect(out.result.elapsed_seconds).toBeGreaterThanOrEqual(0);
         });
     });
 
@@ -411,7 +425,7 @@ describe("CiWatchScript", () => {
     // watchPush — one run fails
     // ---------------------------------------------------------------
     describe("watchPush — one run fails", () => {
-        test("collects url/event/conclusion/logFile, outputs failure JSON, exits 1, stderr has Error:", async () => {
+        test("collects url/event/conclusion/logFile, outputs ci_failed envelope, exits 1", async () => {
             const logContent = "step1 failed\nsome output here\n";
             const { deps, outLines, errLines, runShCalls } = makeMockDeps({
                 runQueue: [
@@ -430,16 +444,19 @@ describe("CiWatchScript", () => {
             expect(errLines.join("")).toContain("Error:");
 
             const out = getStdoutJson(outLines);
-            expect(out.conclusion).toBe("failure");
-            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
-            if (out.conclusion !== "failure") throw new Error("expected failure");
-            expect(out.runs).toHaveLength(1);
-            expect(out.runs[0].runId).toBe("333");
-            expect(out.runs[0].event).toBe("push");
-            expect(out.runs[0].url).toBe("https://github.com/repo/actions/runs/333");
-            // conclusion comes from fetchRunConclusion, not re-fetched in collectFailingRuns
-            expect(out.runs[0].conclusion).toBe("failure");
-            expect(out.runs[0].logFile).toMatch(/^\/tmp\/ci-watch-logs-test-uuid-\d+\.txt$/);
+            expect(out.status).toBe("fail");
+            if (out.status !== "fail") throw new Error("expected fail");
+            expect(out.error.reason).toBe("ci_failed");
+            expect(out.error.details.conclusion).toBe("failure");
+            expect(typeof out.error.details.elapsed_seconds).toBe("number");
+
+            const runs = out.error.details.runs as RunRecordShape[];
+            expect(runs).toHaveLength(1);
+            expect(runs[0].runId).toBe("333");
+            expect(runs[0].event).toBe("push");
+            expect(runs[0].url).toBe("https://github.com/repo/actions/runs/333");
+            expect(runs[0].conclusion).toBe("failure");
+            expect(runs[0].logFile).toMatch(/^\/tmp\/ci-watch-logs-test-uuid-\d+\.txt$/);
 
             // runSh called with gh run view <id> --log-failed (no redirect)
             expect(runShCalls[0]).toBe("gh run view 333 --log-failed");
@@ -494,8 +511,10 @@ describe("CiWatchScript", () => {
             expect(runCalls[1]).toEqual(["gh", "pr", "checks", "42", "--json", "name,state,link"]);
 
             const out = getStdoutJson(outLines);
-            expect(out.conclusion).toBe("success");
-            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
+            expect(out.status).toBe("ok");
+            if (out.status !== "ok") throw new Error("expected ok");
+            expect(out.result.conclusion).toBe("success");
+            expect(out.result.elapsed_seconds).toBeGreaterThanOrEqual(0);
         });
     });
 
@@ -503,7 +522,7 @@ describe("CiWatchScript", () => {
     // watchPr — some checks fail
     // ---------------------------------------------------------------
     describe("watchPr — some checks fail", () => {
-        test("extracts run IDs from .link via regex, outputs failure JSON, exits 1", async () => {
+        test("extracts run IDs from .link via regex, outputs ci_failed envelope, exits 1", async () => {
             const checksJson = JSON.stringify([
                 { name: "build", state: "FAILURE", link: "https://github.com/repo/actions/runs/500/jobs/1" },
                 { name: "test", state: "SUCCESS", link: "https://github.com/repo/actions/runs/501/jobs/2" },
@@ -525,13 +544,16 @@ describe("CiWatchScript", () => {
             expect(code).toBe(1);
 
             const out = getStdoutJson(outLines);
-            expect(out.conclusion).toBe("failure");
-            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
-            if (out.conclusion !== "failure") throw new Error("expected failure");
-            expect(out.runs).toHaveLength(1);
-            expect(out.runs[0].runId).toBe("500");
+            expect(out.status).toBe("fail");
+            if (out.status !== "fail") throw new Error("expected fail");
+            expect(out.error.reason).toBe("ci_failed");
+            expect(out.error.details.conclusion).toBe("failure");
+            expect(typeof out.error.details.elapsed_seconds).toBe("number");
+            const runs = out.error.details.runs as RunRecordShape[];
+            expect(runs).toHaveLength(1);
+            expect(runs[0].runId).toBe("500");
             // conclusion comes from fetchRunConclusion, not re-fetched in collectFailingRuns
-            expect(out.runs[0].conclusion).toBe("failure");
+            expect(runs[0].conclusion).toBe("failure");
         });
 
         test("deduplicates run IDs (two failing checks same run)", async () => {
@@ -556,11 +578,13 @@ describe("CiWatchScript", () => {
             expect(code).toBe(1);
 
             const out = getStdoutJson(outLines);
-            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
-            if (out.conclusion !== "failure") throw new Error("expected failure");
+            expect(out.status).toBe("fail");
+            if (out.status !== "fail") throw new Error("expected fail");
+            expect(out.error.reason).toBe("ci_failed");
+            const runs = out.error.details.runs as RunRecordShape[];
             // Only one run record even though two checks pointed to it
-            expect(out.runs).toHaveLength(1);
-            expect(out.runs[0].runId).toBe("600");
+            expect(runs).toHaveLength(1);
+            expect(runs[0].runId).toBe("600");
         });
 
         test("check with lowercase 'failure' state is treated as failing (case-insensitive)", async () => {
@@ -582,11 +606,12 @@ describe("CiWatchScript", () => {
             expect(code).toBe(1);
 
             const out = getStdoutJson(outLines);
-            expect(out.conclusion).toBe("failure");
-            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
-            if (out.conclusion !== "failure") throw new Error("expected failure");
-            expect(out.runs).toHaveLength(1);
-            expect(out.runs[0].runId).toBe("700");
+            expect(out.status).toBe("fail");
+            if (out.status !== "fail") throw new Error("expected fail");
+            expect(out.error.reason).toBe("ci_failed");
+            const runs = out.error.details.runs as RunRecordShape[];
+            expect(runs).toHaveLength(1);
+            expect(runs[0].runId).toBe("700");
         });
 
         test("link with no extractable run ID — warning on stderr, continues", async () => {
@@ -605,11 +630,14 @@ describe("CiWatchScript", () => {
             // Exits 1 because there are failing checks even if no run IDs could be extracted
             expect(code).toBe(1);
             expect(errLines.join("")).toContain("Warning:");
+
             const out = getStdoutJson(outLines);
-            expect(out.conclusion).toBe("failure");
-            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
-            if (out.conclusion !== "failure") throw new Error("expected failure");
-            expect(out.runs).toHaveLength(0);
+            expect(out.status).toBe("fail");
+            if (out.status !== "fail") throw new Error("expected fail");
+            expect(out.error.reason).toBe("ci_failed");
+            expect(out.error.details.conclusion).toBe("failure");
+            const runs = out.error.details.runs as RunRecordShape[];
+            expect(runs).toHaveLength(0);
         });
     });
 
@@ -639,11 +667,13 @@ describe("CiWatchScript", () => {
             expect(watchCalls[0]).toContain("801");
 
             const out = getStdoutJson(outLines);
-            expect(out.conclusion).toBe("success");
-            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
+            expect(out.status).toBe("ok");
+            if (out.status !== "ok") throw new Error("expected ok");
+            expect(out.result.conclusion).toBe("success");
+            expect(out.result.elapsed_seconds).toBeGreaterThanOrEqual(0);
         });
 
-        test("in_progress check that resolves to failure → gh run watch called, outputs failure JSON, exits 1", async () => {
+        test("in_progress check that resolves to failure → gh run watch called, outputs ci_failed envelope, exits 1", async () => {
             const checksJson = JSON.stringify([
                 { name: "build", state: "SUCCESS", link: "https://github.com/repo/actions/runs/802/jobs/1" },
                 { name: "test", state: "in_progress", link: "https://github.com/repo/actions/runs/803/jobs/2" },
@@ -669,12 +699,13 @@ describe("CiWatchScript", () => {
             expect(watchCalls[0]).toContain("803");
 
             const out = getStdoutJson(outLines);
-            expect(out.conclusion).toBe("failure");
-            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
-            if (out.conclusion !== "failure") throw new Error("expected failure");
-            expect(out.runs).toHaveLength(1);
-            expect(out.runs[0].runId).toBe("803");
-            expect(out.runs[0].conclusion).toBe("failure");
+            expect(out.status).toBe("fail");
+            if (out.status !== "fail") throw new Error("expected fail");
+            expect(out.error.reason).toBe("ci_failed");
+            const runs = out.error.details.runs as RunRecordShape[];
+            expect(runs).toHaveLength(1);
+            expect(runs[0].runId).toBe("803");
+            expect(runs[0].conclusion).toBe("failure");
         });
     });
 
@@ -695,9 +726,9 @@ describe("CiWatchScript", () => {
             expect(stderr).toContain("Error:");
         });
 
-        test("valid JSON that fails RunListSchema — throws ScriptZodValidationError (exits 1)", async () => {
+        test("valid JSON that fails RunListSchema — exits 1 with validation_error envelope", async () => {
             // An object instead of an array fails the schema
-            const { deps, errLines } = makeMockDeps({
+            const { deps, errLines, outLines } = makeMockDeps({
                 runQueue: [
                     makeShellResult('{"not":"an array"}'), // fetchPushRunIds: wrong shape
                 ],
@@ -708,6 +739,8 @@ describe("CiWatchScript", () => {
             const stderr = errLines.join("");
             expect(stderr).toContain("Error:");
             expect(stderr).toContain("unexpected gh run list output");
+            expect(outLines.join("")).toContain('"status":"fail"');
+            expect(outLines.join("")).toContain('"reason":"validation_error"');
         });
 
         test("empty string run list — returns empty array without throwing (exits 1 from timeout, not parse error)", async () => {
@@ -758,11 +791,13 @@ describe("CiWatchScript", () => {
             expect(writtenFiles.get(logFilePath)).toBe(logContent);
 
             const out = getStdoutJson(outLines);
-            expect(out.elapsed_seconds).toBeGreaterThanOrEqual(0);
-            if (out.conclusion !== "failure") throw new Error("expected failure");
-            expect(out.runs[0].logFile).toMatch(/^\/tmp\/ci-watch-logs-test-uuid-\d+\.txt$/);
+            expect(out.status).toBe("fail");
+            if (out.status !== "fail") throw new Error("expected fail");
+            expect(out.error.reason).toBe("ci_failed");
+            const runs = out.error.details.runs as RunRecordShape[];
+            expect(runs[0].logFile).toMatch(/^\/tmp\/ci-watch-logs-test-uuid-\d+\.txt$/);
             // conclusion in output comes from fetchRunConclusion, not a re-fetch
-            expect(out.runs[0].conclusion).toBe("failure");
+            expect(runs[0].conclusion).toBe("failure");
         });
     });
 });

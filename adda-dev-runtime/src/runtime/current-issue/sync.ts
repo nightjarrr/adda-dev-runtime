@@ -1,4 +1,4 @@
-import type { EnvDep, FileSysDep, ScriptEnvelope, ShellDep } from "@adda/lib";
+import type { EnvDep, FileSysDep, ShellDep } from "@adda/lib";
 
 import { executeSwitch } from "./switch";
 import { CurrentIssueError } from "./types";
@@ -8,7 +8,7 @@ export async function executeSync(
     skipRepoInit: boolean,
     deps: ShellDep & EnvDep & FileSysDep,
     store: IssueStateStore,
-): Promise<ScriptEnvelope<CurrentIssueResult>> {
+): Promise<CurrentIssueResult> {
     const state = await store.readState();
     if (!state || !state.id) {
         throw new CurrentIssueError("no_active_issue", "no active issue to sync");

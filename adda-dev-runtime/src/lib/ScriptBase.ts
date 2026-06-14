@@ -17,7 +17,11 @@ export abstract class ScriptBase<TDeps extends StdioDep, TArgs> {
 
     protected abstract execute(args: TArgs): Promise<void>;
 
-    protected emit<T = unknown>(value: T): void {
+    protected emitOk<T>(result: T): void {
+        this.emit({ status: "ok", result, error: null });
+    }
+
+    private emit<T = unknown>(value: T): void {
         this.deps.stdio.stdout.write(`${JSON.stringify(value)}\n`);
     }
 

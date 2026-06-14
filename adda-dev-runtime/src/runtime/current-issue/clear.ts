@@ -1,4 +1,4 @@
-import type { FileSysDep, ScriptEnvelope, ShellDep } from "@adda/lib";
+import type { FileSysDep, ShellDep } from "@adda/lib";
 
 import { runRepoInitHook } from "./hook";
 import { CurrentIssueError } from "./types";
@@ -9,9 +9,9 @@ export async function executeClear(
     skipRepoInit: boolean,
     deps: ShellDep & FileSysDep,
     store: IssueStateStore,
-): Promise<ScriptEnvelope<CurrentIssueResult>> {
+): Promise<CurrentIssueResult> {
     if (!(await store.stateExists())) {
-        return { status: "ok", result: { issue: EMPTY_ISSUE_VIEW, details: { resolution: "no-op" } }, error: null };
+        return { issue: EMPTY_ISSUE_VIEW, details: { resolution: "no-op" } };
     }
 
     const statusResult = await deps.shell.run(["git", "status", "--porcelain"], { strict: false });
@@ -26,9 +26,5 @@ export async function executeClear(
 
     await store.deleteState();
     const hook = await runRepoInitHook(deps, skipRepoInit);
-    return {
-        status: "ok",
-        result: { issue: EMPTY_ISSUE_VIEW, details: { branch: "main", resolution: "main", hook } },
-        error: null,
-    };
+    return { issue: EMPTY_ISSUE_VIEW, details: { branch: "main", resolution: "main", hook } };
 }

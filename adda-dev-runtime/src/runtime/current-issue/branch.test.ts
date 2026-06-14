@@ -118,7 +118,7 @@ describe("executeBranchEnsure", () => {
         expect(envelope.error?.reason).toBe("ambiguous_result");
     });
 
-    test("feature_branch + current matches — returns success envelope with action: none", async () => {
+    test("feature_branch + current matches — returns result with action: none", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeOkResponse("feature_branch", "chore/270-my-branch") });
@@ -130,10 +130,8 @@ describe("executeBranchEnsure", () => {
         });
         const store = makeMockStore();
         const result = await executeBranchEnsure(deps, store);
-        expect(result.status).toBe("ok");
-        if (result.status !== "ok") throw new Error("expected ok");
-        expect(result.result.details.action).toBe("none");
-        expect(result.result.details.branch).toBe("chore/270-my-branch");
+        expect(result.details.action).toBe("none");
+        expect(result.details.branch).toBe("chore/270-my-branch");
     });
 
     test("feature_branch + current doesn't match — throws ScriptStructuredError with expected branch info", async () => {
@@ -169,7 +167,7 @@ describe("executeBranchEnsure", () => {
         expect(err.message).toContain("some-other-branch");
     });
 
-    test("main + current is main, normal title — returns success envelope with action: created, correct branch name", async () => {
+    test("main + current is main, normal title — returns result with action: created, correct branch name", async () => {
         const ghDevelopCalls: string[][] = [];
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
@@ -186,17 +184,15 @@ describe("executeBranchEnsure", () => {
         });
         const store = makeMockStore();
         const result = await executeBranchEnsure(deps, store);
-        expect(result.status).toBe("ok");
-        if (result.status !== "ok") throw new Error("expected ok");
-        expect(result.result.details.action).toBe("created");
-        expect(result.result.details.branch).toBe("chore/270-branch-lifecycle-tooling-for-sdlc-roles");
+        expect(result.details.action).toBe("created");
+        expect(result.details.branch).toBe("chore/270-branch-lifecycle-tooling-for-sdlc-roles");
         expect(ghDevelopCalls.length).toBe(1);
         expect(ghDevelopCalls[0]).toContain("chore/270-branch-lifecycle-tooling-for-sdlc-roles");
         expect(ghDevelopCalls[0]).toContain("270");
         expect(ghDevelopCalls[0]).toContain("--checkout");
     });
 
-    test("main + current is main, degenerate title (all Unicode) — returns success with action: created, warning present", async () => {
+    test("main + current is main, degenerate title (all Unicode) — returns result with action: created, warning present", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeOkResponse("main") });
@@ -208,11 +204,9 @@ describe("executeBranchEnsure", () => {
         });
         const store = makeMockStore({ ...DEFAULT_STATE, title: "😀🎉✨" });
         const result = await executeBranchEnsure(deps, store);
-        expect(result.status).toBe("ok");
-        if (result.status !== "ok") throw new Error("expected ok");
-        expect(result.result.details.action).toBe("created");
-        expect(typeof result.result.details.warning).toBe("string");
-        expect(String(result.result.details.branch)).toMatch(/^chore\/270-[a-z0-9]{8}$/);
+        expect(result.details.action).toBe("created");
+        expect(typeof result.details.warning).toBe("string");
+        expect(String(result.details.branch)).toMatch(/^chore\/270-[a-z0-9]{8}$/);
     });
 
     test("gh issue develop fails — error carries verboseStderr and throws ScriptStructuredError", async () => {
@@ -287,7 +281,7 @@ describe("executeBranchVerify", () => {
         expect(err.message).toContain("no feature branch linked");
     });
 
-    test("feature_branch + matches current — returns success envelope with branch", async () => {
+    test("feature_branch + matches current — returns result with branch", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
                 return makeShellResult({ stdout: makeOkResponse("feature_branch", "chore/270-my-branch") });
@@ -299,9 +293,7 @@ describe("executeBranchVerify", () => {
         });
         const store = makeMockStore();
         const result = await executeBranchVerify(deps, store);
-        expect(result.status).toBe("ok");
-        if (result.status !== "ok") throw new Error("expected ok");
-        expect(result.result.details.branch).toBe("chore/270-my-branch");
+        expect(result.details.branch).toBe("chore/270-my-branch");
     });
 
     test("feature_branch + doesn't match current — throws ScriptStructuredError with expected/actual branch", async () => {
