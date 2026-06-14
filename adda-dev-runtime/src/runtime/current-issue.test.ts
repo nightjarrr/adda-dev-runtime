@@ -432,6 +432,31 @@ describe("CurrentIssueScript", () => {
         });
     });
 
+    describe("switch — git pull failure", () => {
+        test("git pull fails — exits 1, fail envelope, state file not written", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
+                        return makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/28-test", "42") });
+                    }
+                    if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
+                    if (command[0] === "git" && command[1] === "pull") {
+                        return makeShellResult({ stdout: "", stderr: "fatal: couldn't find remote ref HEAD", exitCode: 1 });
+                    }
+                    return makeShellResult();
+                },
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
+            expect(code).toBe(1);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("fail");
+            expect(deps.fileWriter.writeFile).not.toHaveBeenCalled();
+        });
+    });
+
     describe("switch — success paths", () => {
         test("feature_branch resolution — exits 0, ok envelope with branch and resolution", async () => {
             const { deps, outLines } = makeMockDeps({
