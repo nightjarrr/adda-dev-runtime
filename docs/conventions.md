@@ -57,6 +57,7 @@ import { defaultDeps, ScriptArgsError, ScriptBase } from "@adda/lib";
 
 type ExampleDeps = ShellDep & StdioDep;
 type ExampleArgs = { target: string };
+type ExampleResult = { output: string };
 
 export class ExampleScript extends ScriptBase<ExampleDeps, ExampleArgs> {
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
@@ -77,7 +78,7 @@ export class ExampleScript extends ScriptBase<ExampleDeps, ExampleArgs> {
 
     protected async execute(args: ExampleArgs): Promise<void> {
         const result = await this.deps.shell.run(["sometool", args.target]);
-        this.deps.stdio.stdout.write(result.stdout);
+        this.emitOk<ExampleResult>({ output: result.stdout.trim() });
     }
 }
 
@@ -93,8 +94,7 @@ if (import.meta.main)
   constructor accepts `TDeps` directly — used for test injection.
 - `strict: true` in `argDefinitions()` causes `parseArgs` to throw on unknown options;
   `ScriptBase` catches this and returns exit code 2. Required-option presence is validated
-  in `validateArgs()`, as shown above — use `ScriptArgsError` rather than
-  `new ScriptError("...", 2)` for argument validation errors.
+  in `validateArgs()`, as shown above — use `ScriptArgsError` for argument validation errors.
 - `Shell.run` and `Shell.runSh` throw `ScriptShellError` (a `ScriptError` subclass, exit
   code 1) when the command exits non-zero — no manual exit code check needed. Pass
   `{ strict: false }` for calls where a non-zero exit is expected and handled by the
@@ -131,17 +131,50 @@ if (!parsed.success)
 const { id, name } = parsed.data;
 ```
 
-For scripts that also emit structured stdout on error:
+Always use `.safeParse()`, never `.parse()`. Use `.nullable()` on fields the API legitimately returns null (domain conditions such as repository or issue not found); keep non-nullable for fields that must always be present — their absence is a schema failure.
 
-```typescript
-if (!parsed.success) {
-    const err = new ScriptZodValidationError("unexpected API response", parsed.error, raw);
-    this.deps.stdio.stdout.write(`${err.short}\n`);
-    throw err;
-}
+## Script output envelope (Bun)
+
+Scripts emit a single-line JSON envelope to stdout; `ScriptBase.run()` owns all emit paths.
+Never write to `this.deps.stdio.stdout` directly in `execute()`.
+
+**Envelope shape:**
+```json
+{ "status": "ok",   "result": { ...payload... }, "error": null }
+{ "status": "fail", "result": null, "error": { "reason": "...", "message": "...", "details": {} } }
 ```
 
-Always use `.safeParse()`, never `.parse()`. Use `.nullable()` on fields the API legitimately returns null (domain conditions such as repository or issue not found); keep non-nullable for fields that must always be present — their absence is a schema failure.
+**Success:** call `this.emitOk<T>(result)` at the end of `execute()`.
+
+**Error:** throw any `ScriptError` subclass — `run()` catches it and emits the fail envelope
+automatically. No manual emit at error sites. Declare a module-level subclass to add typed
+reason codes:
+
+```typescript
+import { ScriptError } from "@adda/lib";
+import type { BaseReason, GithubReason } from "@adda/lib";
+
+type MyReason = BaseReason | GithubReason | "quota_exceeded";
+class MyScriptError extends ScriptError<MyReason> {}
+
+throw new MyScriptError("quota_exceeded", "rate limit hit", { details: { retryAfter: 60 } });
+```
+
+`BaseReason` codes: `invalid_args`, `invalid_config`, `missing_env`, `api_error`,
+`validation_error`, `shell_error`, `internal_error`, `ambiguous_result`. Use `GithubReason`
+(`repo_not_found`, `issue_not_found`, `pr_not_found`, `thread_not_found`, `not_a_thread`) in
+any script that calls the GitHub API.
+
+**Parsing another script's envelope:** use `makeEnvelopeSchema` (from `@adda/lib`) with a Zod
+result schema — it returns a discriminated union schema that TypeScript narrows correctly:
+
+```typescript
+const ResultSchema = z.object({ id: z.string() });
+const EnvelopeSchema = makeEnvelopeSchema(ResultSchema);
+const parsed = EnvelopeSchema.safeParse(parseJson(result.stdout));
+// status === "ok"   → result non-null, error null
+// status === "fail" → result null, error non-null
+```
 
 ## Testing (Bun)
 
@@ -157,7 +190,7 @@ Always use `.safeParse()`, never `.parse()`. Use `.nullable()` on fields the API
   that capture `defaultDeps` at module level. A function that performs I/O by closing over
   `defaultDeps` is invisible to constructor injection — tests that exercise it will always
   hit the real filesystem. Putting the operation on the capability interface (e.g.
-  `FileWriter.atomicWriteFile`) is what makes constructor injection sufficient.
+  `FileWriter.writeFile`) is what makes constructor injection sufficient.
 - Coverage floor: 95% line / 90% statement, enforced via `bunfig.toml`.
 
 ## FileWriter.writeFile
