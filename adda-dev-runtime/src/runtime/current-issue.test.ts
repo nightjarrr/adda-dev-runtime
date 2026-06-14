@@ -144,80 +144,85 @@ function parseStdoutJson(outLines: string[]): Record<string, unknown> {
 
 describe("CurrentIssueScript", () => {
     describe("argument validation", () => {
-        test("no args — exits 2, error envelope", async () => {
+        test("no args — exits 2, fail envelope", async () => {
             const { deps, outLines } = makeMockDeps();
             const script = new CurrentIssueScript(deps);
             const code = await script.run(["bun", "current-issue.ts"]);
             expect(code).toBe(2);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(out.issue).toBeNull();
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
         });
 
-        test("switch without issue ID — exits 2, error envelope", async () => {
+        test("switch without issue ID — exits 2, fail envelope", async () => {
             const { deps, outLines } = makeMockDeps();
             const script = new CurrentIssueScript(deps);
             const code = await script.run(["bun", "current-issue.ts", "switch"]);
             expect(code).toBe(2);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(out.issue).toBeNull();
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
         });
 
-        test("unknown subcommand — exits 1, error envelope", async () => {
+        test("unknown subcommand — exits 2, fail envelope", async () => {
             const { deps, outLines } = makeMockDeps();
             const script = new CurrentIssueScript(deps);
             const code = await script.run(["bun", "current-issue.ts", "foobar"]);
-            expect(code).toBe(1);
+            expect(code).toBe(2);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(out.issue).toBeNull();
-            expect(String(out.error)).toContain("foobar");
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("foobar");
         });
 
-        test("show --skip-repo-init — exits 2, error envelope, error contains '--skip-repo-init is not valid for'", async () => {
+        test("show --skip-repo-init — exits 2, fail envelope, error contains '--skip-repo-init is not valid for'", async () => {
             const { deps, outLines } = makeMockDeps();
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show", "--skip-repo-init"]);
             expect(code).toBe(2);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(out.issue).toBeNull();
-            expect(String(out.error)).toContain("--skip-repo-init is not valid for 'show'");
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("--skip-repo-init is not valid for 'show'");
         });
 
-        test("get id --skip-repo-init — exits 2, error envelope, error contains '--skip-repo-init is not valid for'", async () => {
+        test("get id --skip-repo-init — exits 2, fail envelope, error contains '--skip-repo-init is not valid for'", async () => {
             const { deps, outLines } = makeMockDeps();
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "id", "--skip-repo-init"]);
             expect(code).toBe(2);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(out.issue).toBeNull();
-            expect(String(out.error)).toContain("--skip-repo-init is not valid for 'get'");
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("--skip-repo-init is not valid for 'get'");
         });
     });
 
     describe("switch — environment validation", () => {
-        test("missing GITHUB_OWNER — exits 1, error envelope", async () => {
+        test("missing GITHUB_OWNER — exits 1, fail envelope", async () => {
             const { deps, outLines } = makeMockDeps({ envVars: { GITHUB_REPO: "testrepo" } });
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(String(out.error)).toContain("GITHUB_OWNER");
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("GITHUB_OWNER");
         });
 
-        test("missing GITHUB_REPO — exits 1, error envelope", async () => {
+        test("missing GITHUB_REPO — exits 1, fail envelope", async () => {
             const { deps, outLines } = makeMockDeps({ envVars: { GITHUB_OWNER: "testowner" } });
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(String(out.error)).toContain("GITHUB_REPO");
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("GITHUB_REPO");
         });
     });
 
     describe("switch — dirty tree", () => {
-        test("dirty tree — exits 1, error envelope, state file not written", async () => {
+        test("dirty tree — exits 1, fail envelope, state file not written", async () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") {
@@ -230,13 +235,13 @@ describe("CurrentIssueScript", () => {
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
             expect(deps.fileWriter.writeFile).not.toHaveBeenCalled();
         });
     });
 
     describe("switch — gh issue fetch failure", () => {
-        test("gh exits non-zero — exits 1, error envelope", async () => {
+        test("gh exits non-zero — exits 1, fail envelope", async () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -248,12 +253,12 @@ describe("CurrentIssueScript", () => {
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
         });
     });
 
     describe("switch — invalid JSON / schema mismatch", () => {
-        test("gh issue view returns invalid JSON — exits 1, error envelope with 'invalid JSON'", async () => {
+        test("gh issue view returns invalid JSON — exits 1, fail envelope with 'invalid JSON'", async () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -267,12 +272,13 @@ describe("CurrentIssueScript", () => {
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(out.issue).toBeNull();
-            expect(String(out.error)).toContain("invalid JSON");
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("invalid JSON");
         });
 
-        test("gh issue view returns unexpected schema — exits 1, error envelope with 'unexpected gh issue response'", async () => {
+        test("gh issue view returns unexpected schema — exits 1, fail envelope with 'unexpected gh issue response'", async () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -286,12 +292,13 @@ describe("CurrentIssueScript", () => {
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(out.issue).toBeNull();
-            expect(String(out.error)).toContain("unexpected gh issue response");
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("unexpected gh issue response");
         });
 
-        test("resolve-issue-branch returns invalid JSON — exits 1, error envelope with 'invalid JSON'", async () => {
+        test("resolve-issue-branch returns invalid JSON — exits 1, fail envelope with 'invalid JSON'", async () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -306,12 +313,13 @@ describe("CurrentIssueScript", () => {
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(out.issue).toBeNull();
-            expect(String(out.error)).toContain("invalid JSON");
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("invalid JSON");
         });
 
-        test("resolve-issue-branch returns unexpected schema — exits 1, error envelope with 'unexpected resolve-issue-branch output'", async () => {
+        test("resolve-issue-branch returns unexpected schema — exits 1, fail envelope with 'unexpected resolve-issue-branch output'", async () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -326,14 +334,15 @@ describe("CurrentIssueScript", () => {
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(out.issue).toBeNull();
-            expect(String(out.error)).toContain("unexpected resolve-issue-branch output");
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("unexpected resolve-issue-branch output");
         });
     });
 
     describe("switch — resolve-issue-branch failures", () => {
-        test("resolve-issue-branch returns ambiguous (exit 1) — exits 1, error envelope, subprocess stderr forwarded", async () => {
+        test("resolve-issue-branch returns ambiguous (exit 1) — exits 1, fail envelope, subprocess stderr forwarded", async () => {
             const { deps, outLines, errLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -352,11 +361,11 @@ describe("CurrentIssueScript", () => {
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
             expect(errLines.join("")).toContain("ambiguity warning from resolve");
         });
 
-        test("resolve-issue-branch returns fail status (exit 0) — exits 1, error envelope, subprocess stderr forwarded", async () => {
+        test("resolve-issue-branch returns fail status (exit 0) — exits 1, fail envelope, subprocess stderr forwarded", async () => {
             const { deps, outLines, errLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -375,11 +384,11 @@ describe("CurrentIssueScript", () => {
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
             expect(errLines.join("")).toContain("error details from resolve");
         });
 
-        test("resolve-issue-branch exits non-zero — exits 1, error envelope, subprocess stderr forwarded", async () => {
+        test("resolve-issue-branch exits non-zero — exits 1, fail envelope, subprocess stderr forwarded", async () => {
             const { deps, outLines, errLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -394,13 +403,13 @@ describe("CurrentIssueScript", () => {
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
             expect(errLines.join("")).toContain("fatal resolve error");
         });
     });
 
     describe("switch — git checkout failure", () => {
-        test("git checkout fails — exits 1, error envelope, state file not written", async () => {
+        test("git checkout fails — exits 1, fail envelope, state file not written", async () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -418,13 +427,13 @@ describe("CurrentIssueScript", () => {
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
             expect(deps.fileWriter.writeFile).not.toHaveBeenCalled();
         });
     });
 
     describe("switch — success paths", () => {
-        test("feature_branch resolution — exits 0, success envelope with branch and resolution", async () => {
+        test("feature_branch resolution — exits 0, ok envelope with branch and resolution", async () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -447,10 +456,11 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(0);
 
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("success");
-            expect(out.error).toBe("");
+            expect(out.status).toBe("ok");
+            expect(out.error).toBeNull();
 
-            const issue = out.issue as Record<string, string>;
+            const result = out.result as Record<string, unknown>;
+            const issue = result.issue as Record<string, string>;
             expect(issue.id).toBe("28");
             expect(issue.title).toBe("My feature issue");
             expect(issue.type).toBe("feature");
@@ -458,12 +468,12 @@ describe("CurrentIssueScript", () => {
             expect(issue.state).toBe("OPEN");
             expect(issue.pr).toBe("42");
 
-            const details = out.details as Record<string, string>;
+            const details = result.details as Record<string, string>;
             expect(details.branch).toBe("feature/28-my-feature");
             expect(details.resolution).toBe("feature_branch");
         });
 
-        test("main resolution — exits 0, success envelope with branch: main and resolution: main", async () => {
+        test("main resolution — exits 0, ok envelope with branch: main and resolution: main", async () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -484,9 +494,10 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(0);
 
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("success");
+            expect(out.status).toBe("ok");
 
-            const details = out.details as Record<string, string>;
+            const result = out.result as Record<string, unknown>;
+            const details = result.details as Record<string, string>;
             expect(details.branch).toBe("main");
             expect(details.resolution).toBe("main");
         });
@@ -512,7 +523,8 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(0);
 
             const out = parseStdoutJson(outLines);
-            const issue = out.issue as Record<string, string>;
+            const result = out.result as Record<string, unknown>;
+            const issue = result.issue as Record<string, string>;
             expect(issue.type).toBe("");
             expect(issue.phase).toBe("");
             expect(issue.state).toBe("CLOSED");
@@ -547,8 +559,9 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(0);
 
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("success");
-            const details = out.details as Record<string, unknown>;
+            expect(out.status).toBe("ok");
+            const result = out.result as Record<string, unknown>;
+            const details = result.details as Record<string, unknown>;
             const hook = details.hook as Record<string, string>;
             expect(hook.status).toBe("skipped");
             expect(hookRunMock).not.toHaveBeenCalled();
@@ -563,8 +576,9 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(0);
 
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("success");
-            const details = out.details as Record<string, unknown>;
+            expect(out.status).toBe("ok");
+            const result = out.result as Record<string, unknown>;
+            const details = result.details as Record<string, unknown>;
             const hook = details.hook as Record<string, string>;
             expect(hook.status).toBe("absent");
         });
@@ -590,14 +604,15 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(0);
 
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("success");
-            const details = out.details as Record<string, unknown>;
+            expect(out.status).toBe("ok");
+            const result = out.result as Record<string, unknown>;
+            const details = result.details as Record<string, unknown>;
             const hook = details.hook as Record<string, string>;
             expect(hook.status).toBe("ok");
             expect(hook.output).toContain("installed deps");
         });
 
-        test("hook present but fails — exits 1, error envelope with details.hook.status 'failed', output retained", async () => {
+        test("hook present but fails — exits 1, fail envelope with details.hook.status 'failed', output retained", async () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -618,9 +633,10 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(1);
 
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(String(out.error)).toContain("repo init hook failed");
-            const details = out.details as Record<string, unknown>;
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("repo init hook failed");
+            const details = error.details as Record<string, unknown>;
             const hook = details.hook as Record<string, string>;
             expect(hook.status).toBe("failed");
             expect(hook.output).toContain("partial output");
@@ -638,71 +654,76 @@ describe("CurrentIssueScript", () => {
             pr: "99",
         });
 
-        test("no active issue (ENOENT) — exits 0, success envelope, all issue fields empty, details is {}", async () => {
+        test("no active issue (ENOENT) — exits 0, ok envelope, all issue fields empty, details is {}", async () => {
             const { deps, outLines } = makeMockDeps();
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show"]);
             expect(code).toBe(0);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("success");
-            expect(out.error).toBe("");
-            const issue = out.issue as Record<string, string>;
+            expect(out.status).toBe("ok");
+            expect(out.error).toBeNull();
+            const result = out.result as Record<string, unknown>;
+            const issue = result.issue as Record<string, string>;
             expect(issue.id).toBe("");
             expect(issue.title).toBe("");
             expect(issue.type).toBe("");
             expect(issue.phase).toBe("");
             expect(issue.state).toBe("");
             expect(issue.pr).toBe("");
-            expect(out.details).toEqual({});
+            expect(result.details).toEqual({});
         });
 
-        test("active issue — exits 0, success envelope, issue fields match state", async () => {
+        test("active issue — exits 0, ok envelope, issue fields match state", async () => {
             const { deps, outLines } = makeMockDeps({
                 fileReaderReadFile: async (_path: string) => validStateJson,
             });
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show"]);
             expect(code).toBe(0);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("success");
-            expect(out.error).toBe("");
-            const issue = out.issue as Record<string, string>;
+            expect(out.status).toBe("ok");
+            expect(out.error).toBeNull();
+            const result = out.result as Record<string, unknown>;
+            const issue = result.issue as Record<string, string>;
             expect(issue.id).toBe("42");
             expect(issue.title).toBe("A test issue");
             expect(issue.type).toBe("feature");
             expect(issue.phase).toBe("phase:implement");
             expect(issue.state).toBe("OPEN");
             expect(issue.pr).toBe("99");
-            expect(out.details).toEqual({});
+            expect(result.details).toEqual({});
         });
 
-        test("corrupt state (invalid JSON) — exits 1, error envelope, error contains 'state file is corrupt'", async () => {
+        test("corrupt state (invalid JSON) — exits 1, fail envelope, error contains 'state file is corrupt'", async () => {
             const { deps, outLines } = makeMockDeps({
                 fileReaderReadFile: async (_path: string) => "not json",
             });
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(String(out.error)).toContain("state file is corrupt");
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("state file is corrupt");
         });
 
-        test("corrupt state (schema mismatch) — exits 1, error envelope, error contains 'state file is corrupt'", async () => {
+        test("corrupt state (schema mismatch) — exits 1, fail envelope, error contains 'state file is corrupt'", async () => {
             const { deps, outLines } = makeMockDeps({
                 fileReaderReadFile: async (_path: string) => JSON.stringify({ foo: "bar" }),
             });
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(String(out.error)).toContain("state file is corrupt");
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("state file is corrupt");
         });
 
-        test("extra positional arg — exits 2, error envelope with 'usage: current-issue show'", async () => {
+        test("extra positional arg — exits 2, fail envelope with 'usage: current-issue show'", async () => {
             const { deps, outLines } = makeMockDeps();
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show", "42"]);
             expect(code).toBe(2);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(String(out.error)).toContain("usage: current-issue show");
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("usage: current-issue show");
         });
     });
 
@@ -716,17 +737,18 @@ describe("CurrentIssueScript", () => {
             pr: "42",
         });
 
-        test("no active issue (ENOENT) — exits 1, error envelope, error contains 'no active issue to sync'", async () => {
+        test("no active issue (ENOENT) — exits 1, fail envelope, error contains 'no active issue to sync'", async () => {
             const { deps, outLines } = makeMockDeps();
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "sync"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(out.issue).toBeNull();
-            expect(String(out.error)).toContain("no active issue to sync");
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("no active issue to sync");
         });
 
-        test("active issue with empty id — exits 1, error envelope, error contains 'no active issue to sync'", async () => {
+        test("active issue with empty id — exits 1, fail envelope, error contains 'no active issue to sync'", async () => {
             const emptyIdState = JSON.stringify({
                 id: "",
                 title: "A test issue",
@@ -741,21 +763,23 @@ describe("CurrentIssueScript", () => {
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "sync"]);
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(out.issue).toBeNull();
-            expect(String(out.error)).toContain("no active issue to sync");
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("no active issue to sync");
         });
 
-        test("active issue with valid id — exits 0, success envelope, issue.id matches state", async () => {
+        test("active issue with valid id — exits 0, ok envelope, issue.id matches state", async () => {
             const { deps, outLines } = makeMockDeps({
                 fileReaderReadFile: async (_path: string) => validStateJson,
             });
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "sync"]);
             expect(code).toBe(0);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("success");
-            expect(out.error).toBe("");
-            const issue = out.issue as Record<string, string>;
+            expect(out.status).toBe("ok");
+            expect(out.error).toBeNull();
+            const result = out.result as Record<string, unknown>;
+            const issue = result.issue as Record<string, string>;
             expect(issue.id).toBe("28");
         });
     });
@@ -772,14 +796,15 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(0);
 
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("success");
-            expect(out.error).toBe("");
-            const details = out.details as Record<string, string>;
+            expect(out.status).toBe("ok");
+            expect(out.error).toBeNull();
+            const result = out.result as Record<string, unknown>;
+            const details = result.details as Record<string, string>;
             expect(details.resolution).toBe("no-op");
             expect(shellRunMock).not.toHaveBeenCalled();
         });
 
-        test("state file present, dirty tree — error envelope, exit 1", async () => {
+        test("state file present, dirty tree — fail envelope, exit 1", async () => {
             const deleteFileMock = mock(async (_path: string) => {});
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
@@ -796,12 +821,13 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(1);
 
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(String(out.error)).toContain("working tree is dirty");
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("working tree is dirty");
             expect(deleteFileMock).not.toHaveBeenCalled();
         });
 
-        test("state file present, clean tree, git checkout main fails — error envelope, exit 1, stderr forwarded", async () => {
+        test("state file present, clean tree, git checkout main fails — fail envelope, exit 1, stderr forwarded", async () => {
             const deleteFileMock = mock(async (_path: string) => {});
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
@@ -821,12 +847,13 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(1);
 
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(String(out.error)).toContain("pathspec 'main' did not match");
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("pathspec 'main' did not match");
             expect(deleteFileMock).not.toHaveBeenCalled();
         });
 
-        test("happy path — deleteState called, success envelope with branch: main and resolution: main, exit 0", async () => {
+        test("happy path — deleteState called, ok envelope with branch: main and resolution: main, exit 0", async () => {
             const deleteFileMock = mock(async (_path: string) => {});
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
@@ -846,14 +873,15 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(0);
 
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("success");
-            expect(out.error).toBe("");
+            expect(out.status).toBe("ok");
+            expect(out.error).toBeNull();
 
-            const issue = out.issue as Record<string, string>;
+            const result = out.result as Record<string, unknown>;
+            const issue = result.issue as Record<string, string>;
             expect(issue.id).toBe("");
             expect(issue.title).toBe("");
 
-            const details = out.details as Record<string, unknown>;
+            const details = result.details as Record<string, unknown>;
             expect(details.branch).toBe("main");
             expect(details.resolution).toBe("main");
             expect(details.hook).toMatchObject({ status: "absent" });
@@ -873,7 +901,7 @@ describe("CurrentIssueScript", () => {
             return makeShellResult();
         };
 
-        test("hook absent — exits 0, success envelope, details.hook.status is 'absent'", async () => {
+        test("hook absent — exits 0, ok envelope, details.hook.status is 'absent'", async () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: defaultShellForClear,
                 fileSysFileExists: async (path: string) => path === STATE_PATH,
@@ -883,12 +911,13 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(0);
 
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("success");
-            const details = out.details as Record<string, unknown>;
+            expect(out.status).toBe("ok");
+            const result = out.result as Record<string, unknown>;
+            const details = result.details as Record<string, unknown>;
             expect(details.hook).toMatchObject({ status: "absent" });
         });
 
-        test("hook present and succeeds — exits 0, success envelope, details.hook.status is 'ok', output captured", async () => {
+        test("hook present and succeeds — exits 0, ok envelope, details.hook.status is 'ok', output captured", async () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -905,14 +934,15 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(0);
 
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("success");
-            const details = out.details as Record<string, unknown>;
+            expect(out.status).toBe("ok");
+            const result = out.result as Record<string, unknown>;
+            const details = result.details as Record<string, unknown>;
             const hook = details.hook as Record<string, string>;
             expect(hook.status).toBe("ok");
             expect(hook.output).toContain("installed deps");
         });
 
-        test("hook present but fails — exits 1, error envelope, details.hook.status is 'failed', output retained", async () => {
+        test("hook present but fails — exits 1, fail envelope, details.hook.status is 'failed', output retained", async () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -929,9 +959,10 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(1);
 
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(String(out.error)).toContain("repo init hook failed");
-            const details = out.details as Record<string, unknown>;
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("repo init hook failed");
+            const details = error.details as Record<string, unknown>;
             const hook = details.hook as Record<string, string>;
             expect(hook.status).toBe("failed");
             expect(hook.output).toContain("partial output");
@@ -985,13 +1016,14 @@ describe("CurrentIssueScript", () => {
             expect(outLines.join("").trim()).toBe("");
         });
 
-        test("no field arg — exits 2, error envelope", async () => {
+        test("no field arg — exits 2, fail envelope", async () => {
             const { deps, outLines } = makeMockDeps();
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get"]);
             expect(code).toBe(2);
             const out = parseStdoutJson(outLines);
-            expect(out.status).toBe("error");
-            expect(String(out.error)).toContain("usage: current-issue get <field>");
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("usage: current-issue get <field>");
         });
 
         test("unknown field — empty output, exit 0", async () => {

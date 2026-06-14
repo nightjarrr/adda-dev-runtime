@@ -26,6 +26,7 @@ export {
     ScriptStructuredError,
     ScriptZodValidationError,
 } from "./errors";
+export type { BaseReason } from "./errors";
 export type { EmptyArgs } from "./ScriptBase";
 export { ScriptBase } from "./ScriptBase";
 export { expandPath, parseJson, slugify } from "./util";

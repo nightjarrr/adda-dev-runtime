@@ -1,35 +1,34 @@
-import type { FileSysDep, ShellDep } from "@adda/lib";
+import type { FileSysDep, ScriptEnvelope, ShellDep } from "@adda/lib";
 
 import { CurrentIssueError } from "./errors";
 import { runRepoInitHook } from "./hook";
-import type { IssueStateStore, SuccessEnvelope } from "./types";
+import type { CurrentIssueResult, IssueStateStore } from "./types";
 import { EMPTY_ISSUE_VIEW } from "./types";
 
 export async function executeClear(
     skipRepoInit: boolean,
     deps: ShellDep & FileSysDep,
     store: IssueStateStore,
-): Promise<SuccessEnvelope> {
+): Promise<ScriptEnvelope<CurrentIssueResult>> {
     if (!(await store.stateExists())) {
-        return { status: "success", issue: EMPTY_ISSUE_VIEW, details: { resolution: "no-op" }, error: "" };
+        return { status: "ok", result: { issue: EMPTY_ISSUE_VIEW, details: { resolution: "no-op" } }, error: null };
     }
 
     const statusResult = await deps.shell.run(["git", "status", "--porcelain"], { strict: false });
     if (statusResult.stdout.trim()) {
-        throw new CurrentIssueError("working tree is dirty — commit or stash changes before clearing");
+        throw new CurrentIssueError("dirty_tree", "working tree is dirty — commit or stash changes before clearing");
     }
 
     const checkoutResult = await deps.shell.run(["git", "checkout", "main"], { strict: false });
     if (checkoutResult.exitCode !== 0) {
-        throw new CurrentIssueError(checkoutResult.stderr.trim() || "git checkout main failed");
+        throw new CurrentIssueError("checkout_failed", checkoutResult.stderr.trim() || "git checkout main failed");
     }
 
     await store.deleteState();
     const hook = await runRepoInitHook(deps, skipRepoInit);
     return {
-        status: "success",
-        issue: EMPTY_ISSUE_VIEW,
-        details: { branch: "main", resolution: "main", hook },
-        error: "",
+        status: "ok",
+        result: { issue: EMPTY_ISSUE_VIEW, details: { branch: "main", resolution: "main", hook } },
+        error: null,
     };
 }

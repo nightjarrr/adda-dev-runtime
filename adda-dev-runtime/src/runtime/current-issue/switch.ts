@@ -1,15 +1,15 @@
-import type { EnvDep, FileSysDep, ShellDep } from "@adda/lib";
+import type { EnvDep, FileSysDep, ScriptEnvelope, ShellDep } from "@adda/lib";
 import { parseJson, ScriptZodValidationError } from "@adda/lib";
 
 import { CurrentIssueError } from "./errors";
 import { runRepoInitHook } from "./hook";
 import { resolveIssueBranch } from "./resolve";
 import { GhIssueSchema } from "./types";
-import type { IssueState, IssueStateStore, SuccessEnvelope } from "./types";
+import type { CurrentIssueResult, IssueState, IssueStateStore } from "./types";
 
 function requireEnvVar(deps: EnvDep, name: string): string {
     const value = deps.env.get(name);
-    if (!value) throw new CurrentIssueError(`required environment variable '${name}' is not set`);
+    if (!value) throw new CurrentIssueError("missing_env", `required environment variable '${name}' is not set`);
     return value;
 }
 
@@ -18,7 +18,7 @@ export async function executeSwitch(
     skipRepoInit: boolean,
     deps: ShellDep & EnvDep & FileSysDep,
     store: IssueStateStore,
-): Promise<SuccessEnvelope> {
+): Promise<ScriptEnvelope<CurrentIssueResult>> {
     // Step 1: Validate env vars
     requireEnvVar(deps, "GITHUB_OWNER");
     requireEnvVar(deps, "GITHUB_REPO");
@@ -26,7 +26,7 @@ export async function executeSwitch(
     // Step 2: Check dirty tree
     const statusResult = await deps.shell.run(["git", "status", "--porcelain"], { strict: false });
     if (statusResult.stdout.trim()) {
-        throw new CurrentIssueError("working tree is dirty — commit or stash changes before switching issues");
+        throw new CurrentIssueError("dirty_tree", "working tree is dirty — commit or stash changes before switching issues");
     }
 
     // Step 3: Fetch issue metadata
@@ -35,6 +35,7 @@ export async function executeSwitch(
     });
     if (ghResult.exitCode !== 0) {
         throw new CurrentIssueError(
+            "api_error",
             `failed to fetch issue #${issueId}: ${ghResult.stderr.trim() || ghResult.stdout.trim()}`,
             ghResult.stderr,
         );
@@ -44,13 +45,13 @@ export async function executeSwitch(
     try {
         ghRaw = parseJson(ghResult.stdout);
     } catch {
-        throw new CurrentIssueError(`invalid JSON from gh issue view #${issueId}`);
+        throw new CurrentIssueError("api_error", `invalid JSON from gh issue view #${issueId}`);
     }
 
     const ghParsed = GhIssueSchema.safeParse(ghRaw);
     if (!ghParsed.success) {
         const err = new ScriptZodValidationError("unexpected gh issue response", ghParsed.error, ghRaw);
-        throw new CurrentIssueError(err.message, err.verboseStderr);
+        throw new CurrentIssueError("validation_error", err.message, err.verboseStderr);
     }
 
     const { title, labels, state } = ghParsed.data;
@@ -68,6 +69,7 @@ export async function executeSwitch(
     const checkoutResult = await deps.shell.run(["git", "checkout", branch], { strict: false });
     if (checkoutResult.exitCode !== 0) {
         throw new CurrentIssueError(
+            "checkout_failed",
             `git checkout '${branch}' failed: ${checkoutResult.stderr.trim() || checkoutResult.stdout.trim()}`,
             checkoutResult.stderr,
         );
@@ -89,9 +91,8 @@ export async function executeSwitch(
     const hook = await runRepoInitHook(deps, skipRepoInit);
 
     return {
-        status: "success",
-        issue: issueState,
-        details: { branch, resolution: resolveData.resolution, hook },
-        error: "",
+        status: "ok",
+        result: { issue: issueState, details: { branch, resolution: resolveData.resolution, hook } },
+        error: null,
     };
 }

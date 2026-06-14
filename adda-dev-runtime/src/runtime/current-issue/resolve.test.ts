@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { Shell, ShellDep, ShellResult } from "../../lib/index";
+import type { ScriptEnvelope, Shell, ShellDep, ShellResult } from "../../lib/index";
 import { ScriptStructuredError } from "../../lib/index";
 import { resolveIssueBranch } from "./resolve";
 
@@ -63,8 +63,9 @@ describe("resolveIssueBranch", () => {
         );
         const err = await resolveIssueBranch(deps, "42").catch((e) => e);
         expect(err).toBeInstanceOf(ScriptStructuredError);
-        const envelope = (err as ScriptStructuredError).envelope as Record<string, unknown>;
-        expect(String(envelope.error)).toContain("unexpected resolve-issue-branch output");
+        const envelope = (err as ScriptStructuredError).envelope as ScriptEnvelope<never>;
+        expect(envelope.status).toBe("fail");
+        expect(envelope.error?.message).toContain("unexpected resolve-issue-branch output");
     });
 
     test("fail status with reason ambiguous carries verboseStderr and throws CurrentIssueError", async () => {

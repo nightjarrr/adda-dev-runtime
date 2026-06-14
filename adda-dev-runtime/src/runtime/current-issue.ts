@@ -158,8 +158,8 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
                 return;
             case "get": {
                 const envelope = await executeShow(new SilentStore(this.deps)).catch(() => null);
-                if (envelope && envelope.issue) {
-                    const value = (envelope.issue as unknown as Record<string, string>)[args.field] ?? "";
+                if (envelope?.status === "ok" && envelope.result.issue) {
+                    const value = (envelope.result.issue as unknown as Record<string, string>)[args.field] ?? "";
                     if (value) this.deps.stdio.stdout.write(value + "\n");
                 }
                 return;
@@ -169,8 +169,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
                 else this.emit(await executeBranchVerify(this.deps, this));
                 return;
             default: {
-                const message = `unknown subcommand: ${args.name}`;
-                throw new CurrentIssueError(message);
+                throw new CurrentIssueArgsError(`unknown subcommand: ${args.name}`);
             }
         }
     }
@@ -196,12 +195,12 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
         try {
             raw = parseJson(content);
         } catch {
-            throw new CurrentIssueError("state file is corrupt — run 'current-issue clear' to reset");
+            throw new CurrentIssueError("api_error", "state file is corrupt — run 'current-issue clear' to reset");
         }
 
         const parsed = IssueStateSchema.safeParse(raw);
         if (!parsed.success) {
-            throw new CurrentIssueError("state file is corrupt — run 'current-issue clear' to reset");
+            throw new CurrentIssueError("validation_error", "state file is corrupt — run 'current-issue clear' to reset");
         }
 
         return parsed.data;
