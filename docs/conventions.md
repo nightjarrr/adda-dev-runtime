@@ -160,10 +160,10 @@ class MyScriptError extends ScriptError<MyReason> {}
 throw new MyScriptError("quota_exceeded", "rate limit hit", { details: { retryAfter: 60 } });
 ```
 
-`BaseReason` codes: `invalid_args`, `invalid_config`, `missing_env`, `api_error`,
-`validation_error`, `shell_error`, `internal_error`, `ambiguous_result`. Use `GithubReason`
-(`repo_not_found`, `issue_not_found`, `pr_not_found`, `thread_not_found`, `not_a_thread`) in
-any script that calls the GitHub API.
+`BaseReason` (from `@adda/lib`) covers general error categories shared across all scripts.
+`GithubReason` (also from `@adda/lib`) covers GitHub API errors — include it in any script
+that calls the GitHub API. Both are string union types defined in `lib/errors.ts`; read the
+source for the current set of codes.
 
 **Parsing another script's envelope:** use `makeEnvelopeSchema` (from `@adda/lib`) with a Zod
 result schema — it returns a discriminated union schema that TypeScript narrows correctly:
