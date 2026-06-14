@@ -13,6 +13,7 @@ import type {
     ShellResult,
     StdioDep,
 } from "../lib/index";
+import { ScriptShellError } from "../lib/index";
 import { CurrentIssueScript, SilentStore, type IssueStateStore } from "./current-issue";
 
 type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileWriterDep & FileReaderDep & FileSysDep;
@@ -342,17 +343,13 @@ describe("CurrentIssueScript", () => {
     });
 
     describe("switch — resolve-issue-branch failures", () => {
-        test("resolve-issue-branch returns ambiguous (exit 1) — exits 1, fail envelope, subprocess stderr forwarded", async () => {
+        test("resolve-issue-branch exits non-zero — exits 1, shell_error envelope, subprocess stderr forwarded", async () => {
             const { deps, outLines, errLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
                     if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
                     if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
-                        return makeShellResult({
-                            stdout: makeResolveFailResponse("ambiguous_result", "multiple linked branches: a, b"),
-                            stderr: "ambiguity warning from resolve\n",
-                            exitCode: 1,
-                        });
+                        throw new ScriptShellError(command.join(" "), 1, "", "ambiguity warning from resolve\n");
                     }
                     return makeShellResult();
                 },
@@ -362,6 +359,7 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(1);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("fail");
+            expect(out.error as Record<string, unknown>).toMatchObject({ reason: "shell_error" });
             expect(errLines.join("")).toContain("ambiguity warning from resolve");
         });
 
@@ -394,7 +392,7 @@ describe("CurrentIssueScript", () => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
                     if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
                     if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
-                        return makeShellResult({ stdout: "", stderr: "fatal resolve error\n", exitCode: 1 });
+                        throw new ScriptShellError(command[0], 1, "", "fatal resolve error\n");
                     }
                     return makeShellResult();
                 },
@@ -418,7 +416,7 @@ describe("CurrentIssueScript", () => {
                         return makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/28-test", "42") });
                     }
                     if (command[0] === "git" && command[1] === "checkout") {
-                        return makeShellResult({ stdout: "", stderr: "branch not found", exitCode: 1 });
+                        throw new ScriptShellError(command.join(" "), 1, "", "branch not found");
                     }
                     return makeShellResult();
                 },
@@ -443,7 +441,7 @@ describe("CurrentIssueScript", () => {
                     }
                     if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
                     if (command[0] === "git" && command[1] === "pull") {
-                        return makeShellResult({ stdout: "", stderr: "fatal: couldn't find remote ref HEAD", exitCode: 1 });
+                        throw new ScriptShellError("git pull", 1, "", "fatal: couldn't find remote ref HEAD");
                     }
                     return makeShellResult();
                 },
@@ -647,7 +645,7 @@ describe("CurrentIssueScript", () => {
                     }
                     if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
                     if (command[0] === "bash" && command[1] === "/workspace/.adda-init.sh") {
-                        return makeShellResult({ stdout: "partial output\n", stderr: "hook error\n", exitCode: 1 });
+                        throw new ScriptShellError("bash /workspace/.adda-init.sh", 1, "partial output\n", "hook error\n");
                     }
                     return makeShellResult();
                 },
@@ -860,7 +858,7 @@ describe("CurrentIssueScript", () => {
                         return makeShellResult({ stdout: "" });
                     }
                     if (command[0] === "git" && command[1] === "checkout") {
-                        return makeShellResult({ stdout: "", stderr: "error: pathspec 'main' did not match", exitCode: 1 });
+                        throw new ScriptShellError("git checkout main", 1, "", "error: pathspec 'main' did not match");
                     }
                     return makeShellResult();
                 },
@@ -874,7 +872,9 @@ describe("CurrentIssueScript", () => {
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("fail");
             const error = out.error as Record<string, unknown>;
-            expect(String(error.message)).toContain("pathspec 'main' did not match");
+            const details = error.details as Record<string, unknown>;
+            expect(String(details.cmd)).toContain("git checkout");
+            expect(String(details.stderr)).toContain("pathspec");
             expect(deleteFileMock).not.toHaveBeenCalled();
         });
 
@@ -973,7 +973,7 @@ describe("CurrentIssueScript", () => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
                     if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
                     if (command[0] === "bash" && command[1] === ADDA_INIT_HOOK_PATH) {
-                        return makeShellResult({ stdout: "partial output\n", stderr: "hook error\n", exitCode: 1 });
+                        throw new ScriptShellError(`bash ${ADDA_INIT_HOOK_PATH}`, 1, "partial output\n", "hook error\n");
                     }
                     return makeShellResult();
                 },

@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Env, EnvDep, FileWriterDep, Shell, ShellDep, ShellResult, StdioDep } from "../lib/index";
+import { ScriptShellError } from "../lib/index";
 import { PrReviewThreadsScript } from "./pr-review-threads";
 
 type PrReviewThreadsDeps = ShellDep & EnvDep & StdioDep & FileWriterDep;
@@ -34,8 +35,7 @@ function makeMockDeps(options: MockDepsOptions = {}): MockDepsResult {
             runCalls.push(command);
             const result = runQueue.shift() ?? makeShellResult("{}");
             if ((opts?.strict ?? true) && result.exitCode !== 0) {
-                const err = new Error(`shell command failed (exit ${result.exitCode}): ${command.join(" ")}`);
-                throw err;
+                throw new ScriptShellError(command.join(" "), result.exitCode, result.stdout, result.stderr);
             }
             return result;
         }),
@@ -427,7 +427,7 @@ describe("PrReviewThreadsScript", () => {
     // pr mode: graphql failure
     // ---------------------------------------------------------------
     describe("pr mode: graphql failure", () => {
-        test("graphql returns non-zero exit — exits 1, api_error envelope on stdout, no file", async () => {
+        test("graphql returns non-zero exit — exits 1, shell_error envelope on stdout, no file", async () => {
             const { deps, outLines, errLines } = makeMockDeps({
                 runQueue: [makeShellResult("", 1, "Could not resolve to a PullRequest with the number of 999999")],
             });
@@ -435,13 +435,13 @@ describe("PrReviewThreadsScript", () => {
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("fail");
-            expect((out.error as Record<string, unknown>)?.reason).toBe("api_error");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("shell_error");
             expect(out).not.toHaveProperty("pr");
             // gh's stderr must be forwarded to the script's stderr
             expect(errLines.join("")).toContain("Could not resolve to a PullRequest with the number of 999999");
         });
 
-        test("graphql failure on pagination page — exits 1, api_error envelope on stdout", async () => {
+        test("graphql failure on pagination page — exits 1, shell_error envelope on stdout", async () => {
             const page1 = makePrThreadsResponse([makeThread()], 2, true, "cursor1");
             const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(page1), makeShellResult("", 1, "GraphQL error on page 2")],
@@ -450,7 +450,7 @@ describe("PrReviewThreadsScript", () => {
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("fail");
-            expect((out.error as Record<string, unknown>)?.reason).toBe("api_error");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("shell_error");
         });
     });
 
@@ -458,7 +458,7 @@ describe("PrReviewThreadsScript", () => {
     // thread mode: graphql failure
     // ---------------------------------------------------------------
     describe("thread mode: graphql failure", () => {
-        test("graphql returns non-zero exit — exits 1, api_error envelope on stdout, no file", async () => {
+        test("graphql returns non-zero exit — exits 1, shell_error envelope on stdout, no file", async () => {
             const { deps, outLines, errLines } = makeMockDeps({
                 envVars: {},
                 runQueue: [makeShellResult("", 1, "Could not resolve to a node")],
@@ -467,7 +467,7 @@ describe("PrReviewThreadsScript", () => {
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
             expect(out.status).toBe("fail");
-            expect((out.error as Record<string, unknown>)?.reason).toBe("api_error");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("shell_error");
             expect(out).not.toHaveProperty("thread");
             // gh's stderr must be forwarded to the script's stderr
             expect(errLines.join("")).toContain("Could not resolve to a node");

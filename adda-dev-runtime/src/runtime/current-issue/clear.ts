@@ -19,10 +19,7 @@ export async function executeClear(
         throw new CurrentIssueError("dirty_tree", "working tree is dirty — commit or stash changes before clearing");
     }
 
-    const checkoutResult = await deps.shell.run(["git", "checkout", "main"], { strict: false });
-    if (checkoutResult.exitCode !== 0) {
-        throw new CurrentIssueError("checkout_failed", checkoutResult.stderr.trim() || "git checkout main failed");
-    }
+    await deps.shell.run(["git", "checkout", "main"]);
 
     await store.deleteState();
     const hook = await runRepoInitHook(deps, skipRepoInit);

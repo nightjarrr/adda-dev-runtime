@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Shell, ShellDep, ShellResult } from "../../lib/index";
-import { ScriptError } from "../../lib/index";
+import { ScriptError, ScriptShellError } from "../../lib/index";
 import type { IssueState, IssueStateStore } from "./types";
 import { executeBranchEnsure, executeBranchVerify } from "./branch";
 
@@ -81,7 +81,7 @@ describe("executeBranchEnsure", () => {
     test("resolve-issue-branch exits non-zero — throws ScriptError", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
-                return makeShellResult({ stdout: "", stderr: "some error", exitCode: 1 });
+                throw new ScriptShellError(RESOLVE_BIN, 1, "", "some error");
             }
             return makeShellResult();
         });
@@ -218,7 +218,7 @@ describe("executeBranchEnsure", () => {
                 return makeShellResult({ stdout: "main\n" });
             }
             if (command[0] === "gh") {
-                return makeShellResult({ stdout: "", stderr: "gh error output", exitCode: 1 });
+                throw new ScriptShellError(command.join(" "), 1, "", "gh error output");
             }
             return makeShellResult();
         });
@@ -234,7 +234,7 @@ describe("executeBranchEnsure", () => {
                 return makeShellResult({ stdout: makeOkResponse("feature_branch", "chore/270-my-branch") });
             }
             if (command[0] === "git" && command[1] === "branch") {
-                return makeShellResult({ stdout: "", stderr: "fatal: not a git repository", exitCode: 1 });
+                throw new ScriptShellError("git branch --show-current", 128, "", "fatal: not a git repository");
             }
             return makeShellResult();
         });
@@ -242,7 +242,7 @@ describe("executeBranchEnsure", () => {
         const err = await executeBranchEnsure(deps, store).catch((e) => e);
         expect(err).toBeInstanceOf(ScriptError);
         expect(err.verboseStderr).toContain("fatal: not a git repository");
-        expect(err.message).toContain("git branch --show-current failed");
+        expect((err as ScriptError).envelope.error?.details?.cmd).toContain("git branch --show-current");
     });
 });
 
@@ -260,7 +260,7 @@ describe("executeBranchVerify", () => {
     test("resolve-issue-branch exits non-zero — throws ScriptError", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
-                return makeShellResult({ stdout: "", stderr: "some error", exitCode: 1 });
+                throw new ScriptShellError(RESOLVE_BIN, 1, "", "some error");
             }
             return makeShellResult();
         });

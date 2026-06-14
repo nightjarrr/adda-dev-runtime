@@ -39,7 +39,7 @@ describe("BunShell", () => {
         expect(result.exitCode).not.toBe(0);
     });
 
-    test("ScriptShellError message includes cmd, stdout, stderr fields", async () => {
+    test("ScriptShellError details include cmd, stdout, stderr fields", async () => {
         const shell = new BunShell();
         let err: ScriptShellError | undefined;
         try {
@@ -48,11 +48,13 @@ describe("BunShell", () => {
             err = e as ScriptShellError;
         }
         expect(err).toBeInstanceOf(ScriptShellError);
-        expect(err?.message).toContain("shell command failed (exit 3)");
-        expect(err?.message).toContain("cmd:");
-        expect(err?.message).toContain("sh -c echo out; echo err >&2; exit 3");
-        expect(err?.message).toContain("stdout: out");
-        expect(err?.message).toContain("stderr: err");
+        expect(err?.message).toBe("shell command failed");
+        if (err?.envelope.status !== "fail") throw new Error("expected fail");
+        const details = err.envelope.error.details;
+        expect(details.cmd).toContain("sh -c echo out; echo err >&2; exit 3");
+        expect(details.stdout).toBe("out");
+        expect(details.stderr).toBe("err");
+        expect(details.exitCode).toBe(3);
     });
 
     test("captures stderr output", async () => {

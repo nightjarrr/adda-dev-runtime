@@ -1,5 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Env, EnvDep, Shell, ShellDep, ShellResult, StdioDep } from "../lib/index";
+import { ScriptShellError } from "../lib/index";
 import { ResolveIssueBranchScript } from "./resolve-issue-branch";
 
 type ResolveIssueBranchDeps = ShellDep & EnvDep & StdioDep;
@@ -153,13 +154,11 @@ describe("ResolveIssueBranchScript", () => {
     });
 
     describe("gh shell command failure", () => {
-        test("gh exits non-zero — exits 1 with fail envelope, reason api_error", async () => {
+        test("gh exits non-zero — exits 1 with fail envelope, reason shell_error", async () => {
             const { deps, outLines } = makeMockDeps({
-                shellRun: async () => ({
-                    stdout: "",
-                    stderr: "API rate limit exceeded",
-                    exitCode: 1,
-                }),
+                shellRun: async () => {
+                    throw new ScriptShellError("gh api graphql", 1, "", "API rate limit exceeded");
+                },
             });
             const script = new ResolveIssueBranchScript(deps);
             const code = await script.run(["bun", "resolve-issue-branch.ts", "132"]);
@@ -168,8 +167,8 @@ describe("ResolveIssueBranchScript", () => {
             expect(out.status).toBe("fail");
             expect(out.result).toBeNull();
             const error = out.error as Record<string, unknown>;
-            expect(error.reason).toBe("api_error");
-            expect(String(error.message)).toContain("GraphQL API call failed");
+            expect(error.reason).toBe("shell_error");
+            expect(String(error.message)).toBe("shell command failed");
         });
     });
 

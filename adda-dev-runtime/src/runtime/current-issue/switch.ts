@@ -30,16 +30,7 @@ export async function executeSwitch(
     }
 
     // Step 3: Fetch issue metadata
-    const ghResult = await deps.shell.run(["gh", "issue", "view", issueId, "--json", "title,labels,state"], {
-        strict: false,
-    });
-    if (ghResult.exitCode !== 0) {
-        throw new CurrentIssueError(
-            "api_error",
-            `failed to fetch issue #${issueId}: ${ghResult.stderr.trim() || ghResult.stdout.trim()}`,
-            { verboseStderr: ghResult.stderr },
-        );
-    }
+    const ghResult = await deps.shell.run(["gh", "issue", "view", issueId, "--json", "title,labels,state"]);
 
     let ghRaw: unknown;
     try {
@@ -66,24 +57,10 @@ export async function executeSwitch(
     const branch = resolveData.resolution === "main" ? "main" : resolveData.branch;
 
     // Step 6: Checkout branch
-    const checkoutResult = await deps.shell.run(["git", "checkout", branch], { strict: false });
-    if (checkoutResult.exitCode !== 0) {
-        throw new CurrentIssueError(
-            "checkout_failed",
-            `git checkout '${branch}' failed: ${checkoutResult.stderr.trim() || checkoutResult.stdout.trim()}`,
-            { verboseStderr: checkoutResult.stderr },
-        );
-    }
+    await deps.shell.run(["git", "checkout", branch]);
 
     // Step 6a: Pull from origin to ensure local branch is up to date
-    const pullResult = await deps.shell.run(["git", "pull"], { strict: false });
-    if (pullResult.exitCode !== 0) {
-        throw new CurrentIssueError(
-            "pull_failed",
-            `git pull failed on '${branch}': ${pullResult.stderr.trim() || pullResult.stdout.trim()}`,
-            { verboseStderr: pullResult.stderr },
-        );
-    }
+    await deps.shell.run(["git", "pull"]);
 
     // Step 7: Write state and emit success
     const issueState: IssueState = {
