@@ -110,10 +110,10 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
     protected async execute(args: PrReviewThreadsArgs): Promise<void> {
         if (args.mode === "pr") {
             const { header, resultsFile } = await runPr(this.deps, args);
-            this.emit({ status: "ok", result: { pr: header, resultsFile }, error: null });
+            this.emitOk({ pr: header, resultsFile });
         } else {
             const { header, resultsFile } = await runThread(this.deps, args);
-            this.emit({ status: "ok", result: { thread: header, resultsFile }, error: null });
+            this.emitOk({ thread: header, resultsFile });
         }
     }
 }

@@ -1,7 +1,6 @@
 import type { parseArgs } from "node:util";
 import type { BaseReason, GithubReason, EnvDep, ShellDep, StdioDep } from "@adda/lib";
 import { defaultDeps, parseJson, ScriptBase, ScriptStructuredError, ScriptZodValidationError } from "@adda/lib";
-import type { ScriptEnvelope } from "@adda/lib";
 import { z } from "zod";
 
 type ResolveIssueBranchDeps = ShellDep & EnvDep & StdioDep;
@@ -156,10 +155,11 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps,
         // Resolution tier 1 — linkedBranches
         const linkedNodes = issue.linkedBranches.nodes;
         if (linkedNodes.length === 1) {
-            this.emit<ScriptEnvelope<ResolveResult>>({
-                status: "ok",
-                result: { issue_id: issueId, resolution: "feature_branch", branch: linkedNodes[0].ref.name, pr: "" },
-                error: null,
+            this.emitOk<ResolveResult>({
+                issue_id: issueId,
+                resolution: "feature_branch",
+                branch: linkedNodes[0].ref.name,
+                pr: "",
             });
             return;
         }
@@ -175,24 +175,16 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps,
         const openPrs = issue.timelineItems.nodes.filter((n) => n.subject?.state === "OPEN");
 
         if (openPrs.length === 0) {
-            this.emit<ScriptEnvelope<ResolveResult>>({
-                status: "ok",
-                result: { issue_id: issueId, resolution: "main", branch: "", pr: "" },
-                error: null,
-            });
+            this.emitOk<ResolveResult>({ issue_id: issueId, resolution: "main", branch: "", pr: "" });
             return;
         }
         if (openPrs.length === 1) {
             const pr = openPrs[0].subject;
-            this.emit<ScriptEnvelope<ResolveResult>>({
-                status: "ok",
-                result: {
-                    issue_id: issueId,
-                    resolution: "feature_branch",
-                    branch: pr?.headRefName ?? "",
-                    pr: String(pr?.number),
-                },
-                error: null,
+            this.emitOk<ResolveResult>({
+                issue_id: issueId,
+                resolution: "feature_branch",
+                branch: pr?.headRefName ?? "",
+                pr: String(pr?.number),
             });
             return;
         }

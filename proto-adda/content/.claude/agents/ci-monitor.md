@@ -34,32 +34,48 @@ Map the structured input to the exact script call:
 
 Run the exact invocation from Step 1. Call the Bash tool immediately — permission is already granted and no confirmation is required.
 
-ci-watch stdout (all modes, JSON):
+ci-watch stdout (all modes, JSON — unified envelope):
 ```
-// exit 0
-{ "conclusion": "success", "elapsed_seconds": 42 }
-// exit 1
-{ "conclusion": "failure", "elapsed_seconds": 42,
-  "runs": [{ "runId": "...", "event": "...", "url": "...", "conclusion": "...", "logFile": "/tmp/..." }] }
+// exit 0 — CI passed
+{ "status": "ok", "result": { "elapsed_seconds": 42 }, "error": null }
+
+// exit 1 — CI failed (runs data in error.details)
+{ "status": "fail", "result": null,
+  "error": { "reason": "ci_failed", "message": "CI runs failed",
+             "details": { "elapsed_seconds": 42,
+                          "runs": [{ "runId": "...", "event": "...", "url": "...", "conclusion": "...", "logFile": "/tmp/..." }] } } }
+
+// exit 1 or 2 — script error (arg/infra)
+{ "status": "fail", "result": null,
+  "error": { "reason": "invalid_args"|"api_error"|"validation_error"|..., "message": "...", "details": {} } }
 ```
+
+Note: `runs[].conclusion` carries the per-run GitHub terminal state (e.g. `"failure"`, `"cancelled"`, `"timed_out"`).
 
 ### Step 3 — On exit 0
 
-Emit the success result (see Output section) and terminate.
+Parse envelope. If `status: "ok"`, emit the success result (see Output section) and terminate. If stdout is not valid envelope JSON, emit the stderr content as a dispatch error and terminate.
 
 ### Step 4 — On non-zero exit
 
-1. If exit code is 2, or if stdout is empty or not valid JSON, ci-watch did not produce a classifiable result. Emit the stderr content as a dispatch error and terminate:
+Parse envelope from stdout:
+1. If `status: "fail"` and `error.reason === "ci_failed"` — CI failure path:
+   - Collect all `logFile` paths from `error.details.runs[].logFile`.
+   - Read each log file in full.
+   - Identify failing step(s), error message(s), and any file/line references.
+   - Navigate to referenced source files in the repository using Read, Grep, and Glob to understand the code context.
+   - Classify the root cause.
+   - Emit the failure result (see Output section) and terminate.
+2. If `status: "fail"` with any other reason — script error; emit the `error.message` as a dispatch error and terminate:
+   ```
+   **Result:** error
+   **Detail:** [error.message]
+   ```
+3. If stdout is empty or not valid JSON — script error; emit the stderr content as a dispatch error and terminate:
    ```
    **Result:** error
    **Detail:** [stderr content]
    ```
-2. Parse the valid JSON from stdout. Collect all `logFile` paths from the `runs` array.
-3. Read each log file in full.
-4. Identify failing step(s), error message(s), and any file/line references.
-5. Navigate to referenced source files in the repository using Read, Grep, and Glob to understand the code context.
-6. Classify the root cause.
-7. Emit the failure result (see Output section) and terminate.
 
 ## Classifications
 

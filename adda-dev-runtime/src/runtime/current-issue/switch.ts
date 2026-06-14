@@ -1,4 +1,4 @@
-import type { EnvDep, FileSysDep, ScriptEnvelope, ShellDep } from "@adda/lib";
+import type { EnvDep, FileSysDep, ShellDep } from "@adda/lib";
 import { parseJson, ScriptZodValidationError } from "@adda/lib";
 
 import { runRepoInitHook } from "./hook";
@@ -18,7 +18,7 @@ export async function executeSwitch(
     skipRepoInit: boolean,
     deps: ShellDep & EnvDep & FileSysDep,
     store: IssueStateStore,
-): Promise<ScriptEnvelope<CurrentIssueResult>> {
+): Promise<CurrentIssueResult> {
     // Step 1: Validate env vars
     requireEnvVar(deps, "GITHUB_OWNER");
     requireEnvVar(deps, "GITHUB_REPO");
@@ -90,9 +90,5 @@ export async function executeSwitch(
     // Step 8: Run repo-level init hook
     const hook = await runRepoInitHook(deps, skipRepoInit);
 
-    return {
-        status: "ok",
-        result: { issue: issueState, details: { branch, resolution: resolveData.resolution, hook } },
-        error: null,
-    };
+    return { issue: issueState, details: { branch, resolution: resolveData.resolution, hook } };
 }

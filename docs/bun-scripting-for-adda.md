@@ -108,23 +108,20 @@ Exit code and `status` always agree and serve different consumers:
 ### Error implementation
 
 Scripts implement errors as a `ScriptStructuredError` subclass carrying the fail envelope.
-`ScriptBase.run()` catches it and auto-emits the envelope — no manual `this.emit()` at error
-sites. Success paths call `this.emit(...)` once and return.
+`ScriptBase.run()` catches it and auto-emits the envelope — no manual emit at error
+sites. Success paths call `this.emitOk(...)` once and return.
 
 ```typescript
 import { ScriptStructuredError } from "@adda/lib";
-import type { ScriptEnvelope } from "@adda/lib";
+import type { BaseReason } from "@adda/lib";
 
-class MyScriptError extends ScriptStructuredError {
-    constructor(reason: MyReason, message: string, details: Record<string, unknown> = {}, exitCode = 1, verboseStderr?: string) {
-        const envelope: ScriptEnvelope<never> = { status: "fail", result: null, error: { reason, message, details } };
-        super(envelope, message, exitCode, verboseStderr);
-    }
-}
-// Error sites:
+type MyReason = BaseReason | "repo_not_found";
+class MyScriptError extends ScriptStructuredError<MyReason> {}
+
+// Error sites — throw the subclass directly:
 throw new MyScriptError("repo_not_found", `repo ${owner}/${repo} not found`);
-// Success sites:
-this.emit<ScriptEnvelope<MyResult>>({ status: "ok", result: { ... }, error: null });
+// Success sites — pass the result object:
+this.emitOk<MyResult>({ id: "...", name: "..." });
 return;
 ```
 

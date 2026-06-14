@@ -1,4 +1,4 @@
-import type { ScriptEnvelope, ShellDep } from "@adda/lib";
+import type { ShellDep } from "@adda/lib";
 import { slugify } from "@adda/lib";
 
 import { resolveIssueBranch } from "./resolve";
@@ -15,7 +15,7 @@ async function getCurrentBranch(deps: ShellDep): Promise<string> {
     return result.stdout.trim();
 }
 
-export async function executeBranchEnsure(deps: ShellDep, store: IssueStateStore): Promise<ScriptEnvelope<CurrentIssueResult>> {
+export async function executeBranchEnsure(deps: ShellDep, store: IssueStateStore): Promise<CurrentIssueResult> {
     const state = await store.readState();
     if (!state) throw new CurrentIssueError("no_current_issue", "no current issue set — run 'current-issue switch <id>' first");
 
@@ -25,11 +25,7 @@ export async function executeBranchEnsure(deps: ShellDep, store: IssueStateStore
 
     if (resolveData.resolution === "feature_branch") {
         if (currentBranch === resolveData.branch) {
-            return {
-                status: "ok",
-                result: { issue: state, details: { action: "none", branch: resolveData.branch } },
-                error: null,
-            };
+            return { issue: state, details: { action: "none", branch: resolveData.branch } };
         }
         throw new CurrentIssueError(
             "branch_mismatch",
@@ -68,10 +64,10 @@ export async function executeBranchEnsure(deps: ShellDep, store: IssueStateStore
 
     const details: Record<string, unknown> = { action: "created", branch: branchName };
     if (warning) details.warning = warning;
-    return { status: "ok", result: { issue: state, details }, error: null };
+    return { issue: state, details };
 }
 
-export async function executeBranchVerify(deps: ShellDep, store: IssueStateStore): Promise<ScriptEnvelope<CurrentIssueResult>> {
+export async function executeBranchVerify(deps: ShellDep, store: IssueStateStore): Promise<CurrentIssueResult> {
     const state = await store.readState();
     if (!state) throw new CurrentIssueError("no_current_issue", "no current issue set — run 'current-issue switch <id>' first");
 
@@ -93,5 +89,5 @@ export async function executeBranchVerify(deps: ShellDep, store: IssueStateStore
         );
     }
 
-    return { status: "ok", result: { issue: state, details: { branch: currentBranch } }, error: null };
+    return { issue: state, details: { branch: currentBranch } };
 }

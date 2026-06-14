@@ -1,6 +1,6 @@
 import type { parseArgs } from "node:util";
-import type { FileWriterDep, ShellDep, SleepDep, StdioDep } from "@adda/lib";
-import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError, ScriptZodValidationError } from "@adda/lib";
+import type { BaseReason, FileWriterDep, ShellDep, SleepDep, StdioDep } from "@adda/lib";
+import { defaultDeps, parseJson, ScriptBase, ScriptStructuredError, ScriptZodValidationError } from "@adda/lib";
 import { z } from "zod";
 
 const ChecksSchema = z.array(z.object({ name: z.string(), state: z.string(), link: z.string() }));
@@ -19,18 +19,14 @@ interface RunRecord {
     logFile: string;
 }
 
-interface SuccessWatchResult {
-    conclusion: "success";
-    elapsed_seconds: number;
-}
+// On success, result carries elapsed_seconds.
+// On CI failure, the data moves to error.details (reason: "ci_failed").
+// Known gap: ScriptShellError and ScriptZodValidationError remain unstructured stderr —
+// wrapping them is out of scope for this migration.
+type CiWatchResult = { elapsed_seconds: number };
 
-interface FailedWatchResult {
-    conclusion: "failure";
-    elapsed_seconds: number;
-    runs: RunRecord[];
-}
-
-type CiWatchOutput = SuccessWatchResult | FailedWatchResult;
+type CiWatchReason = BaseReason | "ci_failed";
+export class CiWatchError extends ScriptStructuredError<CiWatchReason> {}
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 10000;
@@ -63,7 +59,11 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         const mode = parsed.positionals[0];
 
         if (!mode) {
-            throw new ScriptArgsError("mode is required: push --branch <name>|--tag <tag>|--commit <sha>  or  pr <pr-number>");
+            throw new CiWatchError(
+                "invalid_args",
+                "mode is required: push --branch <name>|--tag <tag>|--commit <sha>  or  pr <pr-number>",
+                { exitCode: 2 },
+            );
         }
 
         if (mode === "push") {
@@ -73,7 +73,9 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
 
             const setCount = [branch, tag, commit].filter((v) => v !== undefined).length;
             if (setCount !== 1) {
-                throw new ScriptArgsError("push mode requires exactly one of --branch, --tag, or --commit");
+                throw new CiWatchError("invalid_args", "push mode requires exactly one of --branch, --tag, or --commit", {
+                    exitCode: 2,
+                });
             }
 
             const ref: CiWatchRef =
@@ -84,12 +86,12 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         if (mode === "pr") {
             const prNumber = parsed.positionals[1];
             if (!prNumber) {
-                throw new ScriptArgsError("pr mode requires a PR number as the second argument");
+                throw new CiWatchError("invalid_args", "pr mode requires a PR number as the second argument", { exitCode: 2 });
             }
             return { mode: "pr", prNumber };
         }
 
-        throw new ScriptArgsError(`unknown mode '${mode}': expected 'push' or 'pr'`);
+        throw new CiWatchError("invalid_args", `unknown mode '${mode}': expected 'push' or 'pr'`, { exitCode: 2 });
     }
 
     protected async execute(args: CiWatchArgs): Promise<void> {
@@ -117,13 +119,13 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
                 const localResult = await this.deps.shell.run(["git", "branch", "--show-current"]);
                 resolvedBranch = localResult.stdout.trim();
                 if (!resolvedBranch) {
-                    throw new ScriptArgsError("cannot determine current local branch");
+                    throw new CiWatchError("invalid_args", "cannot determine current local branch", { exitCode: 2 });
                 }
             }
 
             const sha = await this.resolveRemoteSha(resolvedBranch);
             if (!sha) {
-                throw new ScriptArgsError(`cannot resolve branch '${resolvedBranch}' on origin`);
+                throw new CiWatchError("invalid_args", `cannot resolve branch '${resolvedBranch}' on origin`, { exitCode: 2 });
             }
             return sha;
         }
@@ -138,7 +140,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
 
         const tagSha = await this.resolveRemoteSha(`refs/tags/${tagName}`);
         if (!tagSha) {
-            throw new ScriptArgsError(`cannot resolve tag '${tagName}' on origin`);
+            throw new CiWatchError("invalid_args", `cannot resolve tag '${tagName}' on origin`, { exitCode: 2 });
         }
         return tagSha;
     }
@@ -151,7 +153,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
 
         while (runIds.length === 0) {
             if (pollElapsed >= POLL_TIMEOUT_MS) {
-                throw new ScriptError(`no push run found for commit ${sha} after ${POLL_TIMEOUT_MS / 1000}s`, 1);
+                throw new CiWatchError("api_error", `no push run found for commit ${sha} after ${POLL_TIMEOUT_MS / 1000}s`);
             }
             await this.deps.sleep.sleep(POLL_INTERVAL_MS);
             pollElapsed += POLL_INTERVAL_MS;
@@ -165,13 +167,14 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         const getElapsed = () => Math.round((Date.now() - startMs) / 1000);
 
         if (failingRuns.length === 0) {
-            this.emit<CiWatchOutput>({ conclusion: "success", elapsed_seconds: getElapsed() });
+            this.emitOk<CiWatchResult>({ elapsed_seconds: getElapsed() });
             return;
         }
 
         const runs = await this.collectFailingRuns(failingRuns);
-        this.emit<CiWatchOutput>({ conclusion: "failure", elapsed_seconds: getElapsed(), runs });
-        throw new ScriptError("CI runs failed", 1);
+        throw new CiWatchError("ci_failed", "CI runs failed", {
+            details: { elapsed_seconds: getElapsed(), runs },
+        });
     }
 
     private async watchPr(prNumber: string): Promise<void> {
@@ -210,15 +213,16 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
 
         // Phase 4 — emit result
         if (failingRunIdSet.size === 0 && !hasUnresolvableFailure) {
-            this.emit<CiWatchOutput>({ conclusion: "success", elapsed_seconds: getElapsed() });
+            this.emitOk<CiWatchResult>({ elapsed_seconds: getElapsed() });
             return;
         }
 
         const failingRunIds = Array.from(failingRunIdSet);
         const runsWithConclusion = await Promise.all(failingRunIds.map((id) => this.fetchRunConclusion(id)));
         const runs = await this.collectFailingRuns(runsWithConclusion);
-        this.emit<CiWatchOutput>({ conclusion: "failure", elapsed_seconds: getElapsed(), runs });
-        throw new ScriptError("CI runs failed", 1);
+        throw new CiWatchError("ci_failed", "CI runs failed", {
+            details: { elapsed_seconds: getElapsed(), runs },
+        });
     }
 
     private async fetchPushRunIds(sha: string): Promise<string[]> {
