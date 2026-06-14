@@ -103,7 +103,13 @@ When uncertain, prefer dialog over silent assumptions — see Section 10 (Commun
    ```bash
    /usr/local/libexec/adda-dev-runtime/bin/quality-gates
    ```
-2. Read stdout: summary is the final two lines — `PASS` or `FAIL`, then `Results: <path-to-result-file>`.
+2. Parse the single JSON line emitted on stdout — the unified output envelope:
+   - On PASS (exit 0): `{"status":"ok","result":{"overall":"PASS","gates":[…],"resultsFile":"<path>"},"error":null}`
+   - On FAIL verdict (exit 1, `reason:"gates_failed"`): `{"status":"fail","result":null,"error":{"reason":"gates_failed","details":{"resultsFile":"<path>"}}}`
+
+   Capture the envelope and extract the result file path:
+   - PASS: `jq -r '.result.resultsFile'` on the envelope line
+   - FAIL verdict: `jq -r '.error.details.resultsFile'` on the envelope line
 3. Result file structure:
    ```json
    {
@@ -115,12 +121,12 @@ When uncertain, prefer dialog over silent assumptions — see Section 10 (Commun
    ```bash
    jq '[.gates[] | {name, command}]' <result-file>
    ```
-   Note the result file path — you will reference it in Sections 7 and 12. Then, if Section 3 determined that coverage tooling is defined and unambiguous, extract the coverage summary:
+   Note the result file path (from `.result.resultsFile` in the envelope) — you will reference it in Sections 7 and 12. Then, if Section 3 determined that coverage tooling is defined and unambiguous, extract the coverage summary:
    ```bash
    jq '[.gates[] | select(.name == "<gate-name>") | .output]' <result-file>
    ```
    From the output, extract a single line capturing the headline numbers (overall percentage, line/branch breakdown if present) exactly as the tool emitted them — do not normalise or invent a format. Carry that line into the final response under `Code Coverage`. If the identified gate's output contains nothing recognisable as a coverage summary, fall back to `(no coverage data)` and add a deviation note describing what was expected versus what was found. Proceed to Section 7.
-5. On `FAIL`, query failing gates and their output — do not read the full JSON file:
+5. On `FAIL`, extract the result file path from `.error.details.resultsFile` in the envelope, then query failing gates and their output — do not read the full JSON file:
    ```bash
    jq '[.gates[] | select(.status=="FAIL") | {name, command, output}]' <result-file>
    ```

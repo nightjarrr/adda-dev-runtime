@@ -132,6 +132,10 @@ function readWrittenJson(writtenFiles: Map<string, string>): ReturnType<typeof J
     return JSON.parse(content) as ReturnType<typeof JSON.parse>;
 }
 
+function parseEnvelope(outLines: string[]): ReturnType<typeof JSON.parse> {
+    return JSON.parse(outLines.join("")) as ReturnType<typeof JSON.parse>;
+}
+
 // --- Tests ---
 
 describe("QualityGatesScript", () => {
@@ -255,16 +259,15 @@ describe("QualityGatesScript", () => {
 
     describe("conf parsing", () => {
         test("two gates are both executed", async () => {
-            const { deps } = makeMockDeps({
+            const { deps, writtenFiles } = makeMockDeps({
                 confContent: makeTwoGateToml(),
                 runShResults: [makeShellSuccess(), makeShellSuccess()],
             });
             const script = new QualityGatesScript(deps);
             const code = await script.run(["bun", "quality-gates.ts"]);
             expect(code).toBe(0);
-            const stdout = deps.stdio.stdout.write as ReturnType<typeof mock>;
-            const calls = stdout.mock.calls.map((c: string[]) => c[0]);
-            expect(calls.filter((l: string) => l.startsWith("[")).length).toBe(2);
+            const result = readWrittenJson(writtenFiles);
+            expect(result.gates).toHaveLength(2);
         });
 
         test("gates are preserved in order", async () => {
@@ -303,50 +306,51 @@ describe("QualityGatesScript", () => {
             expect(code).toBe(0);
         });
 
-        test("stdout has [1/N] name — description progress line", async () => {
+        test("stdout envelope has status ok", async () => {
+            const { deps, outLines } = makeMockDeps({
+                confContent: makeSingleGateToml(),
+                runShResults: [makeShellSuccess()],
+            });
+            const script = new QualityGatesScript(deps);
+            await script.run(["bun", "quality-gates.ts"]);
+            const envelope = parseEnvelope(outLines);
+            expect(envelope.status).toBe("ok");
+            expect(envelope.error).toBeNull();
+        });
+
+        test("stdout envelope result has overall PASS", async () => {
+            const { deps, outLines } = makeMockDeps({
+                confContent: makeSingleGateToml(),
+                runShResults: [makeShellSuccess()],
+            });
+            const script = new QualityGatesScript(deps);
+            await script.run(["bun", "quality-gates.ts"]);
+            const envelope = parseEnvelope(outLines);
+            expect(envelope.result.overall).toBe("PASS");
+        });
+
+        test("stdout envelope result has gates array matching configured gates", async () => {
             const { deps, outLines } = makeMockDeps({
                 confContent: makeTwoGateToml(),
                 runShResults: [makeShellSuccess(), makeShellSuccess()],
             });
             const script = new QualityGatesScript(deps);
             await script.run(["bun", "quality-gates.ts"]);
-            const joined = outLines.join("");
-            expect(joined).toContain("[1/2] gate-a — Gate A description");
-            expect(joined).toContain("[2/2] gate-b — Gate B description");
+            const envelope = parseEnvelope(outLines);
+            expect(envelope.result.gates).toHaveLength(2);
+            expect(envelope.result.gates[0].name).toBe("gate-a");
+            expect(envelope.result.gates[1].name).toBe("gate-b");
         });
 
-        test("stdout has PASS after each gate", async () => {
+        test("stdout envelope result has resultsFile equal to FAKE_RESULT_PATH", async () => {
             const { deps, outLines } = makeMockDeps({
                 confContent: makeSingleGateToml(),
                 runShResults: [makeShellSuccess()],
             });
             const script = new QualityGatesScript(deps);
             await script.run(["bun", "quality-gates.ts"]);
-            const joined = outLines.join("");
-            expect(joined).toContain("PASS");
-        });
-
-        test("stdout has === delimiter and overall PASS", async () => {
-            const { deps, outLines } = makeMockDeps({
-                confContent: makeSingleGateToml(),
-                runShResults: [makeShellSuccess()],
-            });
-            const script = new QualityGatesScript(deps);
-            await script.run(["bun", "quality-gates.ts"]);
-            const joined = outLines.join("");
-            expect(joined).toContain("===");
-            expect(joined).toContain("PASS");
-        });
-
-        test("stdout has Results: line with result path", async () => {
-            const { deps, outLines } = makeMockDeps({
-                confContent: makeSingleGateToml(),
-                runShResults: [makeShellSuccess()],
-            });
-            const script = new QualityGatesScript(deps);
-            await script.run(["bun", "quality-gates.ts"]);
-            const joined = outLines.join("");
-            expect(joined).toContain(`Results: ${FAKE_RESULT_PATH}`);
+            const envelope = parseEnvelope(outLines);
+            expect(envelope.result.resultsFile).toBe(FAKE_RESULT_PATH);
         });
 
         test("JSON overall is PASS", async () => {
@@ -372,14 +376,38 @@ describe("QualityGatesScript", () => {
             expect(code).toBe(1);
         });
 
-        test("stdout has FAIL", async () => {
+        test("stdout envelope has status fail with reason gates_failed", async () => {
             const { deps, outLines } = makeMockDeps({
                 confContent: makeTwoGateToml(),
                 runShResults: [makeShellSuccess(), makeShellFailure()],
             });
             const script = new QualityGatesScript(deps);
             await script.run(["bun", "quality-gates.ts"]);
-            expect(outLines.join("")).toContain("FAIL");
+            const envelope = parseEnvelope(outLines);
+            expect(envelope.status).toBe("fail");
+            expect(envelope.result).toBeNull();
+            expect(envelope.error.reason).toBe("gates_failed");
+        });
+
+        test("stdout envelope error.details.resultsFile equals FAKE_RESULT_PATH", async () => {
+            const { deps, outLines } = makeMockDeps({
+                confContent: makeSingleGateToml(),
+                runShResults: [makeShellFailure()],
+            });
+            const script = new QualityGatesScript(deps);
+            await script.run(["bun", "quality-gates.ts"]);
+            const envelope = parseEnvelope(outLines);
+            expect(envelope.error.details.resultsFile).toBe(FAKE_RESULT_PATH);
+        });
+
+        test("stderr contains Error:", async () => {
+            const { deps, errLines } = makeMockDeps({
+                confContent: makeSingleGateToml(),
+                runShResults: [makeShellFailure()],
+            });
+            const script = new QualityGatesScript(deps);
+            await script.run(["bun", "quality-gates.ts"]);
+            expect(errLines.join("")).toContain("Error:");
         });
 
         test("all gates still run (run-all, no early exit)", async () => {
