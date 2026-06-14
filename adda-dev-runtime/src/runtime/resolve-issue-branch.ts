@@ -1,5 +1,5 @@
 import type { parseArgs } from "node:util";
-import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
+import type { BaseReason, EnvDep, ShellDep, StdioDep } from "@adda/lib";
 import { defaultDeps, parseJson, ScriptBase, ScriptZodValidationError } from "@adda/lib";
 import type { ScriptEnvelope } from "@adda/lib";
 import { ScriptStructuredError } from "@adda/lib";
@@ -9,14 +9,7 @@ type ResolveIssueBranchDeps = ShellDep & EnvDep & StdioDep;
 
 type ResolveIssueBranchArgs = { issueId: string };
 
-type ResolveReason =
-    | "invalid_args"
-    | "missing_env"
-    | "api_error"
-    | "repo_not_found"
-    | "issue_not_found"
-    | "validation_error"
-    | "ambiguous";
+export type ResolveReason = BaseReason | "repo_not_found" | "issue_not_found" | "ambiguous";
 
 type ResolveResult = {
     issue_id: string;

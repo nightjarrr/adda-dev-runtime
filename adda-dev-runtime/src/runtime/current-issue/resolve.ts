@@ -24,8 +24,6 @@ export async function resolveIssueBranch(deps: ShellDep, issueId: string): Promi
         throw new CurrentIssueError(
             "resolve_failed",
             `resolve-issue-branch failed for issue #${issueId}`,
-            {},
-            1,
             resolveResult.stderr,
         );
     }
@@ -40,7 +38,7 @@ export async function resolveIssueBranch(deps: ShellDep, issueId: string): Promi
     const resolveParsed = ResolveIssueBranchOutputSchema.safeParse(resolveRaw);
     if (!resolveParsed.success) {
         const err = new ScriptZodValidationError("unexpected resolve-issue-branch output", resolveParsed.error, resolveRaw);
-        throw new CurrentIssueError("validation_error", err.message, {}, 1, err.verboseStderr);
+        throw new CurrentIssueError("validation_error", err.message, err.verboseStderr!);
     }
 
     const data = resolveParsed.data;
@@ -50,7 +48,6 @@ export async function resolveIssueBranch(deps: ShellDep, issueId: string): Promi
             data.error.reason as CurrentIssueReason,
             data.error.message,
             data.error.details,
-            1,
             resolveResult.stderr,
         );
     }

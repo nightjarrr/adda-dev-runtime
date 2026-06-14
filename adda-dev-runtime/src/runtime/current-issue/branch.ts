@@ -8,13 +8,7 @@ import type { CurrentIssueResult, IssueStateStore } from "./types";
 async function getCurrentBranch(deps: ShellDep): Promise<string> {
     const result = await deps.shell.run(["git", "branch", "--show-current"], { strict: false });
     if (result.exitCode !== 0) {
-        throw new CurrentIssueError(
-            "shell_error",
-            `git branch --show-current failed: ${result.stderr.trim()}`,
-            {},
-            1,
-            result.stderr,
-        );
+        throw new CurrentIssueError("shell_error", `git branch --show-current failed: ${result.stderr.trim()}`, result.stderr);
     }
     return result.stdout.trim();
 }
@@ -68,8 +62,6 @@ export async function executeBranchEnsure(deps: ShellDep, store: IssueStateStore
         throw new CurrentIssueError(
             "branch_create_failed",
             `gh issue develop failed for issue #${state.id}`,
-            {},
-            1,
             developResult.stderr,
         );
     }

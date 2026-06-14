@@ -1,5 +1,14 @@
 import type { z } from "zod";
 
+export type BaseReason =
+    | "invalid_args"
+    | "invalid_config"
+    | "missing_env"
+    | "api_error"
+    | "validation_error"
+    | "shell_error"
+    | "internal_error";
+
 export class ScriptError extends Error {
     readonly exitCode: number;
     readonly reason: string;

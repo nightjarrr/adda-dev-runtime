@@ -169,7 +169,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
                 else this.emit(await executeBranchVerify(this.deps, this));
                 return;
             default: {
-                throw new CurrentIssueError("unknown_subcommand", `unknown subcommand: ${args.name}`);
+                throw new CurrentIssueArgsError(`unknown subcommand: ${args.name}`);
             }
         }
     }

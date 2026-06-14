@@ -1,36 +1,35 @@
 import type { ScriptEnvelope } from "@adda/lib";
 import { ScriptStructuredError } from "@adda/lib";
 
+import type { ResolveReason } from "../resolve-issue-branch";
+
 export type CurrentIssueReason =
-    | "invalid_args"
-    | "missing_env"
+    | ResolveReason
     | "dirty_tree"
-    | "api_error"
-    | "validation_error"
     | "resolve_failed"
-    | "ambiguous"
-    | "repo_not_found"
-    | "issue_not_found"
     | "checkout_failed"
     | "hook_failed"
     | "no_active_issue"
     | "no_current_issue"
     | "no_feature_branch"
     | "branch_mismatch"
-    | "branch_create_failed"
-    | "shell_error"
-    | "unknown_subcommand";
+    | "branch_create_failed";
 
 export class CurrentIssueError extends ScriptStructuredError {
+    constructor(reason: CurrentIssueReason, message: string);
+    constructor(reason: CurrentIssueReason, message: string, verboseStderr: string);
+    constructor(reason: CurrentIssueReason, message: string, details: Record<string, unknown>);
+    constructor(reason: CurrentIssueReason, message: string, details: Record<string, unknown>, verboseStderr: string);
     constructor(
         reason: CurrentIssueReason,
         message: string,
-        details: Record<string, unknown> = {},
-        exitCode = 1,
+        detailsOrVerbose?: Record<string, unknown> | string,
         verboseStderr?: string,
     ) {
+        const details = typeof detailsOrVerbose === "object" ? detailsOrVerbose : {};
+        const verbose = typeof detailsOrVerbose === "string" ? detailsOrVerbose : verboseStderr;
         const envelope: ScriptEnvelope<never> = { status: "fail", result: null, error: { reason, message, details } };
-        super(envelope, message, exitCode, verboseStderr);
+        super(envelope, message, 1, verbose);
         this.name = "CurrentIssueError";
     }
 }

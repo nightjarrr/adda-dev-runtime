@@ -37,8 +37,6 @@ export async function executeSwitch(
         throw new CurrentIssueError(
             "api_error",
             `failed to fetch issue #${issueId}: ${ghResult.stderr.trim() || ghResult.stdout.trim()}`,
-            {},
-            1,
             ghResult.stderr,
         );
     }
@@ -53,7 +51,7 @@ export async function executeSwitch(
     const ghParsed = GhIssueSchema.safeParse(ghRaw);
     if (!ghParsed.success) {
         const err = new ScriptZodValidationError("unexpected gh issue response", ghParsed.error, ghRaw);
-        throw new CurrentIssueError("validation_error", err.message, {}, 1, err.verboseStderr);
+        throw new CurrentIssueError("validation_error", err.message, err.verboseStderr!);
     }
 
     const { title, labels, state } = ghParsed.data;
@@ -73,8 +71,6 @@ export async function executeSwitch(
         throw new CurrentIssueError(
             "checkout_failed",
             `git checkout '${branch}' failed: ${checkoutResult.stderr.trim() || checkoutResult.stdout.trim()}`,
-            {},
-            1,
             checkoutResult.stderr,
         );
     }

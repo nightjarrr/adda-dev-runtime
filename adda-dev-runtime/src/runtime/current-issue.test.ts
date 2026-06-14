@@ -164,11 +164,11 @@ describe("CurrentIssueScript", () => {
             expect(out.result).toBeNull();
         });
 
-        test("unknown subcommand — exits 1, fail envelope", async () => {
+        test("unknown subcommand — exits 2, fail envelope", async () => {
             const { deps, outLines } = makeMockDeps();
             const script = new CurrentIssueScript(deps);
             const code = await script.run(["bun", "current-issue.ts", "foobar"]);
-            expect(code).toBe(1);
+            expect(code).toBe(2);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("fail");
             expect(out.result).toBeNull();
