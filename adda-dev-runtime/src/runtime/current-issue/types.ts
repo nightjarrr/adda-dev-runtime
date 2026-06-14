@@ -62,7 +62,6 @@ export type CurrentIssueReason =
     | "no_active_issue"
     | "hook_failed"
     | "resolve_failed"
-    | "shell_error"
     | "no_current_issue"
     | "branch_mismatch"
     | "branch_create_failed"
