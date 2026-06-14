@@ -1,7 +1,7 @@
 import type { EnvDep, FileSysDep, ScriptEnvelope, ShellDep } from "@adda/lib";
 
-import { CurrentIssueError } from "./errors";
 import { executeSwitch } from "./switch";
+import { CurrentIssueError } from "./types";
 import type { CurrentIssueResult, IssueStateStore } from "./types";
 
 export async function executeSync(

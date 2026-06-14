@@ -1,10 +1,11 @@
 // thread mode handler for pr-review-threads.
 import type { EnvDep, FileWriterDep, ShellDep } from "@adda/lib";
-import { ScriptError, ScriptZodValidationError } from "@adda/lib";
+import { ScriptZodValidationError } from "@adda/lib";
 import { THREAD_NODE_QUERY, ThreadNodeQuerySchema } from "./graphql";
 import type { CommentNode } from "./graphql";
 import { FILE_PREFIX_THREAD, toThreadObjectFull } from "./helpers";
 import { graphql, paginate, readCeiling } from "./fetch";
+import { PrReviewError } from "./types";
 import type { PrReviewThreadsArgs, ThreadDetailFile, ThreadFileHeader } from "./types";
 
 type ThreadDeps = ShellDep & EnvDep & FileWriterDep;
@@ -25,26 +26,25 @@ export async function runThread(
 
     const node = firstParsed.data.data.node;
     if (node === null) {
-        throw new ScriptError(`thread '${args.threadId}' not found`, 1, "thread_not_found");
+        throw new PrReviewError("thread_not_found", `thread '${args.threadId}' not found`);
     }
     if (node.__typename !== "PullRequestReviewThread") {
-        throw new ScriptError(
-            `node '${args.threadId}' is not a PullRequestReviewThread (got ${node.__typename})`,
-            1,
+        throw new PrReviewError(
             "not_a_thread",
+            `node '${args.threadId}' is not a PullRequestReviewThread (got ${node.__typename})`,
         );
     }
 
     const comments = node.comments;
-    if (!comments) throw new ScriptError("unexpected missing comments on PullRequestReviewThread node");
+    if (!comments) throw new PrReviewError("internal_error", "unexpected missing comments on PullRequestReviewThread node");
     const pullRequest = node.pullRequest;
-    if (!pullRequest) throw new ScriptError("unexpected missing pullRequest on PullRequestReviewThread node");
+    if (!pullRequest)
+        throw new PrReviewError("internal_error", "unexpected missing pullRequest on PullRequestReviewThread node");
 
     const commentCount = comments.totalCount;
     if (commentCount > ceiling) {
-        throw new ScriptError(`scan limit exceeded: ${commentCount} comments > ceiling ${ceiling}`, 1, "scan_limit_exceeded", {
-            commentCount,
-            ceiling,
+        throw new PrReviewError("scan_limit_exceeded", `scan limit exceeded: ${commentCount} comments > ceiling ${ceiling}`, {
+            details: { commentCount, ceiling },
         });
     }
 
@@ -54,7 +54,7 @@ export async function runThread(
         node.isOutdated === undefined ||
         node.diffSide === undefined
     )
-        throw new ScriptError("unexpected missing fields on PullRequestReviewThread node");
+        throw new PrReviewError("internal_error", "unexpected missing fields on PullRequestReviewThread node");
 
     // Collect all comments using shared paginator
     const allComments: CommentNode[] = await paginate(

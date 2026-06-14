@@ -154,16 +154,17 @@ describe("ScriptBase", () => {
         test("emits envelope JSON to stdout", async () => {
             const { deps, outLines } = makeMockDeps();
             const script = new NoArgScript(deps, async () => {
-                throw new ScriptStructuredError({ status: "error", error: "oops" }, "oops");
+                throw new ScriptStructuredError("internal_error", "oops");
             });
             await script.run(["bun", "script.ts"]);
-            expect(outLines.join("")).toContain('{"status":"error","error":"oops"}');
+            expect(outLines.join("")).toContain('"status":"fail"');
+            expect(outLines.join("")).toContain('"reason":"internal_error"');
         });
 
         test("writes diagnostic message to stderr", async () => {
             const { deps, errLines } = makeMockDeps();
             const script = new NoArgScript(deps, async () => {
-                throw new ScriptStructuredError({ status: "error", error: "oops" }, "oops");
+                throw new ScriptStructuredError("internal_error", "oops");
             });
             await script.run(["bun", "script.ts"]);
             expect(errLines.join("")).toContain("Error: oops");
@@ -172,7 +173,7 @@ describe("ScriptBase", () => {
         test("returns the error's exit code", async () => {
             const { deps } = makeMockDeps();
             const script = new NoArgScript(deps, async () => {
-                throw new ScriptStructuredError({}, "msg", 3);
+                throw new ScriptStructuredError("internal_error", "msg", { exitCode: 3 });
             });
             const code = await script.run(["bun", "script.ts"]);
             expect(code).toBe(3);

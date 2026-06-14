@@ -1,14 +1,14 @@
 import { z, type ZodTypeAny } from "zod";
 
-export type ScriptErrorDetail = {
-    reason: string;
+export type ScriptErrorDetail<TReason extends string = string> = {
+    reason: TReason;
     message: string;
     details: Record<string, unknown>;
 };
 
-export type ScriptEnvelope<T> =
+export type ScriptEnvelope<T, TReason extends string = string> =
     | { status: "ok"; result: T; error: null }
-    | { status: "fail"; result: null; error: ScriptErrorDetail };
+    | { status: "fail"; result: null; error: ScriptErrorDetail<TReason> };
 
 const ScriptErrorDetailSchema = z.object({
     reason: z.string(),

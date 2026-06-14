@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { ScriptEnvelope } from "./envelope";
 
 export type BaseReason =
     | "invalid_args"
@@ -7,7 +8,12 @@ export type BaseReason =
     | "api_error"
     | "validation_error"
     | "shell_error"
-    | "internal_error";
+    | "internal_error"
+    | "ambiguous_result";
+
+// GitHub bounded context — all domain-level errors arising from the GitHub API/graph,
+// not just the current intersection across scripts.
+export type GithubReason = "repo_not_found" | "issue_not_found" | "pr_not_found" | "thread_not_found" | "not_a_thread";
 
 export class ScriptError extends Error {
     readonly exitCode: number;
@@ -32,13 +38,21 @@ export class ScriptError extends Error {
     }
 }
 
-export class ScriptStructuredError extends ScriptError {
-    readonly envelope: unknown;
+export class ScriptStructuredError<TExtra extends string = never> extends ScriptError {
+    readonly envelope: ScriptEnvelope<never, BaseReason | TExtra>;
 
-    constructor(envelope: unknown, message: string, exitCode = 1, verboseStderr?: string) {
-        super(message, exitCode, "internal_error", {}, verboseStderr);
+    constructor(
+        reason: BaseReason | TExtra,
+        message: string,
+        {
+            details = {},
+            exitCode = 1,
+            verboseStderr,
+        }: { details?: Record<string, unknown>; exitCode?: number; verboseStderr?: string } = {},
+    ) {
+        super(message, exitCode, reason, {}, verboseStderr);
         this.name = "ScriptStructuredError";
-        this.envelope = envelope;
+        this.envelope = { status: "fail", result: null, error: { reason, message, details } };
     }
 }
 

@@ -1,7 +1,7 @@
 import type { FileSysDep, ScriptEnvelope, ShellDep } from "@adda/lib";
 
-import { CurrentIssueError } from "./errors";
 import { runRepoInitHook } from "./hook";
+import { CurrentIssueError } from "./types";
 import type { CurrentIssueResult, IssueStateStore } from "./types";
 import { EMPTY_ISSUE_VIEW } from "./types";
 

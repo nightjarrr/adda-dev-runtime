@@ -1,9 +1,9 @@
 import type { EnvDep, FileSysDep, ScriptEnvelope, ShellDep } from "@adda/lib";
 import { parseJson, ScriptZodValidationError } from "@adda/lib";
 
-import { CurrentIssueError } from "./errors";
 import { runRepoInitHook } from "./hook";
 import { resolveIssueBranch } from "./resolve";
+import { CurrentIssueError } from "./types";
 import { GhIssueSchema } from "./types";
 import type { CurrentIssueResult, IssueState, IssueStateStore } from "./types";
 
@@ -37,7 +37,7 @@ export async function executeSwitch(
         throw new CurrentIssueError(
             "api_error",
             `failed to fetch issue #${issueId}: ${ghResult.stderr.trim() || ghResult.stdout.trim()}`,
-            ghResult.stderr,
+            { verboseStderr: ghResult.stderr },
         );
     }
 
@@ -51,7 +51,7 @@ export async function executeSwitch(
     const ghParsed = GhIssueSchema.safeParse(ghRaw);
     if (!ghParsed.success) {
         const err = new ScriptZodValidationError("unexpected gh issue response", ghParsed.error, ghRaw);
-        throw new CurrentIssueError("validation_error", err.message, err.verboseStderr);
+        throw new CurrentIssueError("validation_error", err.message, { verboseStderr: err.verboseStderr });
     }
 
     const { title, labels, state } = ghParsed.data;
@@ -71,7 +71,7 @@ export async function executeSwitch(
         throw new CurrentIssueError(
             "checkout_failed",
             `git checkout '${branch}' failed: ${checkoutResult.stderr.trim() || checkoutResult.stdout.trim()}`,
-            checkoutResult.stderr,
+            { verboseStderr: checkoutResult.stderr },
         );
     }
 

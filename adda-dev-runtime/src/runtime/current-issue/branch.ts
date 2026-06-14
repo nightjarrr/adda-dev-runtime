@@ -1,14 +1,16 @@
 import type { ScriptEnvelope, ShellDep } from "@adda/lib";
 import { slugify } from "@adda/lib";
 
-import { CurrentIssueError } from "./errors";
 import { resolveIssueBranch } from "./resolve";
+import { CurrentIssueError } from "./types";
 import type { CurrentIssueResult, IssueStateStore } from "./types";
 
 async function getCurrentBranch(deps: ShellDep): Promise<string> {
     const result = await deps.shell.run(["git", "branch", "--show-current"], { strict: false });
     if (result.exitCode !== 0) {
-        throw new CurrentIssueError("shell_error", `git branch --show-current failed: ${result.stderr.trim()}`, result.stderr);
+        throw new CurrentIssueError("shell_error", `git branch --show-current failed: ${result.stderr.trim()}`, {
+            verboseStderr: result.stderr,
+        });
     }
     return result.stdout.trim();
 }
@@ -59,11 +61,9 @@ export async function executeBranchEnsure(deps: ShellDep, store: IssueStateStore
         strict: false,
     });
     if (developResult.exitCode !== 0) {
-        throw new CurrentIssueError(
-            "branch_create_failed",
-            `gh issue develop failed for issue #${state.id}`,
-            developResult.stderr,
-        );
+        throw new CurrentIssueError("branch_create_failed", `gh issue develop failed for issue #${state.id}`, {
+            verboseStderr: developResult.stderr,
+        });
     }
 
     const details: Record<string, unknown> = { action: "created", branch: branchName };
