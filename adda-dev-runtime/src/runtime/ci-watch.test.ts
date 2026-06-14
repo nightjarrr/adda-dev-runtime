@@ -486,6 +486,23 @@ describe("CiWatchScript", () => {
             expect(code).toBe(1);
             expect(errLines.join("")).toContain("gh pr checks");
         });
+
+        test("gh pr checks --json returns valid JSON with wrong schema — exits 1 with validation_error envelope", async () => {
+            const { deps, outLines, errLines } = makeMockDeps({
+                runQueue: [
+                    makeShellResult(""), // gh pr checks --watch
+                    makeShellResult('{"not":"an array"}'), // gh pr checks --json — valid JSON, wrong schema
+                ],
+            });
+            const script = new CiWatchScript(deps);
+            const code = await script.run(["bun", "ci-watch.ts", "pr", "42"]);
+            expect(code).toBe(1);
+            const out = getStdoutJson(outLines);
+            expect(out.status).toBe("fail");
+            if (out.status !== "fail") throw new Error("expected fail");
+            expect(out.error.reason).toBe("validation_error");
+            expect(errLines.join("")).toContain("unexpected gh pr checks output");
+        });
     });
 
     // ---------------------------------------------------------------
