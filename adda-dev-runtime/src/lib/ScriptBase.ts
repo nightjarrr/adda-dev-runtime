@@ -51,6 +51,8 @@ export abstract class ScriptBase<TDeps extends StdioDep, TArgs> {
                 return err.exitCode;
             }
             const message = err instanceof Error ? err.message : String(err);
+            const internalErr = new ScriptError("internal_error", `Unexpected error: ${message}`);
+            this.emit(internalErr.envelope);
             this.deps.stdio.stderr.write(`Unexpected error: ${message}\n`);
             return 1;
         }

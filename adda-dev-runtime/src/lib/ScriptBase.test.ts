@@ -197,13 +197,17 @@ describe("ScriptBase", () => {
             expect(errLines.join("")).toContain("string error");
         });
 
-        test("does not emit envelope to stdout for non-ScriptError throws", async () => {
+        test("emits internal_error envelope to stdout for non-ScriptError throws", async () => {
             const { deps, outLines } = makeMockDeps();
             const script = new NoArgScript(deps, async () => {
                 throw new Error("unexpected");
             });
             await script.run(["bun", "script.ts"]);
-            expect(outLines).toHaveLength(0);
+            expect(outLines).toHaveLength(1);
+            const envelope = JSON.parse(outLines[0]);
+            expect(envelope.status).toBe("fail");
+            expect(envelope.error.reason).toBe("internal_error");
+            expect(envelope.error.message).toContain("unexpected");
         });
     });
 
