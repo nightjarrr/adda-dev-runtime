@@ -54,15 +54,20 @@ export class ConfigError extends ScriptError {
     }
 }
 
+const STDERR_TRUNCATE_LIMIT = 500;
+
 export class ScriptShellError extends ScriptError {
     constructor(cmdline: string, shellExitCode: number, stdout: string, stderr: string) {
-        const stdoutText = stdout.trim() || "(empty)";
-        const stderrText = stderr.trim() || "(empty)";
-        super(
-            "shell_error",
-            `shell command failed (exit ${shellExitCode})\n  cmd:    ${cmdline}\n  stdout: ${stdoutText}\n  stderr: ${stderrText}`,
-            { exitCode: 1, verboseStderr: stderr },
-        );
+        const truncatedStderr = stderr.length > STDERR_TRUNCATE_LIMIT ? stderr.slice(0, STDERR_TRUNCATE_LIMIT) : stderr;
+        const stderrTruncated = stderr.length > STDERR_TRUNCATE_LIMIT;
+        const details: Record<string, unknown> = {
+            cmd: cmdline,
+            exitCode: shellExitCode,
+            stdout: stdout.trim() || "(empty)",
+            stderr: truncatedStderr.trim() || "(empty)",
+        };
+        if (stderrTruncated) details.stderrTruncated = true;
+        super("shell_error", "shell command failed", { exitCode: 1, details, verboseStderr: stderr });
         this.name = "ScriptShellError";
     }
 }

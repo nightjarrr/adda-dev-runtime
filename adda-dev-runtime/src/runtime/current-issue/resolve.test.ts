@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Shell, ShellDep, ShellResult } from "../../lib/index";
-import { ScriptError } from "../../lib/index";
+import { ScriptError, ScriptShellError } from "../../lib/index";
 import { resolveIssueBranch } from "./resolve";
 
 // --- Helpers ---
@@ -41,7 +41,9 @@ function makeMockDeps(shellRun?: (command: string[]) => Promise<ShellResult>): {
 
 describe("resolveIssueBranch", () => {
     test("non-zero exit carries verboseStderr and throws ScriptError", async () => {
-        const { deps } = makeMockDeps(async () => makeShellResult({ stdout: "", stderr: "some error", exitCode: 1 }));
+        const { deps } = makeMockDeps(async () => {
+            throw new ScriptShellError("resolve-issue-branch 42", 1, "", "some error");
+        });
         const err = await resolveIssueBranch(deps, "42").catch((e) => e);
         expect(err).toBeInstanceOf(ScriptError);
         expect(err.verboseStderr).toContain("some error");

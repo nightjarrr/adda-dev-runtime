@@ -19,12 +19,7 @@ export const ResolveIssueBranchOutputSchema = makeEnvelopeSchema(ResolveResultSc
 export type ResolveIssueBranchData = z.infer<typeof ResolveResultSchema>;
 
 export async function resolveIssueBranch(deps: ShellDep, issueId: string): Promise<ResolveIssueBranchData> {
-    const resolveResult = await deps.shell.run([RESOLVE_ISSUE_BRANCH_BIN, issueId], { strict: false });
-    if (resolveResult.exitCode !== 0) {
-        throw new CurrentIssueError("resolve_failed", `resolve-issue-branch failed for issue #${issueId}`, {
-            verboseStderr: resolveResult.stderr,
-        });
-    }
+    const resolveResult = await deps.shell.run([RESOLVE_ISSUE_BRANCH_BIN, issueId]);
 
     let resolveRaw: unknown;
     try {

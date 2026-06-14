@@ -100,27 +100,19 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps,
             });
         }
 
-        const ghResult = await this.deps.shell.run(
-            [
-                "gh",
-                "api",
-                "graphql",
-                "-F",
-                `owner=${owner}`,
-                "-F",
-                `repo=${repo}`,
-                "-F",
-                `number=${issueId}`,
-                "-f",
-                `query=${GRAPHQL_QUERY}`,
-            ],
-            { strict: false },
-        );
-
-        if (ghResult.exitCode !== 0) {
-            const message = `GraphQL API call failed: ${ghResult.stderr.trim() || ghResult.stdout.trim()}`;
-            throw new ResolveIssueBranchError("api_error", message, { details: { issueId }, verboseStderr: ghResult.stderr });
-        }
+        const ghResult = await this.deps.shell.run([
+            "gh",
+            "api",
+            "graphql",
+            "-F",
+            `owner=${owner}`,
+            "-F",
+            `repo=${repo}`,
+            "-F",
+            `number=${issueId}`,
+            "-f",
+            `query=${GRAPHQL_QUERY}`,
+        ]);
 
         let raw: unknown;
         try {

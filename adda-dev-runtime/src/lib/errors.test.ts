@@ -134,50 +134,51 @@ describe("ScriptShellError", () => {
         expect(err.name).toBe("ScriptShellError");
     });
 
-    test("message contains 'shell command failed (exit N)'", () => {
+    test("message is 'shell command failed'", () => {
         const err = new ScriptShellError("echo hello", 127, "", "");
-        expect(err.message).toContain("shell command failed (exit 127)");
+        expect(err.message).toBe("shell command failed");
     });
 
-    test("message contains 'cmd:' field", () => {
+    test("details.cmd contains the command string", () => {
         const err = new ScriptShellError("my-cmd --flag", 1, "", "");
-        expect(err.message).toContain("cmd:");
-        expect(err.message).toContain("my-cmd --flag");
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.details.cmd).toBe("my-cmd --flag");
     });
 
-    test("message contains 'stdout:' field", () => {
-        const err = new ScriptShellError("cmd", 1, "some output", "");
-        expect(err.message).toContain("stdout:");
+    test("details.exitCode contains the shell exit code", () => {
+        const err = new ScriptShellError("cmd", 127, "", "");
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.details.exitCode).toBe(127);
     });
 
-    test("message contains 'stderr:' field", () => {
-        const err = new ScriptShellError("cmd", 1, "", "some error");
-        expect(err.message).toContain("stderr:");
+    test("details.stdout contains trimmed stdout", () => {
+        const err = new ScriptShellError("cmd", 1, "  some output  ", "");
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.details.stdout).toBe("some output");
     });
 
-    test("empty stdout renders as '(empty)'", () => {
+    test("details.stderr contains trimmed stderr", () => {
+        const err = new ScriptShellError("cmd", 1, "", "  some error  ");
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.details.stderr).toBe("some error");
+    });
+
+    test("empty stdout renders as '(empty)' in details", () => {
         const err = new ScriptShellError("cmd", 1, "", "error text");
-        expect(err.message).toContain("stdout: (empty)");
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.details.stdout).toBe("(empty)");
     });
 
-    test("empty stderr renders as '(empty)'", () => {
+    test("empty stderr renders as '(empty)' in details", () => {
         const err = new ScriptShellError("cmd", 1, "output text", "");
-        expect(err.message).toContain("stderr: (empty)");
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.details.stderr).toBe("(empty)");
     });
 
-    test("whitespace-only stdout renders as '(empty)'", () => {
+    test("whitespace-only stdout renders as '(empty)' in details", () => {
         const err = new ScriptShellError("cmd", 1, "   \n  ", "");
-        expect(err.message).toContain("stdout: (empty)");
-    });
-
-    test("non-empty stdout is rendered trimmed", () => {
-        const err = new ScriptShellError("cmd", 1, "  hello world  ", "");
-        expect(err.message).toContain("stdout: hello world");
-    });
-
-    test("non-empty stderr is rendered trimmed", () => {
-        const err = new ScriptShellError("cmd", 1, "", "  fatal: error  ");
-        expect(err.message).toContain("stderr: fatal: error");
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        expect(err.envelope.error.details.stdout).toBe("(empty)");
     });
 
     test("verboseStderr equals raw stderr passed to constructor", () => {
@@ -191,6 +192,26 @@ describe("ScriptShellError", () => {
         expect(err.envelope.status).toBe("fail");
         if (err.envelope.status !== "fail") throw new Error("expected fail");
         expect(err.envelope.error.reason).toBe("shell_error");
+    });
+
+    test("stderr longer than 500 chars is truncated in details but preserved in verboseStderr", () => {
+        const longStderr = "x".repeat(600);
+        const err = new ScriptShellError("cmd", 1, "", longStderr);
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        const details = err.envelope.error.details;
+        expect(typeof details.stderr).toBe("string");
+        expect((details.stderr as string).length).toBeLessThanOrEqual(500);
+        expect(details.stderrTruncated).toBe(true);
+        expect(err.verboseStderr).toBe(longStderr);
+    });
+
+    test("stderr at exactly 500 chars is not truncated", () => {
+        const exactStderr = "y".repeat(500);
+        const err = new ScriptShellError("cmd", 1, "", exactStderr);
+        if (err.envelope.status !== "fail") throw new Error("expected fail");
+        const details = err.envelope.error.details;
+        expect(details.stderrTruncated).toBeUndefined();
+        expect(err.verboseStderr).toBe(exactStderr);
     });
 });
 

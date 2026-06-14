@@ -58,14 +58,10 @@ export type CurrentIssueReason =
     | BaseReason
     | GithubReason
     | "dirty_tree"
-    | "checkout_failed"
-    | "pull_failed"
     | "no_active_issue"
     | "hook_failed"
-    | "resolve_failed"
     | "no_current_issue"
     | "branch_mismatch"
-    | "branch_create_failed"
     | "no_feature_branch";
 
 export class CurrentIssueError extends ScriptError<CurrentIssueReason> {}

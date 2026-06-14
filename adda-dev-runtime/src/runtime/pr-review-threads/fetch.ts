@@ -23,10 +23,7 @@ export async function graphql(
         if (v === null) continue;
         args.push("-F", `${k}=${String(v)}`);
     }
-    const result = await deps.shell.run(args, { strict: false });
-    if (result.exitCode !== 0) {
-        throw new PrReviewError("api_error", "GitHub GraphQL request failed", { verboseStderr: result.stderr });
-    }
+    const result = await deps.shell.run(args);
     return parseJson(result.stdout);
 }
 

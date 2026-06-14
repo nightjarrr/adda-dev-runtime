@@ -213,7 +213,7 @@ describe("CiWatchScript", () => {
             const script = new CiWatchScript(deps);
             const code = await script.run(["bun", "ci-watch.ts", "push", "--branch", "main"]);
             expect(code).toBe(1);
-            expect(errLines.join("")).toContain("git ls-remote");
+            expect(errLines.join("")).toContain("shell command failed");
         });
 
         test("--branch LOCAL resolves local branch name first, then remote SHA", async () => {
@@ -302,7 +302,7 @@ describe("CiWatchScript", () => {
             const script = new CiWatchScript(deps);
             const code = await script.run(["bun", "ci-watch.ts", "push", "--tag", "v1.0"]);
             expect(code).toBe(1);
-            expect(errLines.join("")).toContain("git ls-remote");
+            expect(errLines.join("")).toContain("shell command failed");
         });
     });
 
@@ -480,7 +480,7 @@ describe("CiWatchScript", () => {
             const script = new CiWatchScript(deps);
             const code = await script.run(["bun", "ci-watch.ts", "pr", "42"]);
             expect(code).toBe(1);
-            expect(errLines.join("")).toContain("gh pr checks");
+            expect(errLines.join("")).toContain("shell command failed");
         });
 
         test("gh pr checks --json returns valid JSON with wrong schema — exits 1 with message on stderr, validation_error envelope", async () => {
