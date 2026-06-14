@@ -11,20 +11,6 @@ model_name="$(printf '%s' "$stdin_json" | jq -r '.model.display_name // empty' 2
 effort="$(printf '%s' "$stdin_json" | jq -r '.effort.level // empty' 2>/dev/null)"
 ctx_pct="$(printf '%s' "$stdin_json" | jq -r 'if .context_window.used_percentage then (.context_window.used_percentage | round | tostring) else empty end' 2>/dev/null)"
 
-output="$(/usr/local/libexec/adda-dev-runtime/bin/current-issue show 2>/dev/null)"
-id="$(printf '%s' "$output" | jq -r '.result.issue.id // empty' 2>/dev/null)"
-
-if [[ -z "$id" ]]; then
-    printf '\033[2;36m(no current issue)\033[0m\n'
-    exit 0
-fi
-
-title="$(printf '%s' "$output" | jq -r '.result.issue.title // empty')"
-issue_type="$(printf '%s' "$output" | jq -r '.result.issue.type // empty')"
-phase="$(printf '%s' "$output" | jq -r '.result.issue.phase // empty')"
-state="$(printf '%s' "$output" | jq -r '.result.issue.state // empty')"
-pr="$(printf '%s' "$output" | jq -r '.result.issue.pr // empty')"
-
 # Build right-side: model/effort part (always dark) + ctx part (colored by threshold)
 if [[ -n "$effort" ]]; then
     model_part="${model_name} (${effort})"
@@ -38,6 +24,37 @@ if [[ -n "$ctx_pct" ]]; then
     ctx_pct_part="${ctx_pct}% ctx"
 fi
 ctx_right="${model_part}${ctx_sep}${ctx_pct_part}"
+
+# ctx part color: bold red if ctx_pct >= threshold (only when threshold env var is set), dark grey otherwise
+if [[ -n "$ctx_pct" && -n "$ADDA_STATUSLINE_CTX_RED_THRESHOLD" ]] \
+    && awk -v pct="$ctx_pct" -v thr="$ADDA_STATUSLINE_CTX_RED_THRESHOLD" \
+           'BEGIN { exit !(pct >= thr) }'; then
+    ctx_part_color='\033[1;31m'
+else
+    ctx_part_color='\033[1;38;5;238m'
+fi
+
+output="$(/usr/local/libexec/adda-dev-runtime/bin/current-issue show 2>/dev/null)"
+id="$(printf '%s' "$output" | jq -r '.result.issue.id // empty' 2>/dev/null)"
+
+if [[ -z "$id" ]]; then
+    no_issue_text="(no current issue)"
+    cols=$(( ${COLUMNS:-80} - 5 ))
+    pad=$(( cols - ${#no_issue_text} - ${#ctx_right} ))
+    if [[ -n "$ctx_right" && $pad -ge 2 ]]; then
+        printf '\033[2;36m%s\033[0m%*s\033[1;38;5;238m%s%s'"${ctx_part_color}"'%s\033[0m\n' \
+            "$no_issue_text" "$pad" "" "$model_part" "$ctx_sep" "$ctx_pct_part"
+    else
+        printf '\033[2;36m%s\033[0m\n' "$no_issue_text"
+    fi
+    exit 0
+fi
+
+title="$(printf '%s' "$output" | jq -r '.result.issue.title // empty')"
+issue_type="$(printf '%s' "$output" | jq -r '.result.issue.type // empty')"
+phase="$(printf '%s' "$output" | jq -r '.result.issue.phase // empty')"
+state="$(printf '%s' "$output" | jq -r '.result.issue.state // empty')"
+pr="$(printf '%s' "$output" | jq -r '.result.issue.pr // empty')"
 
 # Compute left-side visible length (no ANSI codes)
 if [[ "$state" == "CLOSED" ]]; then
@@ -53,15 +70,6 @@ pad=$(( cols - left_len - ${#ctx_right} ))
 # If there's not enough room, suppress the right side rather than overflow
 if [[ $pad -lt 2 ]]; then
     ctx_right=""
-fi
-
-# ctx part color: bold red if ctx_pct >= threshold (only when threshold env var is set), dark grey otherwise
-if [[ -n "$ctx_pct" && -n "$ADDA_STATUSLINE_CTX_RED_THRESHOLD" ]] \
-    && awk -v pct="$ctx_pct" -v thr="$ADDA_STATUSLINE_CTX_RED_THRESHOLD" \
-           'BEGIN { exit !(pct >= thr) }'; then
-    ctx_part_color='\033[1;31m'
-else
-    ctx_part_color='\033[1;38;5;238m'
 fi
 
 if [[ "$state" == "CLOSED" ]]; then
