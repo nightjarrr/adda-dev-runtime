@@ -1,5 +1,8 @@
 {
   "autoMemoryDirectory": "/workspace/.claude/memory",
+  "env": {
+    "ADDA_STATUSLINE_CTX_RED_THRESHOLD": "80"
+  },
   "enabledPlugins": {
     "skill-creator@claude-plugins-official": true
   },
