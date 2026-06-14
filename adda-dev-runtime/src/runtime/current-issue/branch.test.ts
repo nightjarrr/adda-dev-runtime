@@ -1,5 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
-import type { Shell, ShellDep, ShellResult } from "../../lib/index";
+import type { ScriptEnvelope, Shell, ShellDep, ShellResult } from "../../lib/index";
 import { ScriptStructuredError } from "../../lib/index";
 import type { IssueState, IssueStateStore } from "./types";
 import { executeBranchEnsure, executeBranchVerify } from "./branch";
@@ -113,7 +113,9 @@ describe("executeBranchEnsure", () => {
         const store = makeMockStore();
         const err = await executeBranchEnsure(deps, store).catch((e) => e);
         expect(err).toBeInstanceOf(ScriptStructuredError);
-        expect((err as any).envelope.details.reason).toBe("ambiguous");
+        const envelope = (err as ScriptStructuredError).envelope as ScriptEnvelope<never>;
+        expect(envelope.status).toBe("fail");
+        expect(envelope.error?.reason).toBe("ambiguous");
     });
 
     test("feature_branch + current matches — returns success envelope with action: none", async () => {
@@ -128,9 +130,10 @@ describe("executeBranchEnsure", () => {
         });
         const store = makeMockStore();
         const result = await executeBranchEnsure(deps, store);
-        expect(result.status).toBe("success");
-        expect(result.details.action).toBe("none");
-        expect(result.details.branch).toBe("chore/270-my-branch");
+        expect(result.status).toBe("ok");
+        if (result.status !== "ok") throw new Error("expected ok");
+        expect(result.result.details.action).toBe("none");
+        expect(result.result.details.branch).toBe("chore/270-my-branch");
     });
 
     test("feature_branch + current doesn't match — throws CurrentIssueError with expected branch info", async () => {
@@ -183,9 +186,10 @@ describe("executeBranchEnsure", () => {
         });
         const store = makeMockStore();
         const result = await executeBranchEnsure(deps, store);
-        expect(result.status).toBe("success");
-        expect(result.details.action).toBe("created");
-        expect(result.details.branch).toBe("chore/270-branch-lifecycle-tooling-for-sdlc-roles");
+        expect(result.status).toBe("ok");
+        if (result.status !== "ok") throw new Error("expected ok");
+        expect(result.result.details.action).toBe("created");
+        expect(result.result.details.branch).toBe("chore/270-branch-lifecycle-tooling-for-sdlc-roles");
         expect(ghDevelopCalls.length).toBe(1);
         expect(ghDevelopCalls[0]).toContain("chore/270-branch-lifecycle-tooling-for-sdlc-roles");
         expect(ghDevelopCalls[0]).toContain("270");
@@ -204,10 +208,11 @@ describe("executeBranchEnsure", () => {
         });
         const store = makeMockStore({ ...DEFAULT_STATE, title: "😀🎉✨" });
         const result = await executeBranchEnsure(deps, store);
-        expect(result.status).toBe("success");
-        expect(result.details.action).toBe("created");
-        expect(typeof result.details.warning).toBe("string");
-        expect(String(result.details.branch)).toMatch(/^chore\/270-[a-z0-9]{8}$/);
+        expect(result.status).toBe("ok");
+        if (result.status !== "ok") throw new Error("expected ok");
+        expect(result.result.details.action).toBe("created");
+        expect(typeof result.result.details.warning).toBe("string");
+        expect(String(result.result.details.branch)).toMatch(/^chore\/270-[a-z0-9]{8}$/);
     });
 
     test("gh issue develop fails — error carries verboseStderr and throws CurrentIssueError", async () => {
@@ -294,8 +299,9 @@ describe("executeBranchVerify", () => {
         });
         const store = makeMockStore();
         const result = await executeBranchVerify(deps, store);
-        expect(result.status).toBe("success");
-        expect(result.details.branch).toBe("chore/270-my-branch");
+        expect(result.status).toBe("ok");
+        if (result.status !== "ok") throw new Error("expected ok");
+        expect(result.result.details.branch).toBe("chore/270-my-branch");
     });
 
     test("feature_branch + doesn't match current — throws CurrentIssueError with expected/actual branch", async () => {
@@ -328,6 +334,8 @@ describe("executeBranchVerify", () => {
         const store = makeMockStore();
         const err = await executeBranchVerify(deps, store).catch((e) => e);
         expect(err).toBeInstanceOf(ScriptStructuredError);
-        expect((err as any).envelope.details.reason).toBe("ambiguous");
+        const envelope = (err as ScriptStructuredError).envelope as ScriptEnvelope<never>;
+        expect(envelope.status).toBe("fail");
+        expect(envelope.error?.reason).toBe("ambiguous");
     });
 });

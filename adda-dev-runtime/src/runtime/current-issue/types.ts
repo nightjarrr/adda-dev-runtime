@@ -45,21 +45,10 @@ export type HookResult =
     | { status: "skipped" }
     | { status: "absent" };
 
-export interface SuccessEnvelope {
-    status: "success";
+export type CurrentIssueResult = {
     issue: IssueStateView;
     details: Record<string, unknown>;
-    error: "";
-}
-
-export interface ErrorEnvelope {
-    status: "error";
-    issue: null;
-    details: Record<string, unknown>;
-    error: string;
-}
-
-export type Envelope = SuccessEnvelope | ErrorEnvelope;
+};
 
 // --- Interfaces ---
 

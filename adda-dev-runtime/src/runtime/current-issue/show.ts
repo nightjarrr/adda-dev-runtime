@@ -1,7 +1,9 @@
-import type { IssueStateStore, SuccessEnvelope } from "./types";
+import type { ScriptEnvelope } from "@adda/lib";
+
+import type { CurrentIssueResult, IssueStateStore } from "./types";
 import { EMPTY_ISSUE_VIEW } from "./types";
 
-export async function executeShow(store: IssueStateStore): Promise<SuccessEnvelope> {
+export async function executeShow(store: IssueStateStore): Promise<ScriptEnvelope<CurrentIssueResult>> {
     const state = await store.readState();
-    return { status: "success", issue: state ?? EMPTY_ISSUE_VIEW, details: {}, error: "" };
+    return { status: "ok", result: { issue: state ?? EMPTY_ISSUE_VIEW, details: {} }, error: null };
 }
