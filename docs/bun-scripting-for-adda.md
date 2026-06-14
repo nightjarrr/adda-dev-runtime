@@ -58,7 +58,7 @@ if (import.meta.main)
 | 1 | Uncaught exception / runtime error |
 | 2 | Argument parsing error |
 
-Additional codes: scripts throw subclasses of `ScriptError` (base error class defined in `lib/ScriptBase.ts`); `run()` catches them and maps each to its designated exit code. `ScriptShellError` (exit code 1) is thrown automatically by `Shell.run`/`Shell.runSh` when a spawned command exits non-zero (strict mode, on by default); pass `{ strict: false }` to suppress this and handle the exit code manually.
+Additional codes: scripts throw subclasses of `ScriptError` (base error class defined in `lib/errors.ts`); `run()` catches any `ScriptError`, emits its envelope, and returns its exit code. `ScriptShellError` (exit code 1) is thrown automatically by `Shell.run`/`Shell.runSh` when a spawned command exits non-zero (strict mode, on by default); pass `{ strict: false }` to suppress this and handle the exit code manually.
 
 ---
 
@@ -107,16 +107,16 @@ Exit code and `status` always agree and serve different consumers:
 
 ### Error implementation
 
-Scripts implement errors as a `ScriptStructuredError` subclass carrying the fail envelope.
-`ScriptBase.run()` catches it and auto-emits the envelope — no manual emit at error
-sites. Success paths call `this.emitOk(...)` once and return.
+Scripts implement domain errors as a `ScriptError<TReason>` subclass. `ScriptBase.run()`
+catches any `ScriptError` and auto-emits its envelope — no manual emit at error sites.
+Success paths call `this.emitOk(...)` once and return.
 
 ```typescript
-import { ScriptStructuredError } from "@adda/lib";
+import { ScriptError } from "@adda/lib";
 import type { BaseReason } from "@adda/lib";
 
 type MyReason = BaseReason | "repo_not_found";
-class MyScriptError extends ScriptStructuredError<MyReason> {}
+class MyScriptError extends ScriptError<MyReason> {}
 
 // Error sites — throw the subclass directly:
 throw new MyScriptError("repo_not_found", `repo ${owner}/${repo} not found`);
@@ -138,8 +138,10 @@ Capabilities are interfaces representing external services. A script declares ex
 | `Shell` | Execute subprocesses |
 | `FileReader` | Read file contents |
 | `FileWriter` | Write file contents |
+| `FileSys` | Delete files; check file existence |
 | `Stdio` | Read from stdin; write to stdout / stderr |
 | `Env` | Read environment variables |
+| `Sleep` | Async sleep |
 
 **Bun implementations** are bundled in `defaultDeps` (exported from `@adda/lib`), used for production wiring:
 
@@ -147,21 +149,24 @@ Capabilities are interfaces representing external services. A script declares ex
 |-----------|-------------|
 | `Shell` | `run()`: `Bun.spawn()` — direct process execution; `runSh()`: via `sh -c` |
 | `FileReader` | `Bun.file().text()` |
-| `FileWriter` | `Bun.write()` |
+| `FileWriter` | `Bun.write()` (atomic: write to temp path, rename) |
+| `FileSys` | `node:fs/promises unlink()` / `Bun.file().exists()` |
 | `Stdio` | `Bun.stdin`, `process.stdout`, `process.stderr` |
 | `Env` | `process.env` |
-| `Tmp` | `crypto.randomUUID()` / `mkdtempSync()` |
+| `Sleep` | `Bun.sleep()` |
 
 **Shell note:** `run()` uses `Bun.spawn()` directly — no shell features (no pipes, globs, redirects). `runSh()` wraps `sh -c` and has full shell features.
 
 **Dep interfaces:** Each capability has a paired Dep interface that names the property used in the script's deps object:
 
 ```typescript
-interface ShellDep    { shell:      Shell      }
+interface ShellDep      { shell:      Shell      }
 interface FileReaderDep { fileReader: FileReader }
 interface FileWriterDep { fileWriter: FileWriter }
-interface StdioDep    { stdio:      Stdio      }
-interface EnvDep      { env:        Env        }
+interface FileSysDep    { fileSys:    FileSys    }
+interface StdioDep      { stdio:      Stdio      }
+interface EnvDep        { env:        Env        }
+interface SleepDep      { sleep:      Sleep      }
 ```
 
 **`TDeps extends StdioDep`** — `StdioDep` is always mandatory; `ScriptBase` uses `this.deps.stdio.stderr` for error output.
@@ -283,17 +288,16 @@ if (!parsed.success)
 const { id, name } = parsed.data;
 ```
 
-**`ScriptZodValidationError(context, error, rawInput?)`:**
-- `error.message` — full diagnostics (all Zod issue paths + raw input); written to stderr by `ScriptBase`
-- `error.short` — compact issues-only string; available for callers that also emit structured stdout (e.g. `emit()`)
+**`ScriptZodValidationError(context, error, rawInput)`:**
+- `error.message` — compact issues summary (`context: issue1; issue2`)
+- `error.verboseStderr` — full diagnostic with all Zod issue paths + raw input; written to stderr by `ScriptBase`
 
-For scripts that emit structured stdout on error:
+Throwing `ScriptZodValidationError` directly emits the envelope (`reason: "validation_error"`). To surface a script-specific reason or add `details`, wrap it in the script's error class:
 
 ```typescript
 if (!parsed.success) {
     const err = new ScriptZodValidationError("unexpected API response", parsed.error, raw);
-    this.emit(issueId, "error", "", "", err.short);
-    throw err;
+    throw new MyScriptError("validation_error", err.message, { verboseStderr: err.verboseStderr });
 }
 ```
 
@@ -312,12 +316,11 @@ adda-dev-runtime/src/lib/        # ScriptBase, capability interfaces, Bun implem
 
 **Multi-stage Docker build:**
 1. `FROM oven/bun:<version>-slim AS bun-builder` — builder stage at top of Dockerfile
-2. `COPY package.json bun.lock tsconfig.json /build/` + `COPY adda-dev-runtime/src/ /build/adda-dev-runtime/src/` — package manifest and lockfile included so `bun install` can resolve production dependencies (e.g. Zod) before bundling
-3. `RUN bun install --frozen-lockfile` — installs production deps into the builder stage; `bun build` then bundles them into the output executables
-4. Build runtime scripts: `bun build /build/adda-dev-runtime/src/runtime/*.ts --outdir /build/out/bin/ --target bun --sourcemap=inline --banner "#!/usr/bin/env bun"` — shebang injected by banner, not present in source
-   - Add `bun build /build/adda-dev-runtime/src/bootstrap/*.ts --outdir /build/out/bootstrap/ ...` when bootstrap Bun scripts exist
-5. Strip `.js` extensions from outputs per subdirectory → `chmod +x` per subdirectory. `out/` mirrors the target's `bin/`/`bootstrap/` layout.
-6. Final Tier 1 stage: `COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/` — Docker merges directories; bootstrap shell scripts already present under `bootstrap/` are untouched.
+2. `COPY package.json bun.lock tsconfig.json /build/` + `COPY adda-dev-runtime/src/ /build/adda-dev-runtime/src/` — package manifest, lockfile, and source copied into the builder
+3. `RUN bun install --frozen-lockfile` — installs all deps (dev + prod) for the build step; after compilation, `rm -rf node_modules && bun install --production --frozen-lockfile` reinstalls production-only deps for the runtime image
+4. Build runtime scripts: `bun build /build/adda-dev-runtime/src/runtime/*.ts --outdir /build/out/bin/ --target bun --packages=external --sourcemap=inline --banner "#!/usr/bin/env bun"` — shebang injected by banner, not present in source; `--packages=external` keeps production deps (e.g. Zod) as external imports resolved from `node_modules` at runtime rather than bundled into the executable
+5. Strip `.js` extensions from outputs → `chmod +x`. `out/` mirrors the target `bin/` layout.
+6. Final Tier 1 stage: `COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/` — Docker merges directories; bootstrap shell scripts already present under `bootstrap/` are untouched. `COPY --from=bun-builder /build/node_modules/ /usr/local/libexec/adda-dev-runtime/node_modules/` — production `node_modules` placed alongside the executables for runtime import resolution.
 
 **`.dockerignore`** excludes:
 - `**/*.test.ts`
@@ -364,9 +367,9 @@ consumer needs. Keeping them out of the Tier 1 image reduces image size by ~78 M
 
 - `package.json` at repo root — settled convention
 - `@types/bun` is listed under `devDependencies` and installed at bootstrap time; it is type-only and never bundled.
-- **`dependencies`** — packages imported in production source and bundled into executables by `bun build`. Example: `"zod": "4.4.3"`. Add new production deps here.
+- **`dependencies`** — packages imported in production source; kept external by `bun build --packages=external` and shipped as `node_modules` in the image. Example: `"zod": "4.4.3"`. Add new production deps here.
 - **`devDependencies`** — packages used only for type-checking or tooling, never bundled. Examples: `"@types/bun": "1.3.14"`, `"oxlint": "1.68.0"`, `"oxfmt": "0.53.0"`, `"typescript": "6.0.3"`. These are never imported in runtime source.
 - `tsconfig.json`: strict, `noEmit`, `ESNext` target/module, `moduleResolution: bundler`, `skipLibCheck`, `types: ["bun"]`, `baseUrl: "."`, `paths` for `@adda/lib`
-- `bunfig.toml`: `coverageThreshold` line/function/statement = 90
+- `bunfig.toml`: `coverageThreshold` `line = 0.95`, `statement = 0.90` (no function threshold — excluded as non-deterministic for implicit constructors)
 - `.oxlintrc.json`: recommended rules + `no-console: error`
 - `.oxfmtrc.json`: `useTabs: false`, `tabWidth: 4`, `printWidth: 128`
