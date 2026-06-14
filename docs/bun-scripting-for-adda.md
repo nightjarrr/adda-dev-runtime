@@ -80,7 +80,7 @@ gates FAIL). `error` is always `null`.
 
 **`status: "fail"`** — the script could not produce a result. Exit non-zero (2 for arg
 errors, 1 for all others). `result` is always `null`. `error` carries:
-- `reason` — typed code for programmatic branching (see below)
+- `reason` — typed code for programmatic branching
 - `message` — human-readable description
 - `details` — script-specific extra context (may be empty `{}`)
 
