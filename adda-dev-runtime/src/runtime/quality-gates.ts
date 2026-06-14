@@ -1,7 +1,7 @@
 import type { parseArgs } from "node:util";
 import { z } from "zod";
 import type { EmptyArgs, FileReaderDep, FileWriterDep, ShellDep, StdioDep } from "@adda/lib";
-import { ConfigError, defaultDeps, ScriptBase, ScriptError } from "@adda/lib";
+import { ConfigError, defaultDeps, ScriptBase, ScriptStructuredError } from "@adda/lib";
 
 type QualityGatesDeps = ShellDep & FileReaderDep & FileWriterDep & StdioDep;
 
@@ -26,6 +26,7 @@ interface GateResult {
 interface QualityGatesResult {
     overall: "PASS" | "FAIL";
     gates: GateResult[];
+    resultsFile: string;
 }
 
 export class QualityGatesScript extends ScriptBase<QualityGatesDeps, EmptyArgs> {
@@ -66,20 +67,15 @@ export class QualityGatesScript extends ScriptBase<QualityGatesDeps, EmptyArgs> 
         }
 
         const gates = validated.data.gate;
-        const total = gates.length;
         let overall: "PASS" | "FAIL" = "PASS";
         const results: GateResult[] = [];
 
-        for (let i = 0; i < gates.length; i++) {
-            const gate = gates[i];
-            this.deps.stdio.stdout.write(`[${i + 1}/${total}] ${gate.name} — ${gate.description}\n`);
-
+        for (const gate of gates) {
             const result = await this.deps.shell.runSh(`${gate.command} 2>&1`, { strict: false });
             const status: "PASS" | "FAIL" = result.exitCode === 0 ? "PASS" : "FAIL";
 
             if (status === "FAIL") overall = "FAIL";
 
-            this.deps.stdio.stdout.write(`${status}\n`);
             results.push({
                 name: gate.name,
                 description: gate.description,
@@ -89,19 +85,20 @@ export class QualityGatesScript extends ScriptBase<QualityGatesDeps, EmptyArgs> 
             });
         }
 
-        const resultData: QualityGatesResult = { overall, gates: results };
+        const resultData = { overall, gates: results };
         const resultPath = await this.deps.fileWriter.writeFile(
             "<tmpDir>/quality-gates-<uuid>.json",
             JSON.stringify(resultData, null, 2),
         );
 
-        this.deps.stdio.stdout.write("===\n");
-        this.deps.stdio.stdout.write(`${overall}\n`);
-        this.deps.stdio.stdout.write(`Results: ${resultPath}\n`);
-
         if (overall === "FAIL") {
-            throw new ScriptError("Quality gates failed", 1);
+            throw new ScriptStructuredError("gates_failed", "Quality gates failed", {
+                details: { resultsFile: resultPath },
+                exitCode: 1,
+            });
         }
+
+        this.emitOk<QualityGatesResult>({ overall: "PASS", gates: results, resultsFile: resultPath });
     }
 }
 
