@@ -21,8 +21,8 @@ interface RunRecord {
 
 // On success, result carries elapsed_seconds.
 // On CI failure, the data moves to error.details (reason: "ci_failed").
-// Known gap: ScriptShellError from strict:true shell calls remains unstructured stderr — wrapping
-// every shell call is out of scope for this migration.
+// Known gap: ScriptShellError and ScriptZodValidationError remain unstructured stderr —
+// wrapping them is out of scope for this migration.
 type CiWatchResult = { elapsed_seconds: number };
 
 type CiWatchReason = BaseReason | "ci_failed";
@@ -185,10 +185,8 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         const checksResult = await this.deps.shell.run(["gh", "pr", "checks", prNumber, "--json", "name,state,link"]);
         const checksRaw = parseJson(checksResult.stdout.trim() || "[]");
         const checksParsed = ChecksSchema.safeParse(checksRaw);
-        if (!checksParsed.success) {
-            const err = new ScriptZodValidationError("unexpected gh pr checks output", checksParsed.error, checksRaw);
-            throw new CiWatchError("validation_error", err.message, { verboseStderr: err.verboseStderr });
-        }
+        if (!checksParsed.success)
+            throw new ScriptZodValidationError("unexpected gh pr checks output", checksParsed.error, checksRaw);
         const checks = checksParsed.data;
 
         // Phase 1 — partition checks into terminal and non-terminal
@@ -285,10 +283,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         if (!json) return [];
         const raw = parseJson(json);
         const result = RunListSchema.safeParse(raw);
-        if (!result.success) {
-            const err = new ScriptZodValidationError("unexpected gh run list output", result.error, raw);
-            throw new CiWatchError("validation_error", err.message, { verboseStderr: err.verboseStderr });
-        }
+        if (!result.success) throw new ScriptZodValidationError("unexpected gh run list output", result.error, raw);
         return result.data.map((r) => String(r.databaseId));
     }
 }
