@@ -1,6 +1,6 @@
 import type { parseArgs } from "node:util";
 import type { BaseReason, FileWriterDep, ShellDep, SleepDep, StdioDep } from "@adda/lib";
-import { defaultDeps, parseJson, ScriptBase, ScriptStructuredError, ScriptZodValidationError } from "@adda/lib";
+import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError, ScriptZodValidationError } from "@adda/lib";
 import { z } from "zod";
 
 const ChecksSchema = z.array(z.object({ name: z.string(), state: z.string(), link: z.string() }));
@@ -21,12 +21,10 @@ interface RunRecord {
 
 // On success, result carries elapsed_seconds.
 // On CI failure, the data moves to error.details (reason: "ci_failed").
-// Known gap: ScriptShellError and ScriptZodValidationError remain unstructured stderr —
-// wrapping them is out of scope for this migration.
 type CiWatchResult = { elapsed_seconds: number };
 
 type CiWatchReason = BaseReason | "ci_failed";
-export class CiWatchError extends ScriptStructuredError<CiWatchReason> {}
+export class CiWatchError extends ScriptError<CiWatchReason> {}
 
 const POLL_INTERVAL_MS = 2000;
 const POLL_TIMEOUT_MS = 10000;
@@ -59,11 +57,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         const mode = parsed.positionals[0];
 
         if (!mode) {
-            throw new CiWatchError(
-                "invalid_args",
-                "mode is required: push --branch <name>|--tag <tag>|--commit <sha>  or  pr <pr-number>",
-                { exitCode: 2 },
-            );
+            throw new ScriptArgsError("mode is required: push --branch <name>|--tag <tag>|--commit <sha>  or  pr <pr-number>");
         }
 
         if (mode === "push") {
@@ -73,9 +67,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
 
             const setCount = [branch, tag, commit].filter((v) => v !== undefined).length;
             if (setCount !== 1) {
-                throw new CiWatchError("invalid_args", "push mode requires exactly one of --branch, --tag, or --commit", {
-                    exitCode: 2,
-                });
+                throw new ScriptArgsError("push mode requires exactly one of --branch, --tag, or --commit");
             }
 
             const ref: CiWatchRef =
@@ -86,12 +78,12 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
         if (mode === "pr") {
             const prNumber = parsed.positionals[1];
             if (!prNumber) {
-                throw new CiWatchError("invalid_args", "pr mode requires a PR number as the second argument", { exitCode: 2 });
+                throw new ScriptArgsError("pr mode requires a PR number as the second argument");
             }
             return { mode: "pr", prNumber };
         }
 
-        throw new CiWatchError("invalid_args", `unknown mode '${mode}': expected 'push' or 'pr'`, { exitCode: 2 });
+        throw new ScriptArgsError(`unknown mode '${mode}': expected 'push' or 'pr'`);
     }
 
     protected async execute(args: CiWatchArgs): Promise<void> {
@@ -119,13 +111,13 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
                 const localResult = await this.deps.shell.run(["git", "branch", "--show-current"]);
                 resolvedBranch = localResult.stdout.trim();
                 if (!resolvedBranch) {
-                    throw new CiWatchError("invalid_args", "cannot determine current local branch", { exitCode: 2 });
+                    throw new ScriptArgsError("cannot determine current local branch");
                 }
             }
 
             const sha = await this.resolveRemoteSha(resolvedBranch);
             if (!sha) {
-                throw new CiWatchError("invalid_args", `cannot resolve branch '${resolvedBranch}' on origin`, { exitCode: 2 });
+                throw new ScriptArgsError(`cannot resolve branch '${resolvedBranch}' on origin`);
             }
             return sha;
         }
@@ -140,7 +132,7 @@ export class CiWatchScript extends ScriptBase<CiWatchDeps, CiWatchArgs> {
 
         const tagSha = await this.resolveRemoteSha(`refs/tags/${tagName}`);
         if (!tagSha) {
-            throw new CiWatchError("invalid_args", `cannot resolve tag '${tagName}' on origin`, { exitCode: 2 });
+            throw new ScriptArgsError(`cannot resolve tag '${tagName}' on origin`);
         }
         return tagSha;
     }

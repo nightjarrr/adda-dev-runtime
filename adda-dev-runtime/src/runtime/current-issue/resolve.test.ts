@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { Shell, ShellDep, ShellResult } from "../../lib/index";
-import { ScriptStructuredError } from "../../lib/index";
+import { ScriptError } from "../../lib/index";
 import { resolveIssueBranch } from "./resolve";
 
 // --- Helpers ---
@@ -40,21 +40,21 @@ function makeMockDeps(shellRun?: (command: string[]) => Promise<ShellResult>): {
 // --- Tests ---
 
 describe("resolveIssueBranch", () => {
-    test("non-zero exit carries verboseStderr and throws ScriptStructuredError", async () => {
+    test("non-zero exit carries verboseStderr and throws ScriptError", async () => {
         const { deps } = makeMockDeps(async () => makeShellResult({ stdout: "", stderr: "some error", exitCode: 1 }));
         const err = await resolveIssueBranch(deps, "42").catch((e) => e);
-        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err).toBeInstanceOf(ScriptError);
         expect(err.verboseStderr).toContain("some error");
     });
 
-    test("invalid JSON throws ScriptStructuredError with 'invalid JSON'", async () => {
+    test("invalid JSON throws ScriptError with 'invalid JSON'", async () => {
         const { deps } = makeMockDeps(async () => makeShellResult({ stdout: "not valid json{{", exitCode: 0 }));
         await expect(resolveIssueBranch(deps, "42")).rejects.toMatchObject({
             message: expect.stringContaining("invalid JSON"),
         });
     });
 
-    test("schema validation failure throws ScriptStructuredError with short message in envelope", async () => {
+    test("schema validation failure throws ScriptError with short message in envelope", async () => {
         const { deps } = makeMockDeps(async () =>
             makeShellResult({
                 stdout: JSON.stringify({ status: "ok", result: { resolution: "feature_branch" } }),
@@ -62,13 +62,13 @@ describe("resolveIssueBranch", () => {
             }),
         );
         const err = await resolveIssueBranch(deps, "42").catch((e) => e);
-        expect(err).toBeInstanceOf(ScriptStructuredError);
-        const envelope = (err as ScriptStructuredError).envelope;
+        expect(err).toBeInstanceOf(ScriptError);
+        const envelope = (err as ScriptError).envelope;
         expect(envelope.status).toBe("fail");
         expect(envelope.error?.message).toContain("unexpected resolve-issue-branch output");
     });
 
-    test("fail status with reason ambiguous carries verboseStderr and throws ScriptStructuredError", async () => {
+    test("fail status with reason ambiguous carries verboseStderr and throws ScriptError", async () => {
         const { deps } = makeMockDeps(async () =>
             makeShellResult({
                 stdout: makeFailResponse("ambiguous_result", "multiple linked branches: a, b", { branches: ["a", "b"] }),
@@ -77,11 +77,11 @@ describe("resolveIssueBranch", () => {
             }),
         );
         const err = await resolveIssueBranch(deps, "42").catch((e) => e);
-        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err).toBeInstanceOf(ScriptError);
         expect(err.verboseStderr).toContain("ambiguous detail");
     });
 
-    test("fail status with reason api_error carries verboseStderr and throws ScriptStructuredError", async () => {
+    test("fail status with reason api_error carries verboseStderr and throws ScriptError", async () => {
         const { deps } = makeMockDeps(async () =>
             makeShellResult({
                 stdout: makeFailResponse("api_error", "GraphQL API call failed"),
@@ -90,7 +90,7 @@ describe("resolveIssueBranch", () => {
             }),
         );
         const err = await resolveIssueBranch(deps, "42").catch((e) => e);
-        expect(err).toBeInstanceOf(ScriptStructuredError);
+        expect(err).toBeInstanceOf(ScriptError);
         expect(err.verboseStderr).toContain("error detail");
     });
 

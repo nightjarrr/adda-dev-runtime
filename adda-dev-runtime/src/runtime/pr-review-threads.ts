@@ -13,11 +13,10 @@
 //   file:   detail file at /tmp/pr-review-threads-{pr|thread}-…-<epoch-ms>.json
 import type { parseArgs } from "node:util";
 import type { EnvDep, FileWriterDep, ShellDep, StdioDep } from "@adda/lib";
-import { defaultDeps, ScriptBase } from "@adda/lib";
+import { defaultDeps, ScriptArgsError, ScriptBase } from "@adda/lib";
 
 import { runPr } from "./pr-review-threads/pr";
 import { runThread } from "./pr-review-threads/thread";
-import { PrReviewError } from "./pr-review-threads/types";
 import type { PrReviewThreadsArgs } from "./pr-review-threads/types";
 
 const DEFAULT_MAX_UNRESOLVED = 50;
@@ -39,25 +38,19 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
     protected validateArgs(parsed: ReturnType<typeof parseArgs>): PrReviewThreadsArgs {
         const mode = parsed.positionals[0];
         if (!mode) {
-            throw new PrReviewError(
-                "invalid_args",
+            throw new ScriptArgsError(
                 "mode is required: pr <pr-number> [--include-resolved] [--max-unresolved <n>]  or  thread <thread-id>",
-                { exitCode: 2 },
             );
         }
 
         if (mode === "pr") {
             const prArg = parsed.positionals[1];
             if (!prArg) {
-                throw new PrReviewError("invalid_args", "pr mode requires a PR number as the second argument", {
-                    exitCode: 2,
-                });
+                throw new ScriptArgsError("pr mode requires a PR number as the second argument");
             }
             const prNumber = Number(prArg);
             if (!Number.isInteger(prNumber) || prNumber <= 0) {
-                throw new PrReviewError("invalid_args", `invalid PR number '${prArg}': must be a positive integer`, {
-                    exitCode: 2,
-                });
+                throw new ScriptArgsError(`invalid PR number '${prArg}': must be a positive integer`);
             }
 
             const maxUnresolvedArg = parsed.values["max-unresolved"] as string | undefined;
@@ -65,11 +58,7 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
             if (maxUnresolvedArg !== undefined) {
                 maxUnresolved = Number(maxUnresolvedArg);
                 if (!Number.isInteger(maxUnresolved) || maxUnresolved <= 0) {
-                    throw new PrReviewError(
-                        "invalid_args",
-                        `invalid --max-unresolved '${maxUnresolvedArg}': must be a positive integer`,
-                        { exitCode: 2 },
-                    );
+                    throw new ScriptArgsError(`invalid --max-unresolved '${maxUnresolvedArg}': must be a positive integer`);
                 }
             }
 
@@ -83,28 +72,20 @@ export class PrReviewThreadsScript extends ScriptBase<PrReviewThreadsDeps, PrRev
 
         if (mode === "thread") {
             if (parsed.values["include-resolved"] !== undefined) {
-                throw new PrReviewError("invalid_args", "--include-resolved is not valid for 'thread'", {
-                    exitCode: 2,
-                });
+                throw new ScriptArgsError("--include-resolved is not valid for 'thread'");
             }
             if (parsed.values["max-unresolved"] !== undefined) {
-                throw new PrReviewError("invalid_args", "--max-unresolved is not valid for 'thread'", {
-                    exitCode: 2,
-                });
+                throw new ScriptArgsError("--max-unresolved is not valid for 'thread'");
             }
 
             const threadId = parsed.positionals[1];
             if (!threadId) {
-                throw new PrReviewError("invalid_args", "thread mode requires a thread id as the second argument", {
-                    exitCode: 2,
-                });
+                throw new ScriptArgsError("thread mode requires a thread id as the second argument");
             }
             return { mode: "thread", threadId };
         }
 
-        throw new PrReviewError("invalid_args", `unknown mode '${mode}': expected 'pr' or 'thread'`, {
-            exitCode: 2,
-        });
+        throw new ScriptArgsError(`unknown mode '${mode}': expected 'pr' or 'thread'`);
     }
 
     protected async execute(args: PrReviewThreadsArgs): Promise<void> {

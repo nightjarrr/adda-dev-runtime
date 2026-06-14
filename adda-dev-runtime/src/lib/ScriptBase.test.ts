@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 import type { parseArgs } from "node:util";
 import type { StdioDep } from "./capabilities";
-import { ScriptArgsError, ScriptError, ScriptStructuredError } from "./errors";
+import { ScriptArgsError, ScriptError } from "./errors";
 import { ScriptBase } from "./ScriptBase";
 
 // --- Test helpers ---
@@ -119,7 +119,7 @@ describe("ScriptBase", () => {
         test("returns the error's exit code", async () => {
             const { deps } = makeMockDeps();
             const script = new NoArgScript(deps, async () => {
-                throw new ScriptError("something failed", 3);
+                throw new ScriptError("internal_error", "something failed", { exitCode: 3 });
             });
             const code = await script.run(["bun", "script.ts"]);
             expect(code).toBe(3);
@@ -128,16 +128,26 @@ describe("ScriptBase", () => {
         test("writes error message to stderr", async () => {
             const { deps, errLines } = makeMockDeps();
             const script = new NoArgScript(deps, async () => {
-                throw new ScriptError("domain error", 5);
+                throw new ScriptError("internal_error", "domain error", { exitCode: 5 });
             });
             await script.run(["bun", "script.ts"]);
             expect(errLines.join("")).toContain("domain error");
         });
 
-        test("verboseStderr is written to stderr before error message", async () => {
-            const { deps, errLines, outLines } = makeMockDeps();
+        test("emits envelope JSON to stdout", async () => {
+            const { deps, outLines } = makeMockDeps();
             const script = new NoArgScript(deps, async () => {
-                throw new ScriptError("short message", 1, "reason", {}, "verbose details from tool");
+                throw new ScriptError("internal_error", "oops");
+            });
+            await script.run(["bun", "script.ts"]);
+            expect(outLines.join("")).toContain('"status":"fail"');
+            expect(outLines.join("")).toContain('"reason":"internal_error"');
+        });
+
+        test("verboseStderr is written to stderr before error message", async () => {
+            const { deps, errLines } = makeMockDeps();
+            const script = new NoArgScript(deps, async () => {
+                throw new ScriptError("internal_error", "short message", { verboseStderr: "verbose details from tool" });
             });
             await script.run(["bun", "script.ts"]);
             const combined = errLines.join("");
@@ -145,47 +155,16 @@ describe("ScriptBase", () => {
             expect(combined).toContain("Error: short message");
             // verboseStderr appears before the error message
             expect(combined.indexOf("verbose details from tool")).toBeLessThan(combined.indexOf("Error: short message"));
-            // nothing emitted to stdout
-            expect(outLines).toHaveLength(0);
         });
-    });
 
-    describe("ScriptStructuredError thrown in execute", () => {
-        test("emits envelope JSON to stdout", async () => {
+        test("emits envelope with correct exit code for custom exitCode", async () => {
             const { deps, outLines } = makeMockDeps();
             const script = new NoArgScript(deps, async () => {
-                throw new ScriptStructuredError("internal_error", "oops");
-            });
-            await script.run(["bun", "script.ts"]);
-            expect(outLines.join("")).toContain('"status":"fail"');
-            expect(outLines.join("")).toContain('"reason":"internal_error"');
-        });
-
-        test("writes diagnostic message to stderr", async () => {
-            const { deps, errLines } = makeMockDeps();
-            const script = new NoArgScript(deps, async () => {
-                throw new ScriptStructuredError("internal_error", "oops");
-            });
-            await script.run(["bun", "script.ts"]);
-            expect(errLines.join("")).toContain("Error: oops");
-        });
-
-        test("returns the error's exit code", async () => {
-            const { deps } = makeMockDeps();
-            const script = new NoArgScript(deps, async () => {
-                throw new ScriptStructuredError("internal_error", "msg", { exitCode: 3 });
+                throw new ScriptError("internal_error", "msg", { exitCode: 3 });
             });
             const code = await script.run(["bun", "script.ts"]);
             expect(code).toBe(3);
-        });
-
-        test("plain ScriptError does not emit to stdout", async () => {
-            const { deps, outLines } = makeMockDeps();
-            const script = new NoArgScript(deps, async () => {
-                throw new ScriptError("plain");
-            });
-            await script.run(["bun", "script.ts"]);
-            expect(outLines).toHaveLength(0);
+            expect(outLines.join("")).toContain('"status":"fail"');
         });
     });
 
@@ -217,6 +196,15 @@ describe("ScriptBase", () => {
             expect(code).toBe(1);
             expect(errLines.join("")).toContain("string error");
         });
+
+        test("does not emit envelope to stdout for non-ScriptError throws", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const script = new NoArgScript(deps, async () => {
+                throw new Error("unexpected");
+            });
+            await script.run(["bun", "script.ts"]);
+            expect(outLines).toHaveLength(0);
+        });
     });
 
     describe("argument parse failure", () => {
@@ -234,6 +222,16 @@ describe("ScriptBase", () => {
             await script.run(["bun", "script.ts", "--unknown"]);
             expect(errLines.join("")).toContain("Error:");
         });
+
+        test("emits invalid_args envelope to stdout on parse failure", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const script = new FlagScript(deps, async () => {});
+            await script.run(["bun", "script.ts", "--unknown"]);
+            const out = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(error.reason).toBe("invalid_args");
+        });
     });
 
     describe("ScriptArgsError thrown in validateArgs", () => {
@@ -242,6 +240,16 @@ describe("ScriptBase", () => {
             const script = new ValidateArgsErrorScript(deps);
             const code = await script.run(["bun", "script.ts"]);
             expect(code).toBe(2);
+        });
+
+        test("emits invalid_args envelope to stdout", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const script = new ValidateArgsErrorScript(deps);
+            await script.run(["bun", "script.ts"]);
+            const out = JSON.parse(outLines.join("").trim()) as Record<string, unknown>;
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(error.reason).toBe("invalid_args");
         });
     });
 

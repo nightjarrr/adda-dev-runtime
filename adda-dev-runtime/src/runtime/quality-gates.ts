@@ -1,7 +1,7 @@
 import type { parseArgs } from "node:util";
 import { z } from "zod";
 import type { EmptyArgs, FileReaderDep, FileWriterDep, ShellDep, StdioDep } from "@adda/lib";
-import { ConfigError, defaultDeps, ScriptBase, ScriptStructuredError } from "@adda/lib";
+import { ConfigError, defaultDeps, ScriptBase, ScriptError } from "@adda/lib";
 
 type QualityGatesDeps = ShellDep & FileReaderDep & FileWriterDep & StdioDep;
 
@@ -92,7 +92,7 @@ export class QualityGatesScript extends ScriptBase<QualityGatesDeps, EmptyArgs> 
         );
 
         if (overall === "FAIL") {
-            throw new ScriptStructuredError("gates_failed", "Quality gates failed", {
+            throw new ScriptError<"gates_failed">("gates_failed", "Quality gates failed", {
                 details: { resultsFile: resultPath },
                 exitCode: 1,
             });

@@ -1,6 +1,6 @@
 import { parseArgs } from "node:util";
 import type { StdioDep } from "./capabilities";
-import { ScriptError, ScriptStructuredError } from "./errors";
+import { ScriptArgsError, ScriptError } from "./errors";
 
 export type EmptyArgs = Record<string, never>;
 
@@ -33,7 +33,9 @@ export abstract class ScriptBase<TDeps extends StdioDep, TArgs> {
             parsed = parseArgs({ ...this.argDefinitions(), args: sliced });
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            this.deps.stdio.stderr.write(`Error: ${message}\n`);
+            const scriptErr = new ScriptArgsError(message);
+            this.emit(scriptErr.envelope);
+            this.deps.stdio.stderr.write(`Error: ${scriptErr.message}\n`);
             return 2;
         }
 
@@ -43,7 +45,7 @@ export abstract class ScriptBase<TDeps extends StdioDep, TArgs> {
             return 0;
         } catch (err) {
             if (err instanceof ScriptError) {
-                if (err instanceof ScriptStructuredError) this.emit(err.envelope);
+                this.emit(err.envelope);
                 if (err.verboseStderr) this.deps.stdio.stderr.write(err.verboseStderr);
                 this.deps.stdio.stderr.write(`Error: ${err.message}\n`);
                 return err.exitCode;

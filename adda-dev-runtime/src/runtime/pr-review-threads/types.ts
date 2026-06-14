@@ -1,12 +1,12 @@
 // Types shared across pr-review-threads modules.
 import type { BaseReason, GithubReason } from "@adda/lib";
-import { ScriptStructuredError } from "@adda/lib";
+import { ScriptError } from "@adda/lib";
 
 // --- Error types ---
 
 export type PrReviewThreadsReason = BaseReason | GithubReason | "scan_limit_exceeded";
 
-export class PrReviewError extends ScriptStructuredError<PrReviewThreadsReason> {}
+export class PrReviewError extends ScriptError<PrReviewThreadsReason> {}
 
 export type PrReviewThreadsArgs =
     | { mode: "pr"; prNumber: number; includeResolved: boolean; maxUnresolved: number }

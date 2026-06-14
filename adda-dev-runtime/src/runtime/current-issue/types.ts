@@ -1,5 +1,5 @@
 import type { BaseReason, GithubReason } from "@adda/lib";
-import { ScriptStructuredError } from "@adda/lib";
+import { ScriptError } from "@adda/lib";
 import { z } from "zod";
 
 // --- Schemas ---
@@ -67,7 +67,7 @@ export type CurrentIssueReason =
     | "branch_create_failed"
     | "no_feature_branch";
 
-export class CurrentIssueError extends ScriptStructuredError<CurrentIssueReason> {}
+export class CurrentIssueError extends ScriptError<CurrentIssueReason> {}
 
 // --- Interfaces ---
 

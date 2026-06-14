@@ -1,6 +1,6 @@
 import type { parseArgs } from "node:util";
 import type { BaseReason, GithubReason, EnvDep, ShellDep, StdioDep } from "@adda/lib";
-import { defaultDeps, parseJson, ScriptBase, ScriptStructuredError, ScriptZodValidationError } from "@adda/lib";
+import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError, ScriptZodValidationError } from "@adda/lib";
 import { z } from "zod";
 
 type ResolveIssueBranchDeps = ShellDep & EnvDep & StdioDep;
@@ -9,7 +9,7 @@ type ResolveIssueBranchArgs = { issueId: string };
 
 export type ResolveReason = BaseReason | GithubReason;
 
-export class ResolveIssueBranchError extends ScriptStructuredError<ResolveReason> {}
+export class ResolveIssueBranchError extends ScriptError<ResolveReason> {}
 
 type ResolveResult = {
     issue_id: string;
@@ -78,7 +78,7 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps,
 
     protected validateArgs(parsed: ReturnType<typeof parseArgs>): ResolveIssueBranchArgs {
         if (parsed.positionals.length !== 1) {
-            throw new ResolveIssueBranchError("invalid_args", "usage: resolve-issue-branch <issue_id>", { exitCode: 2 });
+            throw new ScriptArgsError("usage: resolve-issue-branch <issue_id>");
         }
         return { issueId: parsed.positionals[0] };
     }
