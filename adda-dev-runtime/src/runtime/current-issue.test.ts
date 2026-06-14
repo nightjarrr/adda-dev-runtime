@@ -31,8 +31,12 @@ function makeGhIssueResponse(title = "Test issue", labels: string[] = ["feature"
     });
 }
 
-function makeResolveResponse(status: string, branch = "", pr = "", details = ""): string {
-    return JSON.stringify({ status, branch, pr, details });
+function makeResolveResponse(resolution: "feature_branch" | "main", branch = "", pr = "", issue_id = "28"): string {
+    return JSON.stringify({ status: "ok", result: { issue_id, resolution, branch, pr }, error: null });
+}
+
+function makeResolveFailResponse(reason: string, message: string, details: Record<string, unknown> = {}): string {
+    return JSON.stringify({ status: "fail", result: null, error: { reason, message, details } });
 }
 
 // --- Mock factory ---
@@ -329,14 +333,14 @@ describe("CurrentIssueScript", () => {
     });
 
     describe("switch — resolve-issue-branch failures", () => {
-        test("resolve-issue-branch returns ambiguous — exits 1, error envelope, subprocess stderr forwarded", async () => {
+        test("resolve-issue-branch returns ambiguous (exit 1) — exits 1, error envelope, subprocess stderr forwarded", async () => {
             const { deps, outLines, errLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
                     if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
                     if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({
-                            stdout: makeResolveResponse("ambiguous", "", "", "multiple linked branches: a, b"),
+                            stdout: makeResolveFailResponse("ambiguous", "multiple linked branches: a, b"),
                             stderr: "ambiguity warning from resolve\n",
                             exitCode: 1,
                         });
@@ -352,14 +356,14 @@ describe("CurrentIssueScript", () => {
             expect(errLines.join("")).toContain("ambiguity warning from resolve");
         });
 
-        test("resolve-issue-branch returns error status (exit 0) — exits 1, error envelope, subprocess stderr forwarded", async () => {
+        test("resolve-issue-branch returns fail status (exit 0) — exits 1, error envelope, subprocess stderr forwarded", async () => {
             const { deps, outLines, errLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
                     if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
                     if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({
-                            stdout: makeResolveResponse("error", "", "", "issue not found"),
+                            stdout: makeResolveFailResponse("issue_not_found", "issue #28 not found"),
                             stderr: "error details from resolve\n",
                             exitCode: 0,
                         });

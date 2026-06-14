@@ -62,7 +62,7 @@ export async function executeSwitch(
     const resolveData = await resolveIssueBranch(deps, issueId);
 
     // Step 5: Determine branch
-    const branch = resolveData.status === "main" ? "main" : resolveData.branch;
+    const branch = resolveData.resolution === "main" ? "main" : resolveData.branch;
 
     // Step 6: Checkout branch
     const checkoutResult = await deps.shell.run(["git", "checkout", branch], { strict: false });
@@ -91,7 +91,7 @@ export async function executeSwitch(
     return {
         status: "success",
         issue: issueState,
-        details: { branch, resolution: resolveData.status, hook },
+        details: { branch, resolution: resolveData.resolution, hook },
         error: "",
     };
 }

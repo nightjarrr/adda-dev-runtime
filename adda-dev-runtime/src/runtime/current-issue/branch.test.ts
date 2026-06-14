@@ -10,8 +10,12 @@ function makeShellResult(overrides: Partial<ShellResult> = {}): ShellResult {
     return { stdout: "", stderr: "", exitCode: 0, ...overrides };
 }
 
-function makeResolveResponse(status: string, branch = "", pr = "", details = ""): string {
-    return JSON.stringify({ status, branch, pr, details });
+function makeOkResponse(resolution: string, branch = "", pr = "", issue_id = "270"): string {
+    return JSON.stringify({ status: "ok", result: { issue_id, resolution, branch, pr }, error: null });
+}
+
+function makeFailResponse(reason: string, message: string): string {
+    return JSON.stringify({ status: "fail", result: null, error: { reason, message, details: {} } });
 }
 
 const RESOLVE_BIN = "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch";
@@ -42,7 +46,7 @@ function makeMockDeps(shellRun?: (command: string[]) => Promise<ShellResult>): {
     const defaultShellRun = async (command: string[]): Promise<ShellResult> => {
         if (command[0] === RESOLVE_BIN) {
             return makeShellResult({
-                stdout: makeResolveResponse("feature_branch", "chore/270-branch-lifecycle-tooling-for-sdlc-roles"),
+                stdout: makeOkResponse("feature_branch", "chore/270-branch-lifecycle-tooling-for-sdlc-roles"),
             });
         }
         if (command[0] === "git" && command[1] === "branch") {
@@ -96,23 +100,26 @@ describe("executeBranchEnsure", () => {
         await expect(executeBranchEnsure(deps, store)).rejects.toBeInstanceOf(ScriptStructuredError);
     });
 
-    test("resolve-issue-branch returns ambiguous — throws CurrentIssueError with 'ambiguous'", async () => {
+    test("resolve-issue-branch returns fail with reason ambiguous — throws CurrentIssueError with 'ambiguous'", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
-                return makeShellResult({ stdout: makeResolveResponse("ambiguous", "", "", "two branches"), exitCode: 0 });
+                return makeShellResult({
+                    stdout: makeFailResponse("ambiguous", "multiple linked branches: a, b"),
+                    exitCode: 0,
+                });
             }
             return makeShellResult();
         });
         const store = makeMockStore();
         const err = await executeBranchEnsure(deps, store).catch((e) => e);
         expect(err).toBeInstanceOf(ScriptStructuredError);
-        expect(err.message).toContain("ambiguous");
+        expect((err as any).envelope.details.reason).toBe("ambiguous");
     });
 
     test("feature_branch + current matches — returns success envelope with action: none", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
-                return makeShellResult({ stdout: makeResolveResponse("feature_branch", "chore/270-my-branch") });
+                return makeShellResult({ stdout: makeOkResponse("feature_branch", "chore/270-my-branch") });
             }
             if (command[0] === "git" && command[1] === "branch") {
                 return makeShellResult({ stdout: "chore/270-my-branch\n" });
@@ -129,7 +136,7 @@ describe("executeBranchEnsure", () => {
     test("feature_branch + current doesn't match — throws CurrentIssueError with expected branch info", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
-                return makeShellResult({ stdout: makeResolveResponse("feature_branch", "chore/270-my-branch") });
+                return makeShellResult({ stdout: makeOkResponse("feature_branch", "chore/270-my-branch") });
             }
             if (command[0] === "git" && command[1] === "branch") {
                 return makeShellResult({ stdout: "some-other-branch\n" });
@@ -146,7 +153,7 @@ describe("executeBranchEnsure", () => {
     test("main + current is not main — throws CurrentIssueError with expected/actual branch info", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
-                return makeShellResult({ stdout: makeResolveResponse("main") });
+                return makeShellResult({ stdout: makeOkResponse("main") });
             }
             if (command[0] === "git" && command[1] === "branch") {
                 return makeShellResult({ stdout: "some-other-branch\n" });
@@ -163,7 +170,7 @@ describe("executeBranchEnsure", () => {
         const ghDevelopCalls: string[][] = [];
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
-                return makeShellResult({ stdout: makeResolveResponse("main") });
+                return makeShellResult({ stdout: makeOkResponse("main") });
             }
             if (command[0] === "git" && command[1] === "branch") {
                 return makeShellResult({ stdout: "main\n" });
@@ -188,7 +195,7 @@ describe("executeBranchEnsure", () => {
     test("main + current is main, degenerate title (all Unicode) — returns success with action: created, warning present", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
-                return makeShellResult({ stdout: makeResolveResponse("main") });
+                return makeShellResult({ stdout: makeOkResponse("main") });
             }
             if (command[0] === "git" && command[1] === "branch") {
                 return makeShellResult({ stdout: "main\n" });
@@ -206,7 +213,7 @@ describe("executeBranchEnsure", () => {
     test("gh issue develop fails — error carries verboseStderr and throws CurrentIssueError", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
-                return makeShellResult({ stdout: makeResolveResponse("main") });
+                return makeShellResult({ stdout: makeOkResponse("main") });
             }
             if (command[0] === "git" && command[1] === "branch") {
                 return makeShellResult({ stdout: "main\n" });
@@ -225,7 +232,7 @@ describe("executeBranchEnsure", () => {
     test("git branch --show-current fails — error carries verboseStderr and throws CurrentIssueError", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
-                return makeShellResult({ stdout: makeResolveResponse("feature_branch", "chore/270-my-branch") });
+                return makeShellResult({ stdout: makeOkResponse("feature_branch", "chore/270-my-branch") });
             }
             if (command[0] === "git" && command[1] === "branch") {
                 return makeShellResult({ stdout: "", stderr: "fatal: not a git repository", exitCode: 1 });
@@ -262,10 +269,10 @@ describe("executeBranchVerify", () => {
         await expect(executeBranchVerify(deps, store)).rejects.toBeInstanceOf(ScriptStructuredError);
     });
 
-    test("resolve-issue-branch returns main — throws CurrentIssueError with 'no feature branch linked'", async () => {
+    test("resolve-issue-branch returns ok with resolution main — throws CurrentIssueError with 'no feature branch linked'", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
-                return makeShellResult({ stdout: makeResolveResponse("main") });
+                return makeShellResult({ stdout: makeOkResponse("main") });
             }
             return makeShellResult();
         });
@@ -278,7 +285,7 @@ describe("executeBranchVerify", () => {
     test("feature_branch + matches current — returns success envelope with branch", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
-                return makeShellResult({ stdout: makeResolveResponse("feature_branch", "chore/270-my-branch") });
+                return makeShellResult({ stdout: makeOkResponse("feature_branch", "chore/270-my-branch") });
             }
             if (command[0] === "git" && command[1] === "branch") {
                 return makeShellResult({ stdout: "chore/270-my-branch\n" });
@@ -294,7 +301,7 @@ describe("executeBranchVerify", () => {
     test("feature_branch + doesn't match current — throws CurrentIssueError with expected/actual branch", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
-                return makeShellResult({ stdout: makeResolveResponse("feature_branch", "chore/270-my-branch") });
+                return makeShellResult({ stdout: makeOkResponse("feature_branch", "chore/270-my-branch") });
             }
             if (command[0] === "git" && command[1] === "branch") {
                 return makeShellResult({ stdout: "some-other-branch\n" });
@@ -308,16 +315,19 @@ describe("executeBranchVerify", () => {
         expect(err.message).toContain("some-other-branch");
     });
 
-    test("resolve-issue-branch returns ambiguous — throws CurrentIssueError", async () => {
+    test("resolve-issue-branch returns fail with reason ambiguous — throws CurrentIssueError", async () => {
         const { deps } = makeMockDeps(async (command) => {
             if (command[0] === RESOLVE_BIN) {
-                return makeShellResult({ stdout: makeResolveResponse("ambiguous", "", "", "two branches"), exitCode: 0 });
+                return makeShellResult({
+                    stdout: makeFailResponse("ambiguous", "multiple linked branches: a, b"),
+                    exitCode: 0,
+                });
             }
             return makeShellResult();
         });
         const store = makeMockStore();
         const err = await executeBranchVerify(deps, store).catch((e) => e);
         expect(err).toBeInstanceOf(ScriptStructuredError);
-        expect(err.message).toContain("ambiguous");
+        expect((err as any).envelope.details.reason).toBe("ambiguous");
     });
 });

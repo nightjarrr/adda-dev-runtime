@@ -21,7 +21,7 @@ export async function executeBranchEnsure(deps: ShellDep, store: IssueStateStore
 
     const currentBranch = await getCurrentBranch(deps);
 
-    if (resolveData.status === "feature_branch") {
+    if (resolveData.resolution === "feature_branch") {
         if (currentBranch === resolveData.branch) {
             return {
                 status: "success",
@@ -35,7 +35,7 @@ export async function executeBranchEnsure(deps: ShellDep, store: IssueStateStore
         );
     }
 
-    // resolveData.status === "main"
+    // resolveData.resolution === "main"
     if (currentBranch !== "main") {
         throw new CurrentIssueError(`expected to be on 'main' to create feature branch, but currently on '${currentBranch}'`);
     }
@@ -70,7 +70,7 @@ export async function executeBranchVerify(deps: ShellDep, store: IssueStateStore
 
     const resolveData = await resolveIssueBranch(deps, state.id);
 
-    if (resolveData.status === "main") {
+    if (resolveData.resolution === "main") {
         throw new CurrentIssueError(
             `no feature branch linked to issue #${state.id} — was 'current-issue branch --ensure' run?`,
         );
