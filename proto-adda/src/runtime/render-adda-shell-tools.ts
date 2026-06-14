@@ -1,13 +1,19 @@
 import type { parseArgs } from "node:util";
-import type { EmptyArgs, FileReaderDep, ShellDep, StdioDep } from "@adda/lib";
-import { defaultDeps, parseJson, ScriptBase } from "@adda/lib";
+import type { FileReaderDep, FileWriterDep, ShellDep, StdioDep } from "@adda/lib";
+import { defaultDeps, parseJson, ScriptArgsError, ScriptBase } from "@adda/lib";
 import { z } from "zod";
 
 // --- Types ---
 
 export type Tool = { name: string; cmd: string; desc: string };
 
-type RenderAddaShellToolsDeps = FileReaderDep & ShellDep & StdioDep;
+type RenderAddaShellToolsDeps = FileReaderDep & FileWriterDep & ShellDep & StdioDep;
+
+type RenderAddaShellToolsArgs = { output: string };
+
+interface RenderAddaShellToolsResult {
+    path: string;
+}
 
 // --- Constants ---
 
@@ -129,16 +135,18 @@ export function render(
 
 // --- Script ---
 
-export class RenderAddaShellTools extends ScriptBase<RenderAddaShellToolsDeps, EmptyArgs> {
+export class RenderAddaShellTools extends ScriptBase<RenderAddaShellToolsDeps, RenderAddaShellToolsArgs> {
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
-        return { options: {}, strict: true };
+        return { options: { output: { type: "string" } }, strict: true };
     }
 
-    protected validateArgs(_parsed: ReturnType<typeof parseArgs>): EmptyArgs {
-        return {};
+    protected validateArgs(parsed: ReturnType<typeof parseArgs>): RenderAddaShellToolsArgs {
+        const output = parsed.values.output as string | undefined;
+        if (!output) throw new ScriptArgsError("--output is required");
+        return { output };
     }
 
-    protected async execute(_args: EmptyArgs): Promise<void> {
+    protected async execute(args: RenderAddaShellToolsArgs): Promise<void> {
         const shellToolsPath = "/run/adda/.adda-shell-tools.jsonl";
 
         const warnings: string[] = [];
@@ -193,7 +201,9 @@ export class RenderAddaShellTools extends ScriptBase<RenderAddaShellToolsDeps, E
         const rendered = render(tools, scriptingAlternatives, constrainedPresent, allAbsent);
 
         const outputParts: string[] = [...warnings, rendered];
-        this.deps.stdio.stdout.write(`${outputParts.join("\n\n")}\n`);
+        const content = `${outputParts.join("\n\n")}\n`;
+        const resultPath = await this.deps.fileWriter.writeFile(args.output, content);
+        this.emitOk<RenderAddaShellToolsResult>({ path: resultPath });
     }
 }
 

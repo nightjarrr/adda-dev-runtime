@@ -15,5 +15,5 @@
 
 section "Rendering shell tools registry"
 
-/usr/local/libexec/adda-dev-runtime/bin/render-adda-shell-tools > /run/adda/.adda-shell-tools.md
+/usr/local/libexec/adda-dev-runtime/bin/render-adda-shell-tools --output /run/adda/.adda-shell-tools.md > /dev/null
 success "Shell tools rendered to /run/adda/.adda-shell-tools.md."

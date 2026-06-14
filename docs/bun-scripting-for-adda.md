@@ -64,8 +64,8 @@ Additional codes: scripts throw subclasses of `ScriptError` (base error class de
 
 ## Script output envelope
 
-Scripts whose output is consumed programmatically emit a single-line JSON envelope on stdout.
-Scripts whose output is a rendered artifact (human text, markdown) are exempt.
+All scripts emit a single-line JSON envelope on stdout. Scripts that produce a file artifact
+(e.g. rendered markdown) take `--output <path>` and surface the resolved path in `result`.
 
 ### Shape
 
