@@ -235,8 +235,8 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts"]);
             expect(code).toBe(2);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
-            expect(out.error).toBeString();
+            expect(out.status).toBe("fail");
+            expect(out.error).toBeTruthy();
             expect(out).not.toHaveProperty("pr");
             expect(out).not.toHaveProperty("thread");
         });
@@ -246,7 +246,7 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "review"]);
             expect(code).toBe(2);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
             expect(out).not.toHaveProperty("pr");
             expect(out).not.toHaveProperty("thread");
         });
@@ -262,7 +262,7 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr"]);
             expect(code).toBe(2);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
             expect(out).not.toHaveProperty("pr");
             expect(out).not.toHaveProperty("thread");
         });
@@ -272,7 +272,7 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "abc"]);
             expect(code).toBe(2);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
         });
 
         test("pr with float number — exits 2", async () => {
@@ -299,7 +299,7 @@ describe("PrReviewThreadsScript", () => {
             ]);
             expect(code).toBe(2);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
         });
 
         test("thread without id — exits 2, structured envelope on stdout", async () => {
@@ -307,7 +307,7 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread"]);
             expect(code).toBe(2);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
             expect(out).not.toHaveProperty("pr");
             expect(out).not.toHaveProperty("thread");
         });
@@ -323,7 +323,7 @@ describe("PrReviewThreadsScript", () => {
             ]);
             expect(code).toBe(2);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
         });
 
         test("thread with --max-unresolved — exits 2, structured envelope on stdout", async () => {
@@ -338,7 +338,7 @@ describe("PrReviewThreadsScript", () => {
             ]);
             expect(code).toBe(2);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
         });
     });
 
@@ -351,10 +351,9 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
-            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("missing_env");
-            expect(out.error).toBeString();
-            expect(out.error as string).toContain("GITHUB_OWNER");
+            expect(out.status).toBe("fail");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("missing_env");
+            expect((out.error as Record<string, unknown>)?.message as string).toContain("GITHUB_OWNER");
         });
 
         test("pr mode: missing GITHUB_REPO — exits 1, missing_env envelope on stdout", async () => {
@@ -362,10 +361,9 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
-            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("missing_env");
-            expect(out.error).toBeString();
-            expect(out.error as string).toContain("GITHUB_REPO");
+            expect(out.status).toBe("fail");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("missing_env");
+            expect((out.error as Record<string, unknown>)?.message as string).toContain("GITHUB_REPO");
         });
 
         test("thread mode: works without GITHUB_OWNER/GITHUB_REPO", async () => {
@@ -376,7 +374,7 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
             expect(code).toBe(0);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("success");
+            expect(out.status).toBe("ok");
         });
 
         test("valid ADDA_DEV_PR_REVIEW_SCAN_CEILING override — used as ceiling", async () => {
@@ -386,8 +384,8 @@ describe("PrReviewThreadsScript", () => {
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
-            const out = getStdoutJson(outLines) as { pr?: { reason: string } };
-            expect(out.pr?.reason).toBe("scan_limit_exceeded");
+            const out = getStdoutJson(outLines) as { error?: { reason: string } };
+            expect(out.error?.reason).toBe("scan_limit_exceeded");
         });
 
         test("invalid ADDA_DEV_PR_REVIEW_SCAN_CEILING — exits 2, invalid_config envelope on stdout", async () => {
@@ -397,8 +395,8 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(2);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
-            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("invalid_config");
+            expect(out.status).toBe("fail");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("invalid_config");
         });
 
         test("ADDA_DEV_PR_REVIEW_SCAN_CEILING=0 — exits 2, invalid_config envelope on stdout", async () => {
@@ -408,8 +406,8 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(2);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
-            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("invalid_config");
+            expect(out.status).toBe("fail");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("invalid_config");
         });
 
         test("thread mode: invalid ceiling — exits 2, invalid_config envelope on stdout", async () => {
@@ -420,8 +418,8 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
             expect(code).toBe(2);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
-            expect((out["thread"] as Record<string, unknown>)?.reason).toBe("invalid_config");
+            expect(out.status).toBe("fail");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("invalid_config");
         });
     });
 
@@ -436,10 +434,9 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "999999"]);
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
-            const pr = out["pr"] as Record<string, unknown>;
-            expect(pr?.reason).toBe("graphql_error");
-            expect(pr).not.toHaveProperty("resultsFile");
+            expect(out.status).toBe("fail");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("graphql_error");
+            expect(out).not.toHaveProperty("pr");
             // gh's stderr must be forwarded to the script's stderr
             expect(errLines.join("")).toContain("Could not resolve to a PullRequest with the number of 999999");
         });
@@ -452,8 +449,8 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
-            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("graphql_error");
+            expect(out.status).toBe("fail");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("graphql_error");
         });
     });
 
@@ -469,9 +466,9 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
-            expect((out["thread"] as Record<string, unknown>)?.reason).toBe("graphql_error");
-            expect(out["thread"] as Record<string, unknown>).not.toHaveProperty("resultsFile");
+            expect(out.status).toBe("fail");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("graphql_error");
+            expect(out).not.toHaveProperty("thread");
             // gh's stderr must be forwarded to the script's stderr
             expect(errLines.join("")).toContain("Could not resolve to a node");
         });
@@ -489,14 +486,17 @@ describe("PrReviewThreadsScript", () => {
             expect(code).toBe(0);
             const out = getStdoutJson(outLines) as {
                 status: string;
-                pr: { number: number; total: number; unresolved: number; returnedUnresolved: number; resultsFile: string };
+                result: {
+                    pr: { number: number; total: number; unresolved: number; returnedUnresolved: number };
+                    resultsFile: string;
+                };
             };
-            expect(out.status).toBe("success");
-            expect(out.pr.number).toBe(303);
-            expect(out.pr.total).toBe(0);
-            expect(out.pr.unresolved).toBe(0);
-            expect(out.pr.returnedUnresolved).toBe(0);
-            expect(out.pr.resultsFile).toBe("/tmp/mock-result.json");
+            expect(out.status).toBe("ok");
+            expect(out.result.pr.number).toBe(303);
+            expect(out.result.pr.total).toBe(0);
+            expect(out.result.pr.unresolved).toBe(0);
+            expect(out.result.pr.returnedUnresolved).toBe(0);
+            expect(out.result.resultsFile).toBe("/tmp/mock-result.json");
             expect(deps.fileWriter.writeFile).toHaveBeenCalledWith(
                 expect.stringContaining("pr-review-threads-pr-303"),
                 expect.any(String),
@@ -511,19 +511,21 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(0);
             const out = getStdoutJson(outLines) as {
-                pr: {
-                    unresolved: number;
-                    resolved: number;
-                    returnedUnresolved: number;
-                    moreUnresolvedAvailable: boolean;
+                result: {
+                    pr: {
+                        unresolved: number;
+                        resolved: number;
+                        returnedUnresolved: number;
+                        moreUnresolvedAvailable: boolean;
+                    };
                     resultsFile: string;
                 };
             };
-            expect(out.pr.unresolved).toBe(1);
-            expect(out.pr.resolved).toBe(0);
-            expect(out.pr.returnedUnresolved).toBe(1);
-            expect(out.pr.moreUnresolvedAvailable).toBe(false);
-            expect(out.pr.resultsFile).toBeDefined();
+            expect(out.result.pr.unresolved).toBe(1);
+            expect(out.result.pr.resolved).toBe(0);
+            expect(out.result.pr.returnedUnresolved).toBe(1);
+            expect(out.result.pr.moreUnresolvedAvailable).toBe(false);
+            expect(out.result.resultsFile).toBeDefined();
         });
 
         test("all resolved, no --include-resolved — threads empty, exit 0, file written", async () => {
@@ -533,9 +535,11 @@ describe("PrReviewThreadsScript", () => {
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(0);
-            const out = getStdoutJson(outLines) as { pr: { unresolved: number; resolved: number; resultsFile: string } };
-            expect(out.pr.unresolved).toBe(0);
-            expect(out.pr.resolved).toBe(1);
+            const out = getStdoutJson(outLines) as {
+                result: { pr: { unresolved: number; resolved: number }; resultsFile: string };
+            };
+            expect(out.result.pr.unresolved).toBe(0);
+            expect(out.result.pr.resolved).toBe(1);
             expect(deps.fileWriter.writeFile).toHaveBeenCalledWith(
                 expect.stringContaining("pr-review-threads-pr-"),
                 expect.any(String),
@@ -556,8 +560,8 @@ describe("PrReviewThreadsScript", () => {
                 "--include-resolved",
             ]);
             expect(code).toBe(0);
-            const out = getStdoutJson(outLines) as { pr: { resultsFile: string } };
-            expect(out.pr.resultsFile).toBeDefined();
+            const out = getStdoutJson(outLines) as { result: { resultsFile: string } };
+            expect(out.result.resultsFile).toBeDefined();
             const fileContent = getMockFileContent(deps) as { threads: Array<{ id: string }> };
             const ids = fileContent.threads.map((t) => t.id);
             expect(ids).toContain("PRRT_r1");
@@ -584,18 +588,20 @@ describe("PrReviewThreadsScript", () => {
             ]);
             expect(code).toBe(0);
             const out = getStdoutJson(outLines) as {
-                pr: {
-                    unresolved: number;
-                    returnedUnresolved: number;
-                    moreUnresolvedAvailable: boolean;
-                    maxUnresolved: number;
+                result: {
+                    pr: {
+                        unresolved: number;
+                        returnedUnresolved: number;
+                        moreUnresolvedAvailable: boolean;
+                        maxUnresolved: number;
+                    };
                     resultsFile: string;
                 };
             };
-            expect(out.pr.unresolved).toBe(10);
-            expect(out.pr.returnedUnresolved).toBe(3);
-            expect(out.pr.moreUnresolvedAvailable).toBe(true);
-            expect(out.pr.maxUnresolved).toBe(3);
+            expect(out.result.pr.unresolved).toBe(10);
+            expect(out.result.pr.returnedUnresolved).toBe(3);
+            expect(out.result.pr.moreUnresolvedAvailable).toBe(true);
+            expect(out.result.pr.maxUnresolved).toBe(3);
         });
 
         test("unresolved <= maxUnresolved — all included, moreUnresolvedAvailable false", async () => {
@@ -613,10 +619,10 @@ describe("PrReviewThreadsScript", () => {
             ]);
             expect(code).toBe(0);
             const out = getStdoutJson(outLines) as {
-                pr: { returnedUnresolved: number; moreUnresolvedAvailable: boolean; resultsFile: string };
+                result: { pr: { returnedUnresolved: number; moreUnresolvedAvailable: boolean }; resultsFile: string };
             };
-            expect(out.pr.returnedUnresolved).toBe(3);
-            expect(out.pr.moreUnresolvedAvailable).toBe(false);
+            expect(out.result.pr.returnedUnresolved).toBe(3);
+            expect(out.result.pr.moreUnresolvedAvailable).toBe(false);
         });
 
         test("default maxUnresolved is 50", async () => {
@@ -626,8 +632,8 @@ describe("PrReviewThreadsScript", () => {
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(0);
-            const out = getStdoutJson(outLines) as { pr: { maxUnresolved: number; resultsFile: string } };
-            expect(out.pr.maxUnresolved).toBe(50);
+            const out = getStdoutJson(outLines) as { result: { pr: { maxUnresolved: number }; resultsFile: string } };
+            expect(out.result.pr.maxUnresolved).toBe(50);
         });
     });
 
@@ -725,12 +731,12 @@ describe("PrReviewThreadsScript", () => {
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as {
                 status: string;
-                pr?: { reason: string; total?: number; ceiling?: number };
+                error?: { reason: string; details?: { total?: number; ceiling?: number } };
             };
-            expect(out.status).toBe("error");
-            expect(out.pr?.reason).toBe("scan_limit_exceeded");
-            expect(out.pr?.total).toBe(10);
-            expect(out.pr?.ceiling).toBe(5);
+            expect(out.status).toBe("fail");
+            expect(out.error?.reason).toBe("scan_limit_exceeded");
+            expect(out.error?.details?.total).toBe(10);
+            expect(out.error?.details?.ceiling).toBe(5);
             expect(deps.fileWriter.writeFile).not.toHaveBeenCalled();
         });
 
@@ -759,9 +765,9 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
-            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("repo_not_found");
-            expect(out["pr"] as Record<string, unknown>).not.toHaveProperty("resultsFile");
+            expect(out.status).toBe("fail");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("repo_not_found");
+            expect(out).not.toHaveProperty("pr");
             expect(deps.fileWriter.writeFile).not.toHaveBeenCalled();
         });
 
@@ -772,8 +778,8 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
-            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("pr_not_found");
+            expect(out.status).toBe("fail");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("pr_not_found");
         });
     });
 
@@ -791,18 +797,18 @@ describe("PrReviewThreadsScript", () => {
                 expect.stringContaining("pr-review-threads-pr-42"),
                 expect.any(String),
             );
-            const out = getStdoutJson(outLines) as { pr: { resultsFile: string } };
-            expect(out.pr.resultsFile).toBe("/tmp/mock-result.json");
+            const out = getStdoutJson(outLines) as { result: { resultsFile: string } };
+            expect(out.result.resultsFile).toBe("/tmp/mock-result.json");
         });
 
-        test("error — no resultsFile in envelope", async () => {
+        test("error — no resultsFile in error envelope", async () => {
             const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makeRepoNotFound())],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out["pr"] as Record<string, unknown>).not.toHaveProperty("resultsFile");
+            expect(out.result).toBeNull();
         });
     });
 
@@ -848,40 +854,43 @@ describe("PrReviewThreadsScript", () => {
     // pr mode: envelope shape
     // ---------------------------------------------------------------
     describe("pr mode: envelope shape", () => {
-        test("success envelope has mode-keyed pr payload with resultsFile, no result wrapper", async () => {
+        test("success envelope has result wrapper with pr key and top-level resultsFile", async () => {
             const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makePrThreadsResponse([]))],
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "303"]);
             expect(code).toBe(0);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out).toHaveProperty("status");
-            expect(out).toHaveProperty("error");
-            expect(out).toHaveProperty("pr");
-            expect(out).not.toHaveProperty("result");
+            expect(out).toHaveProperty("status", "ok");
+            expect(out).toHaveProperty("result");
+            expect(out).toHaveProperty("error", null);
+            expect(out).not.toHaveProperty("pr");
             expect(out).not.toHaveProperty("mode");
-            const pr = out["pr"] as Record<string, unknown>;
-            expect(pr).toHaveProperty("resultsFile");
+            const result = out["result"] as Record<string, unknown>;
+            expect(result).toHaveProperty("resultsFile");
+            expect(result).toHaveProperty("pr");
+            const pr = result["pr"] as Record<string, unknown>;
             expect(pr).toHaveProperty("number", 303);
         });
 
-        test("error envelope has pr key with reason", async () => {
+        test("error envelope has error key with reason, no mode key", async () => {
             const { deps, outLines } = makeMockDeps({
                 runQueue: [makeShellResult(makeRepoNotFound())],
             });
             await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "pr", "1"]);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out).toHaveProperty("status", "error");
-            expect(out).toHaveProperty("pr");
-            const pr = out["pr"] as Record<string, unknown>;
-            expect(pr).toHaveProperty("reason");
+            expect(out).toHaveProperty("status", "fail");
+            expect(out).toHaveProperty("error");
+            expect(out).not.toHaveProperty("pr");
+            const error = out["error"] as Record<string, unknown>;
+            expect(error).toHaveProperty("reason");
         });
 
         test("pre-dispatch error emits structured envelope on stdout (no pr/thread key)", async () => {
             const { deps, outLines } = makeMockDeps();
             await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts"]);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
             expect(out).toHaveProperty("error");
             expect(out).not.toHaveProperty("pr");
             expect(out).not.toHaveProperty("thread");
@@ -899,18 +908,21 @@ describe("PrReviewThreadsScript", () => {
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_abc"]);
             expect(code).toBe(0);
-            const out = getStdoutJson(outLines) as { status: string; thread: { id: string; pr: number; resultsFile: string } };
-            expect(out.status).toBe("success");
-            expect(out.thread.id).toBe("PRRT_abc");
-            expect(out.thread.pr).toBe(303);
-            expect(out.thread.resultsFile).toBe("/tmp/mock-result.json");
+            const out = getStdoutJson(outLines) as {
+                status: string;
+                result: { thread: { id: string; pr: number }; resultsFile: string };
+            };
+            expect(out.status).toBe("ok");
+            expect(out.result.thread.id).toBe("PRRT_abc");
+            expect(out.result.thread.pr).toBe(303);
+            expect(out.result.resultsFile).toBe("/tmp/mock-result.json");
             expect(deps.fileWriter.writeFile).toHaveBeenCalledWith(
                 expect.stringContaining("pr-review-threads-thread-"),
                 expect.any(String),
             );
         });
 
-        test("file header matches envelope minus resultsFile", async () => {
+        test("file header matches result.thread", async () => {
             const { deps, outLines } = makeMockDeps({
                 envVars: {},
                 runQueue: [
@@ -926,15 +938,14 @@ describe("PrReviewThreadsScript", () => {
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_abc"]);
             expect(code).toBe(0);
-            const envOut = getStdoutJson(outLines) as { thread: Record<string, unknown> };
+            const envOut = getStdoutJson(outLines) as { result: { thread: Record<string, unknown> } };
             const fileContent = getMockFileContent(deps) as {
                 thread: Record<string, unknown>;
                 threads: unknown[];
                 hunks: Record<string, string>;
             };
-            // File header = envelope minus resultsFile
-            const { resultsFile: _, ...headerWithoutFile } = envOut.thread;
-            expect(fileContent.thread).toEqual(headerWithoutFile);
+            // File header = result.thread from envelope
+            expect(fileContent.thread).toEqual(envOut.result.thread);
             expect(fileContent.threads).toHaveLength(1);
         });
     });
@@ -983,11 +994,15 @@ describe("PrReviewThreadsScript", () => {
             });
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
             expect(code).toBe(1);
-            const out = getStdoutJson(outLines) as { status: string; thread?: { reason: string; commentCount?: number } };
-            expect(out.status).toBe("error");
-            expect(out.thread?.reason).toBe("scan_limit_exceeded");
-            expect(out.thread?.commentCount).toBe(10);
-            expect(out.thread as Record<string, unknown>).not.toHaveProperty("resultsFile");
+            const out = getStdoutJson(outLines) as {
+                status: string;
+                result: null;
+                error?: { reason: string; details?: { commentCount?: number } };
+            };
+            expect(out.status).toBe("fail");
+            expect(out.error?.reason).toBe("scan_limit_exceeded");
+            expect(out.error?.details?.commentCount).toBe(10);
+            expect(out.result).toBeNull();
             expect(deps.fileWriter.writeFile).not.toHaveBeenCalled();
         });
     });
@@ -1004,8 +1019,8 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
-            expect((out["thread"] as Record<string, unknown>)?.reason).toBe("thread_not_found");
+            expect(out.status).toBe("fail");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("thread_not_found");
         });
 
         test("node is not a PullRequestReviewThread — exits 1, no file, not_a_thread reason", async () => {
@@ -1016,8 +1031,8 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
             expect(code).toBe(1);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out.status).toBe("error");
-            expect((out["thread"] as Record<string, unknown>)?.reason).toBe("not_a_thread");
+            expect(out.status).toBe("fail");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("not_a_thread");
         });
     });
 
@@ -1025,7 +1040,7 @@ describe("PrReviewThreadsScript", () => {
     // thread mode: envelope shape
     // ---------------------------------------------------------------
     describe("thread mode: envelope shape", () => {
-        test("success envelope has thread key, no pr key, no result wrapper", async () => {
+        test("success envelope has result wrapper with thread key, no pr key", async () => {
             const { deps, outLines } = makeMockDeps({
                 envVars: {},
                 runQueue: [makeShellResult(makeThreadNodeResponse())],
@@ -1033,9 +1048,11 @@ describe("PrReviewThreadsScript", () => {
             const code = await new PrReviewThreadsScript(deps).run(["bun", "pr-review-threads.ts", "thread", "PRRT_x"]);
             expect(code).toBe(0);
             const out = getStdoutJson(outLines) as Record<string, unknown>;
-            expect(out).toHaveProperty("thread");
-            expect(out).not.toHaveProperty("pr");
-            expect(out).not.toHaveProperty("result");
+            expect(out).toHaveProperty("result");
+            const result = out["result"] as Record<string, unknown>;
+            expect(result).toHaveProperty("thread");
+            expect(result).not.toHaveProperty("pr");
+            expect(out).not.toHaveProperty("thread");
             expect(out).not.toHaveProperty("mode");
         });
     });
@@ -1053,8 +1070,8 @@ describe("PrReviewThreadsScript", () => {
             const combined = outLines.join("").trim();
             expect(() => JSON.parse(combined)).not.toThrow();
             const out = JSON.parse(combined) as Record<string, unknown>;
-            expect(out.status).toBe("error");
-            expect((out["pr"] as Record<string, unknown>)?.reason).toBe("repo_not_found");
+            expect(out.status).toBe("fail");
+            expect((out.error as Record<string, unknown>)?.reason).toBe("repo_not_found");
         });
 
         test("pr graphql error — single envelope on stdout", async () => {
@@ -1065,7 +1082,7 @@ describe("PrReviewThreadsScript", () => {
             const combined = outLines.join("").trim();
             expect(() => JSON.parse(combined)).not.toThrow();
             const out = JSON.parse(combined) as Record<string, unknown>;
-            expect(out.status).toBe("error");
+            expect(out.status).toBe("fail");
         });
     });
 });
@@ -1075,10 +1092,8 @@ describe("PrReviewThreadsScript", () => {
 // ---------------------------------------------------------------
 import { hunkToFields, sortThreads, toThreadObject } from "./pr-review-threads/helpers";
 import type { ThreadNode } from "./pr-review-threads/graphql";
-import { PrThreadsArgsError, PrThreadsModeError } from "./pr-review-threads/errors";
 import { paginate } from "./pr-review-threads/fetch";
 import { PR_THREADS_QUERY, PrThreadsPageSchema } from "./pr-review-threads/graphql";
-import { ScriptError, ScriptStructuredError } from "../lib/index";
 
 describe("sortThreads", () => {
     test("sorts by path, then by line", () => {
@@ -1233,95 +1248,6 @@ describe("hunkToFields", () => {
         const hunk = "@@ -1,2 +1,3 @@\n line\n+new\n";
         const { targetLine } = hunkToFields(hunk);
         expect(targetLine).toBe("+new");
-    });
-});
-
-// ---------------------------------------------------------------
-// PrThreadsArgsError unit tests
-// ---------------------------------------------------------------
-
-describe("PrThreadsArgsError", () => {
-    test("is a ScriptStructuredError with exit code 2", () => {
-        const err = new PrThreadsArgsError("mode is required");
-        expect(err).toBeInstanceOf(ScriptStructuredError);
-        expect(err.exitCode).toBe(2);
-    });
-
-    test("envelope has status error and error message", () => {
-        const err = new PrThreadsArgsError("invalid argument");
-        const envelope = err.envelope as Record<string, unknown>;
-        expect(envelope.status).toBe("error");
-        expect(envelope.error).toBe("invalid argument");
-    });
-
-    test("message matches the provided string", () => {
-        const err = new PrThreadsArgsError("pr mode requires a PR number");
-        expect(err.message).toBe("pr mode requires a PR number");
-    });
-
-    test("name is 'PrThreadsArgsError'", () => {
-        const err = new PrThreadsArgsError("bad");
-        expect(err.name).toBe("PrThreadsArgsError");
-    });
-});
-
-// ---------------------------------------------------------------
-// PrThreadsModeError unit tests
-// ---------------------------------------------------------------
-
-describe("PrThreadsModeError", () => {
-    test("is a ScriptStructuredError", () => {
-        const err = new PrThreadsModeError("pr", new ScriptError("msg", 1, "reason_code"));
-        expect(err).toBeInstanceOf(ScriptStructuredError);
-    });
-
-    test("pr mode: envelope has pr key with reason and payload from ScriptError", () => {
-        const cause = new ScriptError("repo not found", 1, "repo_not_found", { extra: 42 });
-        const err = new PrThreadsModeError("pr", cause);
-        const envelope = err.envelope as Record<string, unknown>;
-        expect(envelope.status).toBe("error");
-        expect(envelope.error).toBe("repo not found");
-        const pr = envelope["pr"] as Record<string, unknown>;
-        expect(pr?.reason).toBe("repo_not_found");
-        expect(pr?.extra).toBe(42);
-    });
-
-    test("thread mode: envelope has thread key", () => {
-        const cause = new ScriptError("not found", 1, "thread_not_found");
-        const err = new PrThreadsModeError("thread", cause);
-        const envelope = err.envelope as Record<string, unknown>;
-        expect(envelope).toHaveProperty("thread");
-        expect((envelope["thread"] as Record<string, unknown>)?.reason).toBe("thread_not_found");
-    });
-
-    test("non-ScriptError cause: internal_error reason, exitCode 1", () => {
-        const err = new PrThreadsModeError("pr", new Error("boom"));
-        expect(err.exitCode).toBe(1);
-        const envelope = err.envelope as Record<string, unknown>;
-        expect((envelope["pr"] as Record<string, unknown>)?.reason).toBe("internal_error");
-    });
-
-    test("inherits exitCode from ScriptError cause", () => {
-        const cause = new ScriptError("config bad", 2, "invalid_config");
-        const err = new PrThreadsModeError("pr", cause);
-        expect(err.exitCode).toBe(2);
-    });
-
-    test("threads verboseStderr from ScriptError cause", () => {
-        const cause = new ScriptError("failed", 1, "graphql_error", {}, "raw stderr from gh");
-        const err = new PrThreadsModeError("pr", cause);
-        expect(err.verboseStderr).toBe("raw stderr from gh");
-    });
-
-    test("verboseStderr is undefined when cause has no verboseStderr", () => {
-        const cause = new ScriptError("failed", 1, "error_code");
-        const err = new PrThreadsModeError("pr", cause);
-        expect(err.verboseStderr).toBeUndefined();
-    });
-
-    test("verboseStderr is undefined for non-ScriptError cause", () => {
-        const err = new PrThreadsModeError("pr", new Error("boom"));
-        expect(err.verboseStderr).toBeUndefined();
     });
 });
 

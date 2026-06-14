@@ -1,4 +1,5 @@
 import type { z } from "zod";
+import type { ScriptEnvelope } from "./envelope";
 
 export type BaseReason =
     | "invalid_args"
@@ -33,12 +34,20 @@ export class ScriptError extends Error {
 }
 
 export class ScriptStructuredError extends ScriptError {
-    readonly envelope: unknown;
+    readonly envelope: ScriptEnvelope<never>;
 
-    constructor(envelope: unknown, message: string, exitCode = 1, verboseStderr?: string) {
-        super(message, exitCode, "internal_error", {}, verboseStderr);
+    constructor(
+        reason: string,
+        message: string,
+        {
+            details = {},
+            exitCode = 1,
+            verboseStderr,
+        }: { details?: Record<string, unknown>; exitCode?: number; verboseStderr?: string } = {},
+    ) {
+        super(message, exitCode, reason, {}, verboseStderr);
         this.name = "ScriptStructuredError";
-        this.envelope = envelope;
+        this.envelope = { status: "fail", result: null, error: { reason, message, details } };
     }
 }
 

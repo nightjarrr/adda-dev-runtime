@@ -64,19 +64,3 @@ export interface ThreadDetailFile {
     threads: [ThreadObject];
     hunks: Record<string, string>;
 }
-
-// --- Envelope shapes ---
-
-export interface PrEnvelope {
-    status: "success" | "error";
-    error: string;
-    pr?: (PrFileHeader & { resultsFile?: string }) | { reason: string; total?: number; ceiling?: number };
-}
-
-export interface ThreadEnvelope {
-    status: "success" | "error";
-    error: string;
-    thread?: (ThreadFileHeader & { resultsFile?: string }) | { reason: string; commentCount?: number; ceiling?: number };
-}
-
-export type Envelope = PrEnvelope | ThreadEnvelope | { status: "error"; error: string };

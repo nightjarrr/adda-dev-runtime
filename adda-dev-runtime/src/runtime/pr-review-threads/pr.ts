@@ -1,6 +1,6 @@
 // pr mode handler for pr-review-threads.
 import type { EnvDep, FileWriterDep, ShellDep, StdioDep } from "@adda/lib";
-import { ScriptError, ScriptZodValidationError } from "@adda/lib";
+import { ScriptStructuredError, ScriptZodValidationError } from "@adda/lib";
 import { PR_THREADS_QUERY, PrThreadsPageSchema } from "./graphql";
 import type { ThreadNode } from "./graphql";
 import { COMMENT_PREVIEW_DEPTH, FILE_PREFIX_PR, sortThreads, toThreadObject } from "./helpers";
@@ -21,19 +21,18 @@ export async function runPr(deps: PrDeps, args: Extract<PrReviewThreadsArgs, { m
     if (!firstParsed.success) throw new ScriptZodValidationError("unexpected PR threads response", firstParsed.error, firstRaw);
 
     if (firstParsed.data.data.repository === null) {
-        throw new ScriptError(`repository ${owner}/${repo} not found`, 1, "repo_not_found");
+        throw new ScriptStructuredError("repo_not_found", `repository ${owner}/${repo} not found`);
     }
     if (firstParsed.data.data.repository.pullRequest === null) {
-        throw new ScriptError(`PR #${args.prNumber} not found in ${owner}/${repo}`, 1, "pr_not_found");
+        throw new ScriptStructuredError("pr_not_found", `PR #${args.prNumber} not found in ${owner}/${repo}`);
     }
 
     const firstPage = firstParsed.data.data.repository.pullRequest.reviewThreads;
     const total = firstPage.totalCount;
 
     if (total > ceiling) {
-        throw new ScriptError(`scan limit exceeded: ${total} threads > ceiling ${ceiling}`, 1, "scan_limit_exceeded", {
-            total,
-            ceiling,
+        throw new ScriptStructuredError("scan_limit_exceeded", `scan limit exceeded: ${total} threads > ceiling ${ceiling}`, {
+            details: { total, ceiling },
         });
     }
 

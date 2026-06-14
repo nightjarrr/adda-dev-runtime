@@ -1,8 +1,7 @@
 import type { parseArgs } from "node:util";
 import type { BaseReason, EnvDep, ShellDep, StdioDep } from "@adda/lib";
-import { defaultDeps, parseJson, ScriptBase, ScriptZodValidationError } from "@adda/lib";
+import { defaultDeps, parseJson, ScriptBase, ScriptStructuredError, ScriptZodValidationError } from "@adda/lib";
 import type { ScriptEnvelope } from "@adda/lib";
-import { ScriptStructuredError } from "@adda/lib";
 import { z } from "zod";
 
 type ResolveIssueBranchDeps = ShellDep & EnvDep & StdioDep;
@@ -17,20 +16,6 @@ type ResolveResult = {
     branch: string;
     pr: string;
 };
-
-class ResolveIssueBranchError extends ScriptStructuredError {
-    constructor(
-        reason: ResolveReason,
-        message: string,
-        details: Record<string, unknown> = {},
-        exitCode = 1,
-        verboseStderr?: string,
-    ) {
-        const envelope: ScriptEnvelope<never> = { status: "fail", result: null, error: { reason, message, details } };
-        super(envelope, message, exitCode, verboseStderr);
-        this.name = "ResolveIssueBranchError";
-    }
-}
 
 const GraphQLSchema = z.object({
     data: z.object({
@@ -92,7 +77,7 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps,
 
     protected validateArgs(parsed: ReturnType<typeof parseArgs>): ResolveIssueBranchArgs {
         if (parsed.positionals.length !== 1) {
-            throw new ResolveIssueBranchError("invalid_args", "usage: resolve-issue-branch <issue_id>", {}, 2);
+            throw new ScriptStructuredError("invalid_args", "usage: resolve-issue-branch <issue_id>", { exitCode: 2 });
         }
         return { issueId: parsed.positionals[0] };
     }
@@ -102,15 +87,15 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps,
 
         const owner = this.deps.env.get("GITHUB_OWNER");
         if (!owner) {
-            throw new ResolveIssueBranchError("missing_env", "required environment variable 'GITHUB_OWNER' is not set", {
-                issueId,
+            throw new ScriptStructuredError("missing_env", "required environment variable 'GITHUB_OWNER' is not set", {
+                details: { issueId },
             });
         }
 
         const repo = this.deps.env.get("GITHUB_REPO");
         if (!repo) {
-            throw new ResolveIssueBranchError("missing_env", "required environment variable 'GITHUB_REPO' is not set", {
-                issueId,
+            throw new ScriptStructuredError("missing_env", "required environment variable 'GITHUB_REPO' is not set", {
+                details: { issueId },
             });
         }
 
@@ -133,31 +118,34 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps,
 
         if (ghResult.exitCode !== 0) {
             const message = `GraphQL API call failed: ${ghResult.stderr.trim() || ghResult.stdout.trim()}`;
-            throw new ResolveIssueBranchError("api_error", message, { issueId }, 1, ghResult.stderr);
+            throw new ScriptStructuredError("api_error", message, { details: { issueId }, verboseStderr: ghResult.stderr });
         }
 
         let raw: unknown;
         try {
             raw = parseJson(ghResult.stdout);
         } catch {
-            throw new ResolveIssueBranchError("api_error", "invalid JSON", { issueId });
+            throw new ScriptStructuredError("api_error", "invalid JSON", { details: { issueId } });
         }
 
         const parsed = GraphQLSchema.safeParse(raw);
         if (!parsed.success) {
             const err = new ScriptZodValidationError("unexpected API response", parsed.error, raw);
-            throw new ResolveIssueBranchError("validation_error", err.message, { issueId }, 1, err.verboseStderr);
+            throw new ScriptStructuredError("validation_error", err.message, {
+                details: { issueId },
+                verboseStderr: err.verboseStderr,
+            });
         }
 
         // Domain conditions — null is intentional (not found), not a schema violation
         if (parsed.data.data.repository === null) {
-            throw new ResolveIssueBranchError("repo_not_found", `repository ${owner}/${repo} not found`, { owner, repo });
+            throw new ScriptStructuredError("repo_not_found", `repository ${owner}/${repo} not found`, {
+                details: { owner, repo },
+            });
         }
         if (parsed.data.data.repository.issue === null) {
-            throw new ResolveIssueBranchError("issue_not_found", `issue #${issueId} not found in ${owner}/${repo}`, {
-                issueId,
-                owner,
-                repo,
+            throw new ScriptStructuredError("issue_not_found", `issue #${issueId} not found in ${owner}/${repo}`, {
+                details: { issueId, owner, repo },
             });
         }
 
@@ -175,8 +163,8 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps,
         }
         if (linkedNodes.length > 1) {
             const names = linkedNodes.map((n) => n.ref.name).join(", ");
-            throw new ResolveIssueBranchError("ambiguous", `multiple linked branches: ${names}`, {
-                branches: linkedNodes.map((n) => n.ref.name),
+            throw new ScriptStructuredError("ambiguous", `multiple linked branches: ${names}`, {
+                details: { branches: linkedNodes.map((n) => n.ref.name) },
             });
         }
 
@@ -208,8 +196,8 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps,
         }
 
         const branches = openPrs.map((n) => n.subject?.headRefName).join(", ");
-        throw new ResolveIssueBranchError("ambiguous", `multiple open PRs with branches: ${branches}`, {
-            branches: openPrs.map((n) => n.subject?.headRefName),
+        throw new ScriptStructuredError("ambiguous", `multiple open PRs with branches: ${branches}`, {
+            details: { branches: openPrs.map((n) => n.subject?.headRefName) },
         });
     }
 }
