@@ -15,6 +15,9 @@ import { defaultDeps, ScriptArgsError, ScriptBase } from "@adda/lib";
 import { runChildren } from "./issue-hierarchy/children";
 import type { IssueHierarchyArgs } from "./issue-hierarchy/types";
 
+export type { GitHubIssueHeader } from "@adda/lib";
+export { fetchChildren } from "./issue-hierarchy/fetch";
+
 type IssueHierarchyDeps = ShellDep & EnvDep & StdioDep;
 
 export class IssueHierarchyScript extends ScriptBase<IssueHierarchyDeps, IssueHierarchyArgs> {
@@ -52,8 +55,5 @@ export class IssueHierarchyScript extends ScriptBase<IssueHierarchyDeps, IssueHi
         this.emitOk(result);
     }
 }
-
-export type { GitHubIssueHeader } from "@adda/lib";
-export { fetchChildren } from "./issue-hierarchy/fetch";
 
 if (import.meta.main) process.exit(await new IssueHierarchyScript(defaultDeps).run(process.argv));
