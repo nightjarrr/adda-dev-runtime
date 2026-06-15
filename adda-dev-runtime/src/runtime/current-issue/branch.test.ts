@@ -27,6 +27,9 @@ const DEFAULT_STATE: IssueState = {
     phase: "",
     state: "OPEN",
     pr: "",
+    parent: null,
+    children: [],
+    siblings: [],
 };
 
 // --- Mock factory ---

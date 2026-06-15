@@ -1,8 +1,18 @@
-import type { BaseReason, GithubReason } from "@adda/lib";
+import type { BaseReason, GithubReason, GitHubIssueHeader } from "@adda/lib";
 import { ScriptError } from "@adda/lib";
 import { z } from "zod";
 
 // --- Schemas ---
+
+const hierarchyEntrySchema = z.object({
+    number: z.number(),
+    title: z.string(),
+    state: z.enum(["open", "closed"]),
+    type: z.string().nullable(),
+    phase: z.string().nullable(),
+    parent: z.number().nullable(),
+    labels: z.array(z.string()),
+});
 
 export const IssueStateSchema = z.object({
     id: z.string(),
@@ -11,6 +21,9 @@ export const IssueStateSchema = z.object({
     phase: z.string(),
     state: z.enum(["OPEN", "CLOSED"]),
     pr: z.string(),
+    parent: hierarchyEntrySchema.nullable(),
+    children: z.array(hierarchyEntrySchema),
+    siblings: z.array(hierarchyEntrySchema),
 });
 
 export const GhIssueSchema = z.object({
@@ -30,6 +43,9 @@ export interface IssueStateView {
     phase: string;
     state: string;
     pr: string;
+    parent: GitHubIssueHeader | null;
+    children: GitHubIssueHeader[];
+    siblings: GitHubIssueHeader[];
 }
 
 export const EMPTY_ISSUE_VIEW: IssueStateView = {
@@ -39,6 +55,9 @@ export const EMPTY_ISSUE_VIEW: IssueStateView = {
     phase: "",
     state: "",
     pr: "",
+    parent: null,
+    children: [],
+    siblings: [],
 };
 
 export type HookResult =
