@@ -29,6 +29,6 @@ export async function fetchChildren(
         const raw = parseJson(line);
         const parsed = RawIssueSchema.safeParse(raw);
         if (!parsed.success) throw new ScriptZodValidationError("unexpected sub_issues response", parsed.error, raw);
-        return buildIssueHeader(parsed.data, parentNumber);
+        return buildIssueHeader({ ...parsed.data, parent: parentNumber });
     });
 }

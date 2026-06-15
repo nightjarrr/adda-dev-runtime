@@ -6,8 +6,8 @@ import { RawIssueSchema, buildIssueHeader, requireOwnerRepo } from "./github";
 
 describe("buildIssueHeader", () => {
     function makeRaw(
-        overrides: Partial<{ number: number; title: string; state: string; labels: Array<{ name: string }> }> = {},
-    ): { number: number; title: string; state: string; labels: Array<{ name: string }> } {
+        overrides: Partial<{ number: number; title: string; state: string; labels: Array<{ name: string }>; parent?: number }> = {},
+    ): { number: number; title: string; state: string; labels: Array<{ name: string }>; parent?: number } {
         return {
             number: 42,
             title: "Test Issue",
@@ -69,18 +69,18 @@ describe("buildIssueHeader", () => {
         expect(buildIssueHeader(makeRaw({ state: "merged" })).state).toBe("open");
     });
 
-    test("sets parent when parentNumber is provided", () => {
-        const header = buildIssueHeader(makeRaw(), 99);
+    test("sets parent when parent field is provided", () => {
+        const header = buildIssueHeader(makeRaw({ parent: 99 }));
         expect(header.parent).toBe(99);
     });
 
-    test("parent is null when parentNumber is omitted", () => {
+    test("parent is null when parent field is omitted", () => {
         const header = buildIssueHeader(makeRaw());
         expect(header.parent).toBeNull();
     });
 
-    test("parent is null when parentNumber is undefined", () => {
-        const header = buildIssueHeader(makeRaw(), undefined);
+    test("parent is null when parent field is undefined", () => {
+        const header = buildIssueHeader(makeRaw({ parent: undefined }));
         expect(header.parent).toBeNull();
     });
 

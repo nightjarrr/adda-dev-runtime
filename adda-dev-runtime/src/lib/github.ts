@@ -47,8 +47,7 @@ function extractPhaseLabel(labels: string[]): string | null {
  * Normalizes state casing, extracts type/phase from labels, and assigns parent.
  */
 export function buildIssueHeader(
-    raw: { number: number; title: string; state: string; labels: Array<{ name: string }> },
-    parentNumber?: number,
+    raw: { number: number; title: string; state: string; labels: Array<{ name: string }>; parent?: number },
 ): GitHubIssueHeader {
     const labelNames = raw.labels.map((l) => l.name);
     return {
@@ -57,7 +56,7 @@ export function buildIssueHeader(
         state: raw.state.toLowerCase() === "closed" ? "closed" : "open",
         type: extractTypeLabel(labelNames),
         phase: extractPhaseLabel(labelNames),
-        parent: parentNumber ?? null,
+        parent: raw.parent ?? null,
         labels: labelNames,
     };
 }
