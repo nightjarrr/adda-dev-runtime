@@ -547,7 +547,7 @@ describe("fetchChildren", () => {
 
     test("empty stdout — returns empty array", async () => {
         const deps = makeShellDeps([makeShellResult("")]);
-        const result = await fetchChildren(deps, "owner", "repo", 5);
+        const result = await fetchChildren(deps, 5);
         expect(result).toEqual([]);
     });
 
@@ -557,7 +557,7 @@ describe("fetchChildren", () => {
             makeRawSubIssue(20, "Issue B", "closed", ["bug"]),
         ].join("\n");
         const deps = makeShellDeps([makeShellResult(lines)]);
-        const result = await fetchChildren(deps, "owner", "repo", 5);
+        const result = await fetchChildren(deps, 5);
         expect(result).toHaveLength(2);
         expect(result[0]!.number).toBe(10);
         expect(result[0]!.title).toBe("Issue A");
@@ -569,48 +569,48 @@ describe("fetchChildren", () => {
     test("parent field is set to parentNumber argument", async () => {
         const lines = makeRawSubIssue(99, "Child", "open", []);
         const deps = makeShellDeps([makeShellResult(lines)]);
-        const result = await fetchChildren(deps, "owner", "repo", 42);
+        const result = await fetchChildren(deps, 42);
         expect(result[0]!.parent).toBe(42);
     });
 
     test("issue with chore label — type is 'chore'", async () => {
         const lines = makeRawSubIssue(1, "Chore issue", "open", ["chore"]);
         const deps = makeShellDeps([makeShellResult(lines)]);
-        const result = await fetchChildren(deps, "owner", "repo", 1);
+        const result = await fetchChildren(deps, 1);
         expect(result[0]!.type).toBe("chore");
     });
 
     test("issue with no type label — type is null", async () => {
         const lines = makeRawSubIssue(1, "Unlabeled", "open", ["phase: impl"]);
         const deps = makeShellDeps([makeShellResult(lines)]);
-        const result = await fetchChildren(deps, "owner", "repo", 1);
+        const result = await fetchChildren(deps, 1);
         expect(result[0]!.type).toBeNull();
     });
 
     test("issue with phase label — phase matches full label string", async () => {
         const lines = makeRawSubIssue(1, "Phase issue", "open", ["feature", "phase: impl-plan"]);
         const deps = makeShellDeps([makeShellResult(lines)]);
-        const result = await fetchChildren(deps, "owner", "repo", 1);
+        const result = await fetchChildren(deps, 1);
         expect(result[0]!.phase).toBe("phase: impl-plan");
     });
 
     test("issue with no phase label — phase is null", async () => {
         const lines = makeRawSubIssue(1, "No phase", "open", ["feature"]);
         const deps = makeShellDeps([makeShellResult(lines)]);
-        const result = await fetchChildren(deps, "owner", "repo", 1);
+        const result = await fetchChildren(deps, 1);
         expect(result[0]!.phase).toBeNull();
     });
 
     test("blank lines in stdout are ignored", async () => {
         const lines = makeRawSubIssue(5, "Only one", "open", []) + "\n\n";
         const deps = makeShellDeps([makeShellResult(lines)]);
-        const result = await fetchChildren(deps, "owner", "repo", 5);
+        const result = await fetchChildren(deps, 5);
         expect(result).toHaveLength(1);
     });
 
     test("invalid JSON in response — throws ScriptZodValidationError", async () => {
         const deps = makeShellDeps([makeShellResult("not json")]);
-        await expect(fetchChildren(deps, "owner", "repo", 5)).rejects.toThrow();
+        await expect(fetchChildren(deps, 5)).rejects.toThrow();
     });
 });
 

@@ -18,10 +18,9 @@ export const RawIssueSchema = z.object({
 
 export async function fetchChildren(
     deps: ShellDep & EnvDep,
-    owner: string,
-    repo: string,
     parentNumber: number,
 ): Promise<GitHubIssueHeader[]> {
+    const { owner, repo } = requireOwnerRepo(deps);
     const result = await deps.shell.run([
         "gh",
         "api",
@@ -46,7 +45,6 @@ export async function runChildren(
     deps: ShellDep & EnvDep,
     args: Extract<IssueHierarchyArgs, { subcommand: "children" }>,
 ): Promise<ChildrenResult> {
-    const { owner, repo } = requireOwnerRepo(deps);
-    const children = await fetchChildren(deps, owner, repo, args.parentNumber);
+    const children = await fetchChildren(deps, args.parentNumber);
     return { parent: args.parentNumber, children };
 }
