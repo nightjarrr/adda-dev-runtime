@@ -69,7 +69,7 @@ export async function executeSwitch(
         title,
         type: typeLabel,
         phase: phaseLabel,
-        state,
+        state: state === "CLOSED" ? "closed" : "open",
         pr: resolveData.pr,
         parent: parentHeader,
         children: childrenHeaders,

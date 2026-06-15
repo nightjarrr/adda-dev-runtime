@@ -560,7 +560,7 @@ describe("CurrentIssueScript", () => {
             expect(issue.title).toBe("My feature issue");
             expect(issue.type).toBe("feature");
             expect(issue.phase).toBe("phase: implement");
-            expect(issue.state).toBe("OPEN");
+            expect(issue.state).toBe("open");
             expect(issue.pr).toBe("42");
 
             const details = result.details as Record<string, string>;
@@ -622,7 +622,7 @@ describe("CurrentIssueScript", () => {
             const issue = result.issue as Record<string, string>;
             expect(issue.type).toBe("");
             expect(issue.phase).toBe("");
-            expect(issue.state).toBe("CLOSED");
+            expect(issue.state).toBe("closed");
             expect(issue.pr).toBe("");
         });
     });
@@ -894,7 +894,7 @@ describe("CurrentIssueScript", () => {
             title: "A test issue",
             type: "feature",
             phase: "phase:implement",
-            state: "OPEN",
+            state: "open",
             pr: "99",
             parent: null,
             children: [],
@@ -937,7 +937,7 @@ describe("CurrentIssueScript", () => {
             expect(issue.title).toBe("A test issue");
             expect(issue.type).toBe("feature");
             expect(issue.phase).toBe("phase:implement");
-            expect(issue.state).toBe("OPEN");
+            expect(issue.state).toBe("open");
             expect(issue.pr).toBe("99");
             expect(result.details).toEqual({});
         });
@@ -982,7 +982,7 @@ describe("CurrentIssueScript", () => {
                 title: "Hierarchy issue",
                 type: "feature",
                 phase: "phase: implement",
-                state: "OPEN",
+                state: "open",
                 pr: "99",
                 parent: {
                     number: 10,
@@ -1025,7 +1025,7 @@ describe("CurrentIssueScript", () => {
                 title: "A test issue",
                 type: "feature",
                 phase: "phase:implement",
-                state: "OPEN",
+                state: "open",
                 pr: "99",
                 // missing parent, children, siblings
             });
@@ -1047,7 +1047,7 @@ describe("CurrentIssueScript", () => {
             title: "A test issue",
             type: "feature",
             phase: "phase:implement",
-            state: "OPEN",
+            state: "open",
             pr: "42",
             parent: null,
             children: [],
@@ -1071,7 +1071,7 @@ describe("CurrentIssueScript", () => {
                 title: "A test issue",
                 type: "feature",
                 phase: "phase:implement",
-                state: "OPEN",
+                state: "open",
                 pr: "42",
                 parent: null,
                 children: [],
@@ -1298,7 +1298,7 @@ describe("CurrentIssueScript", () => {
             title: "A test issue",
             type: "feature",
             phase: "phase: triage",
-            state: "OPEN",
+            state: "open",
             pr: "99",
             parent: null,
             children: [],
@@ -1402,7 +1402,7 @@ describe("CurrentIssueScript", () => {
             });
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "state"]);
             expect(code).toBe(0);
-            expect(outLines.join("").trim()).toBe("OPEN");
+            expect(outLines.join("").trim()).toBe("open");
         });
 
         test("field 'pr' — output '99', exit 0", async () => {
@@ -1420,7 +1420,7 @@ describe("CurrentIssueScript", () => {
                 title: "A test issue",
                 type: "feature",
                 phase: "phase: triage",
-                state: "OPEN",
+                state: "open",
                 pr: "",
                 parent: null,
                 children: [],
@@ -1441,7 +1441,7 @@ describe("CurrentIssueScript", () => {
             title: "A test issue",
             type: "feature",
             phase: "phase:implement",
-            state: "OPEN",
+            state: "open",
             pr: "99",
             parent: null,
             children: [],
@@ -1502,7 +1502,7 @@ describe("CurrentIssueScript", () => {
                 expect(result?.title).toBe("A test issue");
                 expect(result?.type).toBe("feature");
                 expect(result?.phase).toBe("phase:implement");
-                expect(result?.state).toBe("OPEN");
+                expect(result?.state).toBe("open");
                 expect(result?.pr).toBe("99");
             });
 
@@ -1537,7 +1537,7 @@ describe("CurrentIssueScript", () => {
                         title: "t",
                         type: "feature",
                         phase: "p",
-                        state: "OPEN",
+                        state: "open",
                         pr: "",
                         parent: null,
                         children: [],

@@ -25,7 +25,7 @@ const DEFAULT_STATE: IssueState = {
     title: "Branch lifecycle tooling for SDLC roles",
     type: "chore",
     phase: "",
-    state: "OPEN",
+    state: "open",
     pr: "",
     parent: null,
     children: [],
