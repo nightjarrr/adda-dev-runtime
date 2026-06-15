@@ -6,7 +6,13 @@ import { RawIssueSchema, buildIssueHeader, requireOwnerRepo } from "./github";
 
 describe("buildIssueHeader", () => {
     function makeRaw(
-        overrides: Partial<{ number: number; title: string; state: string; labels: Array<{ name: string }>; parent?: number }> = {},
+        overrides: Partial<{
+            number: number;
+            title: string;
+            state: string;
+            labels: Array<{ name: string }>;
+            parent?: number;
+        }> = {},
     ): { number: number; title: string; state: string; labels: Array<{ name: string }>; parent?: number } {
         return {
             number: 42,

@@ -46,9 +46,13 @@ function extractPhaseLabel(labels: string[]): string | null {
  * Builds a GitHubIssueHeader from raw API response data.
  * Normalizes state casing, extracts type/phase from labels, and assigns parent.
  */
-export function buildIssueHeader(
-    raw: { number: number; title: string; state: string; labels: Array<{ name: string }>; parent?: number },
-): GitHubIssueHeader {
+export function buildIssueHeader(raw: {
+    number: number;
+    title: string;
+    state: string;
+    labels: Array<{ name: string }>;
+    parent?: number;
+}): GitHubIssueHeader {
     const labelNames = raw.labels.map((l) => l.name);
     return {
         number: raw.number,
