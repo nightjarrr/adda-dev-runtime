@@ -4,6 +4,7 @@ import { ScriptShellError } from "../lib/index";
 import { IssueHierarchyScript } from "./issue-hierarchy";
 import { fetchChildren, RawIssueSchema } from "./issue-hierarchy/children";
 import { fetchParent, runParent } from "./issue-hierarchy/parent";
+import { fetchSiblings } from "./issue-hierarchy/siblings";
 
 type IssueHierarchyDeps = ShellDep & EnvDep & StdioDep;
 
@@ -869,5 +870,220 @@ describe("exports", () => {
     test("fetchParent is exported from entrypoint", async () => {
         const { fetchParent: exportedFetch } = await import("./issue-hierarchy");
         expect(exportedFetch).toBeFunction();
+    });
+
+    test("fetchSiblings is exported from entrypoint", async () => {
+        const { fetchSiblings: exportedFetch } = await import("./issue-hierarchy");
+        expect(exportedFetch).toBeFunction();
+    });
+});
+
+// ---------------------------------------------------------------
+// Siblings — argument validation via script.run
+// ---------------------------------------------------------------
+
+describe("IssueHierarchyScript — siblings argument validation", () => {
+    test("siblings without number — exits 2", async () => {
+        const { deps, outLines } = makeMockDeps();
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "siblings"]);
+        expect(code).toBe(2);
+        const out = getStdoutJson(outLines) as Record<string, unknown>;
+        expect(out.status).toBe("fail");
+        expect((out.error as Record<string, unknown>)?.reason).toBe("invalid_args");
+    });
+
+    test("siblings nan — exits 2", async () => {
+        const { deps, outLines } = makeMockDeps();
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "siblings", "abc"]);
+        expect(code).toBe(2);
+        const out = getStdoutJson(outLines) as Record<string, unknown>;
+        expect(out.status).toBe("fail");
+        expect((out.error as Record<string, unknown>)?.reason).toBe("invalid_args");
+    });
+
+    test("siblings 0 — exits 2 (non-positive)", async () => {
+        const { deps, outLines } = makeMockDeps();
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "siblings", "0"]);
+        expect(code).toBe(2);
+        const out = getStdoutJson(outLines) as Record<string, unknown>;
+        expect(out.status).toBe("fail");
+    });
+
+    test("siblings -1 — exits 2 (negative)", async () => {
+        const { deps, outLines } = makeMockDeps();
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "siblings", "-1"]);
+        expect(code).toBe(2);
+        const out = getStdoutJson(outLines) as Record<string, unknown>;
+        expect(out.status).toBe("fail");
+    });
+});
+
+// ---------------------------------------------------------------
+// Siblings — integration via script.run
+// ---------------------------------------------------------------
+
+describe("siblings integration", () => {
+    test("no parent — ok envelope with empty siblings array", async () => {
+        const { deps, outLines } = makeMockDeps({
+            runQueue: [
+                // fetchParent: fetchIssueById → no parent url
+                makeShellResult(makeRawIssue(42, "Orphan", "open", 500, ["feature"], null)),
+            ],
+        });
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "siblings", "42"]);
+        expect(code).toBe(0);
+        const out = getStdoutJson(outLines) as { status: string; result: { issue: number; siblings: unknown[] }; error: null };
+        expect(out.status).toBe("ok");
+        expect(out.result.issue).toBe(42);
+        expect(out.result.siblings).toEqual([]);
+        expect(out.error).toBeNull();
+    });
+
+    test("has parent with other siblings — returns filtered list with correct fields", async () => {
+        const { deps, outLines } = makeMockDeps({
+            runQueue: [
+                // fetchParent: fetchIssueById → has parent url
+                makeShellResult(makeRawIssue(5, "Target", "open", 50, ["bug"], "https://api.github.com/repos/o/r/issues/10")),
+                // fetchParent: fetch the parent issue
+                makeShellResult(makeRawIssue(10, "Parent", "open", 100, ["feature"], null)),
+                // fetchChildren: list sub-issues of parent
+                makeShellResult(
+                    [
+                        makeRawSubIssue(5, "Target", "open", ["bug"]),
+                        makeRawSubIssue(7, "Sibling A", "closed", ["feature", "phase: planning"]),
+                        makeRawSubIssue(8, "Sibling B", "open", ["chore"]),
+                    ].join("\n"),
+                ),
+            ],
+        });
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "siblings", "5"]);
+        expect(code).toBe(0);
+        const out = getStdoutJson(outLines) as {
+            status: string;
+            result: {
+                issue: number;
+                siblings: Array<{ number: number; title: string; state: string; type: string | null; phase: string | null }>;
+            };
+            error: null;
+        };
+        expect(out.status).toBe("ok");
+        expect(out.result.issue).toBe(5);
+        expect(out.result.siblings).toHaveLength(2);
+        expect(out.result.siblings[0]!.number).toBe(7);
+        expect(out.result.siblings[0]!.title).toBe("Sibling A");
+        expect(out.result.siblings[0]!.state).toBe("closed");
+        expect(out.result.siblings[0]!.type).toBe("feature");
+        expect(out.result.siblings[0]!.phase).toBe("phase: planning");
+        expect(out.result.siblings[1]!.number).toBe(8);
+        expect(out.result.siblings[1]!.type).toBe("chore");
+        expect(out.result.siblings[1]!.phase).toBeNull();
+    });
+
+    test("has parent but is the only child — empty siblings array", async () => {
+        const { deps, outLines } = makeMockDeps({
+            runQueue: [
+                // fetchParent: fetchIssueById → has parent url
+                makeShellResult(
+                    makeRawIssue(3, "Only child", "open", 30, ["feature"], "https://api.github.com/repos/o/r/issues/1"),
+                ),
+                // fetchParent: fetch the parent
+                makeShellResult(makeRawIssue(1, "Parent", "open", 10, [], null)),
+                // fetchChildren: only the source issue
+                makeShellResult(makeRawSubIssue(3, "Only child", "open", ["feature"])),
+            ],
+        });
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "siblings", "3"]);
+        expect(code).toBe(0);
+        const out = getStdoutJson(outLines) as { status: string; result: { issue: number; siblings: unknown[] }; error: null };
+        expect(out.status).toBe("ok");
+        expect(out.result.issue).toBe(3);
+        expect(out.result.siblings).toEqual([]);
+    });
+
+    test("shell error — exit 1, shell_error reason", async () => {
+        const { deps, outLines } = makeMockDeps({
+            runQueue: [makeShellResult("", 1, "HTTP 404")],
+        });
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "siblings", "999"]);
+        expect(code).toBe(1);
+        const out = getStdoutJson(outLines) as Record<string, unknown>;
+        expect(out.status).toBe("fail");
+        expect((out.error as Record<string, unknown>)?.reason).toBe("shell_error");
+    });
+
+    test("missing env vars — exit 1, missing_env reason", async () => {
+        const { deps, outLines } = makeMockDeps({ envVars: {} });
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "siblings", "1"]);
+        expect(code).toBe(1);
+        const out = getStdoutJson(outLines) as Record<string, unknown>;
+        expect(out.status).toBe("fail");
+        expect((out.error as Record<string, unknown>)?.reason).toBe("missing_env");
+    });
+});
+
+// ---------------------------------------------------------------
+// fetchSiblings unit tests
+// ---------------------------------------------------------------
+
+describe("fetchSiblings", () => {
+    function makeDeps(runQueue: ShellResult[]): ShellDep & EnvDep {
+        const queue = [...runQueue];
+        const mockShell: Shell = {
+            run: mock(async (command: string[], opts?: { strict?: boolean }) => {
+                const result = queue.shift() ?? makeShellResult("");
+                if ((opts?.strict ?? true) && result.exitCode !== 0) {
+                    throw new ScriptShellError(command.join(" "), result.exitCode, result.stdout, result.stderr);
+                }
+                return result;
+            }),
+            runSh: mock(async () => makeShellResult("")),
+        };
+        const mockEnv: Env = {
+            get: mock((name: string) => ({ GITHUB_OWNER: "o", GITHUB_REPO: "r" })[name]),
+        };
+        return { shell: mockShell, env: mockEnv };
+    }
+
+    test("no parent — returns empty array", async () => {
+        const deps = makeDeps([makeShellResult(makeRawIssue(1, "Root", "open", 10, ["feature"], null))]);
+        const result = await fetchSiblings(deps, 1);
+        expect(result).toEqual([]);
+    });
+
+    test("has parent with children — returns filtered list", async () => {
+        const deps = makeDeps([
+            // fetchParent: fetchIssueById
+            makeShellResult(makeRawIssue(5, "Target", "open", 50, [], "https://api.github.com/repos/o/r/issues/10")),
+            // fetchParent: fetch parent issue
+            makeShellResult(makeRawIssue(10, "Parent", "open", 100, ["feature"], null)),
+            // fetchChildren
+            makeShellResult(
+                [
+                    makeRawSubIssue(5, "Target", "open", ["bug"]),
+                    makeRawSubIssue(7, "Sibling A", "closed", ["feature"]),
+                    makeRawSubIssue(8, "Sibling B", "open", ["chore"]),
+                ].join("\n"),
+            ),
+        ]);
+        const result = await fetchSiblings(deps, 5);
+        expect(result).toHaveLength(2);
+        expect(result[0]!.number).toBe(7);
+        expect(result[0]!.title).toBe("Sibling A");
+        expect(result[1]!.number).toBe(8);
+    });
+
+    test("has parent, self is only child — returns empty array", async () => {
+        const deps = makeDeps([
+            makeShellResult(makeRawIssue(3, "Only child", "open", 30, [], "https://api.github.com/repos/o/r/issues/1")),
+            makeShellResult(makeRawIssue(1, "Parent", "open", 10, [], null)),
+            makeShellResult(makeRawSubIssue(3, "Only child", "open", [])),
+        ]);
+        const result = await fetchSiblings(deps, 3);
+        expect(result).toEqual([]);
+    });
+
+    test("invalid JSON — throws ScriptZodValidationError", async () => {
+        const deps = makeDeps([makeShellResult("not json")]);
+        await expect(fetchSiblings(deps, 1)).rejects.toThrow();
     });
 });
