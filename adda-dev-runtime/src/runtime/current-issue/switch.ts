@@ -1,17 +1,11 @@
 import type { EnvDep, FileSysDep, ShellDep } from "@adda/lib";
-import { parseJson, ScriptZodValidationError } from "@adda/lib";
+import { parseJson, requireOwnerRepo, ScriptZodValidationError } from "@adda/lib";
 
 import { runRepoInitHook } from "./hook";
 import { resolveIssueBranch } from "./resolve";
 import { CurrentIssueError } from "./types";
 import { GhIssueSchema } from "./types";
 import type { CurrentIssueResult, IssueState, IssueStateStore } from "./types";
-
-function requireEnvVar(deps: EnvDep, name: string): string {
-    const value = deps.env.get(name);
-    if (!value) throw new CurrentIssueError("missing_env", `required environment variable '${name}' is not set`);
-    return value;
-}
 
 export async function executeSwitch(
     issueId: string,
@@ -20,8 +14,7 @@ export async function executeSwitch(
     store: IssueStateStore,
 ): Promise<CurrentIssueResult> {
     // Step 1: Validate env vars
-    requireEnvVar(deps, "GITHUB_OWNER");
-    requireEnvVar(deps, "GITHUB_REPO");
+    requireOwnerRepo(deps);
 
     // Step 2: Check dirty tree
     const statusResult = await deps.shell.run(["git", "status", "--porcelain"], { strict: false });

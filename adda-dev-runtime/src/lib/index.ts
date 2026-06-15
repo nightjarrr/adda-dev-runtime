@@ -19,9 +19,11 @@ export type {
 export { defaultDeps } from "./capabilities";
 
 export { ConfigError, ScriptArgsError, ScriptError, ScriptShellError, ScriptZodValidationError } from "./errors";
-export type { BaseReason, GithubReason } from "./errors";
+export type { BaseReason } from "./errors";
 export type { EmptyArgs } from "./ScriptBase";
 export { ScriptBase } from "./ScriptBase";
 export { expandPath, parseJson, slugify } from "./util";
 export type { ScriptEnvelope, ScriptErrorDetail } from "./envelope";
 export { makeEnvelopeSchema } from "./envelope";
+export type { GitHubIssueHeader, GithubReason } from "./github";
+export { buildIssueHeader, requireOwnerRepo, RawIssueSchema } from "./github";
