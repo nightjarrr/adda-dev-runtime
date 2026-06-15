@@ -11,4 +11,4 @@ When PM decides to handle a code fix directly in-session rather than dispatch Co
 
 **Why:** The Coder dispatch normally runs quality gates as part of its workflow. When PM bypasses Coder, the responsibility for running those gates shifts to PM. Pushing without verifying shifts the verification burden to CI, which is slower and wastes resources.
 
-**How to apply:** Before any `git push` on a direct fix, run: `bun test`, `bun run tsc --noEmit`, `bun run oxlint <affected dir>`, `bun run oxfmt --check <affected files>`.
+**How to apply:** Before any `git push` on a direct fix, run `quality-gates` (the dedicated script at `/usr/local/libexec/adda-dev-runtime/bin/quality-gates`) — it runs the full suite (tests, builds, typecheck, lint, format, bun-version) in one invocation.
