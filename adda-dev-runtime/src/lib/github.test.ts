@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptError } from "./errors";
-import { RawIssueSchema, buildIssueHeader, requireOwnerRepo } from "./github";
+import { buildIssueHeader, requireOwnerRepo } from "./github";
 
 // --- buildIssueHeader ---
 
@@ -129,47 +129,5 @@ describe("requireOwnerRepo", () => {
         }
         expect(caught).toBeInstanceOf(ScriptError);
         expect((caught as ScriptError).reason).toBe("missing_env");
-    });
-});
-
-// --- RawIssueSchema ---
-
-describe("RawIssueSchema", () => {
-    test("valid input passes", () => {
-        const result = RawIssueSchema.safeParse({
-            number: 1,
-            title: "Test",
-            state: "open",
-            labels: [{ name: "bug" }],
-        });
-        expect(result.success).toBe(true);
-    });
-
-    test("invalid state fails", () => {
-        const result = RawIssueSchema.safeParse({
-            number: 1,
-            title: "Test",
-            state: "OPEN",
-            labels: [],
-        });
-        expect(result.success).toBe(false);
-    });
-
-    test("missing number fails", () => {
-        const result = RawIssueSchema.safeParse({
-            title: "Test",
-            state: "open",
-            labels: [],
-        });
-        expect(result.success).toBe(false);
-    });
-
-    test("missing labels fails", () => {
-        const result = RawIssueSchema.safeParse({
-            number: 1,
-            title: "Test",
-            state: "open",
-        });
-        expect(result.success).toBe(false);
     });
 });

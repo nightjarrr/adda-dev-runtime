@@ -26,4 +26,4 @@ export { expandPath, parseJson, slugify } from "./util";
 export type { ScriptEnvelope, ScriptErrorDetail } from "./envelope";
 export { makeEnvelopeSchema } from "./envelope";
 export type { GitHubIssueHeader, GithubReason } from "./github";
-export { buildIssueHeader, requireOwnerRepo, RawIssueSchema } from "./github";
+export { buildIssueHeader, requireOwnerRepo } from "./github";

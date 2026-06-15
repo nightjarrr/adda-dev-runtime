@@ -1,22 +1,25 @@
-// issue-hierarchy — query the sub-issue hierarchy of a GitHub issue.
+// issue-hierarchy — query and manage the sub-issue hierarchy of a GitHub issue.
 //
 // Usage:
 //   issue-hierarchy children <issue-number>
+//   issue-hierarchy parent <issue-number> [--set <number>]
 //
 // Inputs:
-//   GITHUB_OWNER, GITHUB_REPO — required for children subcommand
+//   GITHUB_OWNER, GITHUB_REPO — required for all subcommands
 //
 // Outputs:
-//   stdout: JSON envelope { status, result: { parent, children }, error }
+//   stdout: JSON envelope { status, result, error }
 import type { parseArgs } from "node:util";
 import type { EnvDep, ShellDep, StdioDep } from "@adda/lib";
 import { defaultDeps, ScriptArgsError, ScriptBase } from "@adda/lib";
 
 import { runChildren } from "./issue-hierarchy/children";
+import { runParent } from "./issue-hierarchy/parent";
 import type { IssueHierarchyArgs } from "./issue-hierarchy/types";
 
 export type { GitHubIssueHeader } from "@adda/lib";
-export { fetchChildren } from "./issue-hierarchy/fetch";
+export { fetchChildren } from "./issue-hierarchy/children";
+export { fetchParent } from "./issue-hierarchy/parent";
 
 type IssueHierarchyDeps = ShellDep & EnvDep & StdioDep;
 
@@ -25,14 +28,18 @@ export class IssueHierarchyScript extends ScriptBase<IssueHierarchyDeps, IssueHi
         return {
             allowPositionals: true,
             strict: true,
-            options: {},
+            options: {
+                set: { type: "string" },
+            },
         };
     }
 
     protected validateArgs(parsed: ReturnType<typeof parseArgs>): IssueHierarchyArgs {
         const subcommand = parsed.positionals[0];
         if (!subcommand) {
-            throw new ScriptArgsError("subcommand is required: children <issue-number>");
+            throw new ScriptArgsError(
+                "subcommand is required: children <issue-number> | parent <issue-number> [--set <number>]",
+            );
         }
 
         if (subcommand === "children") {
@@ -47,12 +54,43 @@ export class IssueHierarchyScript extends ScriptBase<IssueHierarchyDeps, IssueHi
             return { subcommand: "children", parentNumber };
         }
 
-        throw new ScriptArgsError(`unknown subcommand '${subcommand}': expected 'children'`);
+        if (subcommand === "parent") {
+            const numberArg = parsed.positionals[1];
+            if (!numberArg) {
+                throw new ScriptArgsError("parent subcommand requires an issue number as the second argument");
+            }
+            const issueNumber = Number(numberArg);
+            if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
+                throw new ScriptArgsError(`invalid issue number '${numberArg}': must be a positive integer`);
+            }
+
+            const setRaw = parsed.values.set as string | undefined;
+            let setParent: number | null | undefined;
+            if (setRaw === undefined) {
+                setParent = undefined; // read only
+            } else if (setRaw.toUpperCase() === "NONE") {
+                setParent = null; // remove
+            } else {
+                setParent = Number(setRaw);
+                if (!Number.isInteger(setParent) || setParent <= 0) {
+                    throw new ScriptArgsError(`invalid --set value '${setRaw}': must be a positive integer or 'NONE'`);
+                }
+            }
+
+            return { subcommand: "parent", issueNumber, setParent };
+        }
+
+        throw new ScriptArgsError(`unknown subcommand '${subcommand}': expected 'children' or 'parent'`);
     }
 
     protected async execute(args: IssueHierarchyArgs): Promise<void> {
-        const result = await runChildren(this.deps, args);
-        this.emitOk(result);
+        if (args.subcommand === "children") {
+            const result = await runChildren(this.deps, args);
+            this.emitOk(result);
+        } else {
+            const result = await runParent(this.deps, args);
+            this.emitOk(result);
+        }
     }
 }
 

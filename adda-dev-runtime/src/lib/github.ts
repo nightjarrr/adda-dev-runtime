@@ -1,5 +1,4 @@
 // Shared GitHub types, helpers, and errors for all ADDA runtime scripts.
-import { z } from "zod";
 import type { EnvDep } from "./capabilities";
 import { ScriptError } from "./errors";
 
@@ -18,15 +17,6 @@ export interface GitHubIssueHeader {
     parent: number | null; // parent issue number; null if root
     labels: string[]; // all label names verbatim
 }
-
-// --- Schema for raw API response (sub_issues endpoint) ---
-
-export const RawIssueSchema = z.object({
-    number: z.number(),
-    title: z.string(),
-    state: z.enum(["open", "closed"]),
-    labels: z.array(z.object({ name: z.string() })),
-});
 
 // --- Label extraction helpers (internal) ---
 
