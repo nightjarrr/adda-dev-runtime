@@ -26,6 +26,18 @@ export { fetchSiblings } from "./issue-hierarchy/siblings";
 type IssueHierarchyDeps = ShellDep & EnvDep & StdioDep;
 
 export class IssueHierarchyScript extends ScriptBase<IssueHierarchyDeps, IssueHierarchyArgs> {
+    private parseIssueNumber(positionals: string[], subcommandName: string): number {
+        const numberArg = positionals[1];
+        if (!numberArg) {
+            throw new ScriptArgsError(`${subcommandName} subcommand requires an issue number as the second argument`);
+        }
+        const number = Number(numberArg);
+        if (!Number.isInteger(number) || number <= 0) {
+            throw new ScriptArgsError(`invalid issue number '${numberArg}': must be a positive integer`);
+        }
+        return number;
+    }
+
     protected argDefinitions(): Parameters<typeof parseArgs>[0] {
         return {
             allowPositionals: true,
@@ -45,26 +57,12 @@ export class IssueHierarchyScript extends ScriptBase<IssueHierarchyDeps, IssueHi
         }
 
         if (subcommand === "children") {
-            const numberArg = parsed.positionals[1];
-            if (!numberArg) {
-                throw new ScriptArgsError("children subcommand requires an issue number as the second argument");
-            }
-            const parentNumber = Number(numberArg);
-            if (!Number.isInteger(parentNumber) || parentNumber <= 0) {
-                throw new ScriptArgsError(`invalid issue number '${numberArg}': must be a positive integer`);
-            }
+            const parentNumber = this.parseIssueNumber(parsed.positionals, "children");
             return { subcommand: "children", parentNumber };
         }
 
         if (subcommand === "parent") {
-            const numberArg = parsed.positionals[1];
-            if (!numberArg) {
-                throw new ScriptArgsError("parent subcommand requires an issue number as the second argument");
-            }
-            const issueNumber = Number(numberArg);
-            if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
-                throw new ScriptArgsError(`invalid issue number '${numberArg}': must be a positive integer`);
-            }
+            const issueNumber = this.parseIssueNumber(parsed.positionals, "parent");
 
             const setRaw = parsed.values.set as string | undefined;
             let setParent: number | null | undefined;
@@ -83,14 +81,7 @@ export class IssueHierarchyScript extends ScriptBase<IssueHierarchyDeps, IssueHi
         }
 
         if (subcommand === "siblings") {
-            const numberArg = parsed.positionals[1];
-            if (!numberArg) {
-                throw new ScriptArgsError("siblings subcommand requires an issue number as the second argument");
-            }
-            const issueNumber = Number(numberArg);
-            if (!Number.isInteger(issueNumber) || issueNumber <= 0) {
-                throw new ScriptArgsError(`invalid issue number '${numberArg}': must be a positive integer`);
-            }
+            const issueNumber = this.parseIssueNumber(parsed.positionals, "siblings");
             return { subcommand: "siblings", issueNumber };
         }
 
