@@ -88,7 +88,7 @@ Comments: 14
 Before starting the work on the new issue, register the current issue state using `current-issue switch`.
 
 1. Run `git status --porcelain`. If the output is non-empty (dirty working tree), surface the dirty-tree state to PO via `AskUserQuestion` and do not proceed until PO confirms or resolves the dirty tree.
-2. Run `/usr/local/libexec/adda-dev-runtime/bin/current-issue switch <id>`. The command emits a JSON envelope to stdout. Three representative shapes:
+2. Run `/usr/local/libexec/adda-dev-runtime/bin/current-issue switch <id>`. The command emits a JSON envelope to stdout. Four representative shapes:
 
    Success — feature branch resolved (orphan issue with no children/siblings):
    ```json
