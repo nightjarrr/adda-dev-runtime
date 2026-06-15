@@ -2,7 +2,7 @@ import { describe, expect, mock, test } from "bun:test";
 import type { Env, EnvDep, Shell, ShellDep, ShellResult, StdioDep } from "../lib/index";
 import { ScriptShellError } from "../lib/index";
 import { IssueHierarchyScript } from "./issue-hierarchy";
-import { extractPhaseLabel, extractTypeLabel, fetchChildren } from "./issue-hierarchy/fetch";
+import { fetchChildren } from "./issue-hierarchy/fetch";
 
 type IssueHierarchyDeps = ShellDep & EnvDep & StdioDep;
 
@@ -190,6 +190,7 @@ describe("IssueHierarchyScript", () => {
                         type: string | null;
                         phase: string | null;
                         parent: number;
+                        labels: string[];
                     }>;
                 };
             };
@@ -321,53 +322,5 @@ describe("fetchChildren", () => {
         const deps = makeShellDeps([makeShellResult(lines)]);
         const result = await fetchChildren(deps, "owner", "repo", 5);
         expect(result).toHaveLength(1);
-    });
-});
-
-// ---------------------------------------------------------------
-// extractTypeLabel unit tests
-// ---------------------------------------------------------------
-
-describe("extractTypeLabel", () => {
-    test("returns first type label found", () => {
-        expect(extractTypeLabel(["chore", "feature"])).toBe("chore");
-    });
-
-    test("returns null when no type label present", () => {
-        expect(extractTypeLabel(["phase: planning", "some-other"])).toBeNull();
-    });
-
-    test("returns null for empty array", () => {
-        expect(extractTypeLabel([])).toBeNull();
-    });
-
-    test("recognises all four type labels", () => {
-        expect(extractTypeLabel(["feature"])).toBe("feature");
-        expect(extractTypeLabel(["bug"])).toBe("bug");
-        expect(extractTypeLabel(["chore"])).toBe("chore");
-        expect(extractTypeLabel(["docs"])).toBe("docs");
-    });
-});
-
-// ---------------------------------------------------------------
-// extractPhaseLabel unit tests
-// ---------------------------------------------------------------
-
-describe("extractPhaseLabel", () => {
-    test("returns matching phase label", () => {
-        expect(extractPhaseLabel(["phase: impl-plan", "feature"])).toBe("phase: impl-plan");
-    });
-
-    test("returns null when no phase label present", () => {
-        expect(extractPhaseLabel(["feature", "bug"])).toBeNull();
-    });
-
-    test("returns null for empty array", () => {
-        expect(extractPhaseLabel([])).toBeNull();
-    });
-
-    test("phase label must start with 'phase: '", () => {
-        expect(extractPhaseLabel(["not-a-phase"])).toBeNull();
-        expect(extractPhaseLabel(["phase:no-space"])).toBeNull();
     });
 });

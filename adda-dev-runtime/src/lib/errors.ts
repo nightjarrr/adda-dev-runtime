@@ -11,10 +11,6 @@ export type BaseReason =
     | "internal_error"
     | "ambiguous_result";
 
-// GitHub bounded context — all domain-level errors arising from the GitHub API/graph,
-// not just the current intersection across scripts.
-export type GithubReason = "repo_not_found" | "issue_not_found" | "pr_not_found" | "thread_not_found" | "not_a_thread";
-
 export class ScriptError<TExtra extends string = never> extends Error {
     readonly exitCode: number;
     readonly reason: BaseReason | TExtra;

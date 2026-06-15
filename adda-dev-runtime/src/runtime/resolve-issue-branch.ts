@@ -1,6 +1,14 @@
 import type { parseArgs } from "node:util";
 import type { BaseReason, GithubReason, EnvDep, ShellDep, StdioDep } from "@adda/lib";
-import { defaultDeps, parseJson, ScriptArgsError, ScriptBase, ScriptError, ScriptZodValidationError } from "@adda/lib";
+import {
+    defaultDeps,
+    parseJson,
+    requireOwnerRepo,
+    ScriptArgsError,
+    ScriptBase,
+    ScriptError,
+    ScriptZodValidationError,
+} from "@adda/lib";
 import { z } from "zod";
 
 type ResolveIssueBranchDeps = ShellDep & EnvDep & StdioDep;
@@ -85,20 +93,7 @@ export class ResolveIssueBranchScript extends ScriptBase<ResolveIssueBranchDeps,
 
     protected async execute(args: ResolveIssueBranchArgs): Promise<void> {
         const issueId = args.issueId;
-
-        const owner = this.deps.env.get("GITHUB_OWNER");
-        if (!owner) {
-            throw new ResolveIssueBranchError("missing_env", "required environment variable 'GITHUB_OWNER' is not set", {
-                details: { issueId },
-            });
-        }
-
-        const repo = this.deps.env.get("GITHUB_REPO");
-        if (!repo) {
-            throw new ResolveIssueBranchError("missing_env", "required environment variable 'GITHUB_REPO' is not set", {
-                details: { issueId },
-            });
-        }
+        const { owner, repo } = requireOwnerRepo(this.deps);
 
         const ghResult = await this.deps.shell.run([
             "gh",

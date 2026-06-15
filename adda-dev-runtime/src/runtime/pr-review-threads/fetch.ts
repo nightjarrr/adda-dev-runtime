@@ -1,6 +1,6 @@
 // Fetch helpers for pr-review-threads: graphql caller, generic paginate, env helpers.
 import type { EnvDep, ShellDep } from "@adda/lib";
-import { parseJson, ScriptZodValidationError } from "@adda/lib";
+import { parseJson, requireOwnerRepo, ScriptZodValidationError } from "@adda/lib";
 import type { z } from "zod";
 import { PrReviewError } from "./types";
 
@@ -89,10 +89,4 @@ export function readCeiling(deps: EnvDep): number {
     return n;
 }
 
-export function requireOwnerRepo(deps: EnvDep): { owner: string; repo: string } {
-    const owner = deps.env.get("GITHUB_OWNER");
-    if (!owner) throw new PrReviewError("missing_env", "required environment variable 'GITHUB_OWNER' is not set");
-    const repo = deps.env.get("GITHUB_REPO");
-    if (!repo) throw new PrReviewError("missing_env", "required environment variable 'GITHUB_REPO' is not set");
-    return { owner, repo };
-}
+export { requireOwnerRepo };
