@@ -53,4 +53,7 @@ export class IssueHierarchyScript extends ScriptBase<IssueHierarchyDeps, IssueHi
     }
 }
 
+export type { GitHubIssueHeader } from "@adda/lib";
+export { fetchChildren } from "./issue-hierarchy/fetch";
+
 if (import.meta.main) process.exit(await new IssueHierarchyScript(defaultDeps).run(process.argv));
