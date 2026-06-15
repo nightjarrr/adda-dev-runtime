@@ -8,3 +8,4 @@
 - [Consistency check after plan edits](feedback_consistency_check.md) — after changing a fact in one place, scan the full document for other occurrences before finalising
 - [PO holds a high design-quality bar](feedback_design_quality_bar.md) — expects genuinely well-designed code (typed errors, no dead code, reuse built-ins, tight contracts), not just functional; reviews at diff level and iterates via deltas
 - [Broaden design thinking beyond immediate solution space](feedback_design_pattern_breadth.md) — when stuck on a design problem, consider Builder, factory methods, fluent setters, etc. before reshuffling within the current approach
+- [Run quality gates on direct fixes](feedback_quality_gates_direct_fixes.md) — skipping Coder does not excuse skipping local tests/typecheck/lint/format before push
