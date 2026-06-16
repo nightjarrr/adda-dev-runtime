@@ -22,7 +22,7 @@ type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileReaderDep & FileWrite
 type CurrentIssueArgs =
     | { subcommand: "switch"; issueId: string; skipRepoInit: boolean }
     | { subcommand: "show" }
-    | { subcommand: "sync"; skipRepoInit: boolean }
+    | { subcommand: "sync"; skipRepoInit: boolean; issueStateOnly: boolean }
     | { subcommand: "clear"; skipRepoInit: boolean }
     | { subcommand: "get"; field: string }
     | { subcommand: "branch"; mode: "ensure" | "verify" }
@@ -69,6 +69,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
             allowPositionals: true,
             options: {
                 "skip-repo-init": { type: "boolean", default: false },
+                "issue-state-only": { type: "boolean", default: false },
                 ensure: { type: "boolean", default: false },
                 verify: { type: "boolean", default: false },
             },
@@ -86,6 +87,11 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
         const skipRepoInit = (parsed.values["skip-repo-init"] as boolean | undefined) ?? false;
         if (skipRepoInit && (subcommand === "show" || subcommand === "get")) {
             throw new ScriptArgsError(`--skip-repo-init is not valid for '${subcommand}'`);
+        }
+
+        const issueStateOnly = (parsed.values["issue-state-only"] as boolean | undefined) ?? false;
+        if (issueStateOnly && subcommand !== "sync") {
+            throw new ScriptArgsError(`--issue-state-only is not valid for '${subcommand}'`);
         }
 
         const ensure = (parsed.values["ensure"] as boolean | undefined) ?? false;
@@ -111,7 +117,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
         }
 
         if (subcommand === "sync") {
-            return { subcommand: "sync", skipRepoInit };
+            return { subcommand: "sync", skipRepoInit, issueStateOnly };
         }
 
         if (subcommand === "clear") {
@@ -145,13 +151,13 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
     protected async execute(args: CurrentIssueArgs): Promise<void> {
         switch (args.subcommand) {
             case "switch":
-                this.emitOk(await executeSwitch(args.issueId, args.skipRepoInit, this.deps, this));
+                this.emitOk(await executeSwitch(args.issueId, args.skipRepoInit, this.deps, this, false));
                 return;
             case "show":
                 this.emitOk(await executeShow(this));
                 return;
             case "sync":
-                this.emitOk(await executeSync(args.skipRepoInit, this.deps, this));
+                this.emitOk(await executeSync(args.skipRepoInit, this.deps, this, args.issueStateOnly));
                 return;
             case "clear":
                 this.emitOk(await executeClear(args.skipRepoInit, this.deps, this));

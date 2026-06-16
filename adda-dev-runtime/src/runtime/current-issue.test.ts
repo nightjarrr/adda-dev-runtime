@@ -1104,6 +1104,84 @@ describe("CurrentIssueScript", () => {
         });
     });
 
+    describe("sync --issue-state-only", () => {
+        const validStateJson = JSON.stringify({
+            id: "28",
+            title: "A test issue",
+            type: "feature",
+            phase: "phase:implement",
+            state: "open",
+            pr: "42",
+            parent: null,
+            children: [],
+            siblings: [],
+        });
+
+        test("sync --issue-state-only succeeds — exit 0, ok envelope, issue.id matches state, no git calls made", async () => {
+            const shellRunMock = mock(async (command: string[]) => {
+                if (command[0] === "gh" && command[1] === "issue") {
+                    return makeShellResult({ stdout: makeGhIssueResponse() });
+                }
+                if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
+                    return makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/28-test", "42") });
+                }
+                if (command[0] === "gh" && command[1] === "api") {
+                    return makeShellResult({ stdout: defaultHierarchyApiResponse(command[command.length - 1] as string) });
+                }
+                return makeShellResult();
+            });
+
+            const { deps, outLines } = makeMockDeps({
+                shellRun: shellRunMock,
+                fileReaderReadFile: async (_path: string) => validStateJson,
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "sync", "--issue-state-only"]);
+            expect(code).toBe(0);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("ok");
+            expect(out.error).toBeNull();
+            const result = out.result as Record<string, unknown>;
+            const issue = result.issue as Record<string, string>;
+            expect(issue.id).toBe("28");
+
+            // Verify git operations were NOT called
+            expect(shellRunMock).not.toHaveBeenCalledWith(expect.arrayContaining(["git", "status", "--porcelain"]));
+            expect(shellRunMock).not.toHaveBeenCalledWith(expect.arrayContaining(["git", "checkout"]));
+            expect(shellRunMock).not.toHaveBeenCalledWith(expect.arrayContaining(["git", "pull"]));
+            // Verify bash (repo init hook) was NOT called
+            expect(shellRunMock).not.toHaveBeenCalledWith(expect.arrayContaining(["bash"]));
+        });
+
+        test("no active issue with --issue-state-only — exits 1, fail envelope, error contains 'no active issue to sync'", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "sync", "--issue-state-only"]);
+            expect(code).toBe(1);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("no active issue to sync");
+        });
+
+        test("switch --issue-state-only is rejected — exits 2, ScriptArgsError", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const code = await new CurrentIssueScript(deps).run([
+                "bun",
+                "current-issue.ts",
+                "switch",
+                "28",
+                "--issue-state-only",
+            ]);
+            expect(code).toBe(2);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("--issue-state-only is not valid for 'switch'");
+        });
+    });
+
     describe("clear", () => {
         test("no state file — no-op envelope, exit 0, no git calls made", async () => {
             const shellRunMock = mock(async (_command: string[]) => makeShellResult());
