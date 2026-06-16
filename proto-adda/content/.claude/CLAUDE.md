@@ -168,6 +168,12 @@ gh pr create --title "..." --body "..."
 
 When the PR is opened, watch PR checks using the `ci-gate` skill. Step 7 is not complete until `ci-gate` resolves green.
 
+After PR checks pass, sync the issue state to reflect the PR's current state:
+
+```bash
+/usr/local/libexec/adda-dev-runtime/bin/current-issue sync --issue-state-only
+```
+
 ### 8. Review
 
  Output the full contents of `/tmp/{issue-id}-coder-response.md` verbatim as Markdown text in your response message. Do not summarize. Reading the file with Read tool is not sufficient — tool results are not visible to PO; the content must appear in your text output. The goal of the review stage for PM and PO is to ensure that Coder's outcome is correctly implementing the plan, identify any gaps, new requirements, additional use cases, refactoring needs or code smells, and any other follow-up items that might arise.
@@ -212,6 +218,12 @@ The issue comment thread (plan/outcome pairs) is the baseline; do not restate wo
 This step is triggered only if PO explicitly reports that the PR was merged. PM must not ask, prompt, or urge PO to report merge status — if PO does not mention it, skip this step entirely.
 
 If PO does report the merge, ensure CI is green after merge to main using the `ci-gate` skill. Main is healthy when `ci-gate` resolves green.
+
+After CI is green, sync the full issue state (including any transition to a new feature branch):
+
+```bash
+/usr/local/libexec/adda-dev-runtime/bin/current-issue sync
+```
 
 ## Cutting a release
 

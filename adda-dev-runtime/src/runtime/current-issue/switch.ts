@@ -13,14 +13,20 @@ export async function executeSwitch(
     skipRepoInit: boolean,
     deps: ShellDep & EnvDep & FileSysDep,
     store: IssueStateStore,
+    issueStateOnly = false,
 ): Promise<CurrentIssueResult> {
     // Step 1: Validate env vars
     requireOwnerRepo(deps);
 
-    // Step 2: Check dirty tree
-    const statusResult = await deps.shell.run(["git", "status", "--porcelain"], { strict: false });
-    if (statusResult.stdout.trim()) {
-        throw new CurrentIssueError("dirty_tree", "working tree is dirty — commit or stash changes before switching issues");
+    // Step 2: Check dirty tree (skip if issueStateOnly)
+    if (!issueStateOnly) {
+        const statusResult = await deps.shell.run(["git", "status", "--porcelain"], { strict: false });
+        if (statusResult.stdout.trim()) {
+            throw new CurrentIssueError(
+                "dirty_tree",
+                "working tree is dirty — commit or stash changes before switching issues",
+            );
+        }
     }
 
     // Step 3: Fetch issue metadata
@@ -44,26 +50,30 @@ export async function executeSwitch(
     const typeLabel = labels.find((l) => /^(feature|bug|chore|docs)$/.test(l.name))?.name ?? "";
     const phaseLabel = labels.find((l) => l.name.startsWith("phase:"))?.name ?? "";
 
-    // Step 4: Resolve branch
+    // Step 4: Resolve branch (read-only GraphQL API call, safe to run always)
     const resolveData = await resolveIssueBranch(deps, issueId);
 
-    // Step 5: Determine branch
-    const branch = resolveData.resolution === "main" ? "main" : resolveData.branch;
-
-    // Step 6: Checkout branch
-    await deps.shell.run(["git", "checkout", branch]);
-
-    // Step 6a: Pull from origin to ensure local branch is up to date
-    await deps.shell.run(["git", "pull"]);
-
-    // Step 7: Enrich with hierarchy context (parallel, fails fast)
+    // Step 5: Enrich with hierarchy context (parallel, fails fast)
     const [parentHeader, childrenHeaders, siblingHeaders] = await Promise.all([
         fetchParent(deps, Number(issueId)),
         fetchChildren(deps, Number(issueId)),
         fetchSiblings(deps, Number(issueId)),
     ]);
 
-    // Step 8: Write state and emit success
+    // Step 6: Determine branch
+    const branch = resolveData.resolution === "main" ? "main" : resolveData.branch;
+
+    // Step 7: Checkout branch (skip if issueStateOnly)
+    if (!issueStateOnly) {
+        await deps.shell.run(["git", "checkout", branch]);
+    }
+
+    // Step 8: Pull from origin to ensure local branch is up to date (skip if issueStateOnly)
+    if (!issueStateOnly) {
+        await deps.shell.run(["git", "pull"]);
+    }
+
+    // Step 9: Write state and emit success
     const issueState: IssueState = {
         id: issueId,
         title,
@@ -78,8 +88,8 @@ export async function executeSwitch(
 
     await store.writeState(issueState);
 
-    // Step 9: Run repo-level init hook
-    const hook = await runRepoInitHook(deps, skipRepoInit);
+    // Step 10: Run repo-level init hook (skip if issueStateOnly)
+    const hook = await runRepoInitHook(deps, issueStateOnly ? true : skipRepoInit);
 
     return { issue: issueState, details: { branch, resolution: resolveData.resolution, hook } };
 }
