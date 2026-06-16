@@ -4,11 +4,11 @@
 
 This is a hardened, ephemeral container: no root access, read-only rootfs except for designated writable paths, no direct network access — only traffic routed through `HTTP_PROXY`/`HTTPS_PROXY` reaches the outside — and `~/.claude/` is re-seeded from the image on every start; changes there do not survive a restart.
 
-| Path | Writable | Persistence |
-|---|---|---|
-| `/workspace` | yes | durable — commit and push to persist |
-| `/home/adda/`, `/tmp` | yes | ephemeral — wiped at container stop |
-| everything else | **no** | rootfs is read-only; write attempts fail |
+| Path                  | Writable | Persistence                              |
+| --------------------- | -------- | ---------------------------------------- |
+| `/workspace`          | yes      | durable — commit and push to persist     |
+| `/home/adda/`, `/tmp` | yes      | ephemeral — wiped at container stop      |
+| everything else       | **no**   | rootfs is read-only; write attempts fail |
 
 ## Available CLI tools
 
@@ -22,19 +22,19 @@ This is a hardened, ephemeral container: no root access, read-only rootfs except
 
 This project uses an agentic SDLC with distinct roles. The key roles referenced throughout this file:
 
-| Role | Subagent name in Agent tool | Description |
-|---|---|---|
-| **Project Owner (PO)** | - (human) | The human user — sets requirements, reviews artifacts, approves gates, merges PRs |
-| **Project Manager (PM)** | - (main session) | The AI orchestrator (this session) — dispatches subagents, relays communication, manages GitHub state |
-| **Coder** | `coder` | Writes code and tests according to implementation plans |
+| Role                     | Subagent name in Agent tool | Description                                                                                           |
+| ------------------------ | --------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **Project Owner (PO)**   | - (human)                   | The human user — sets requirements, reviews artifacts, approves gates, merges PRs                     |
+| **Project Manager (PM)** | - (main session)            | The AI orchestrator (this session) — dispatches subagents, relays communication, manages GitHub state |
+| **Coder**                | `coder`                     | Writes code and tests according to implementation plans                                               |
 
 ### Secondary roles
 
 These roles are dispatched on-demand but do not own an integral part of the SDLC.
 
-| Role | Subagent name in Agent tool | Description |
-|---|---|---|
-| **CI Monitor** | `ci-monitor` | Runs a CI workflow to completion and classifies any failures. Dispatched by PM via the `ci-gate` skill. |
+| Role           | Subagent name in Agent tool | Description                                                                                             |
+| -------------- | --------------------------- | ------------------------------------------------------------------------------------------------------- |
+| **CI Monitor** | `ci-monitor`                | Runs a CI workflow to completion and classifies any failures. Dispatched by PM via the `ci-gate` skill. |
 
 ## Working together
 
@@ -125,9 +125,11 @@ gh issue comment {issue-id} --body-file {path-to-plan-file}
 Branch names follow the pattern `{type}/{issue-id}-{slug}` — for example: `feature/42-avif-support`, `chore/37-add-claude-md`, `docs/51-timeout-handling`.
 
 **Before modifying any repository files**, ensure the feature branch exists and is checked out:
+
 ```
 /usr/local/libexec/adda-dev-runtime/bin/current-issue branch --ensure
 ```
+
 This command is idempotent: if no linked branch exists yet it creates one, links it to the issue, and checks out the local workspace onto it in a single operation; if already on the correct branch it is a no-op. The branch name is derived automatically from the current issue as `{type}/{issue-id}-{slug}`. If the command exits non-zero, stop and ask PO — do not proceed to Coder dispatch.
 
 On existing branch, always verify the working tree is clean before dispatching Coder or making repository file modifications. If there are unrelated dirty changes, stop and ask PO.
@@ -146,7 +148,7 @@ Ensure CI is green on the current feature branch using the `ci-gate` skill. Step
 
 ### 6. Post outcome
 
-After receiving the final response from the Coder, write it verbatim to `/tmp/{issue-id}-coder-response.md`. It is important to preserve the exact output from Coder for later reference, so avoid any summarization or re-structuring,  even if some sections of the response are empty or seem not relevant or important currently. They might become important in the future, so every line of Coder's output must be preserved as-is.
+After receiving the final response from the Coder, write it verbatim to `/tmp/{issue-id}-coder-response.md`. It is important to preserve the exact output from Coder for later reference, so avoid any summarization or re-structuring, even if some sections of the response are empty or seem not relevant or important currently. They might become important in the future, so every line of Coder's output must be preserved as-is.
 
 After saving the file, post Coder's response as a comment to the issue:
 
@@ -176,32 +178,53 @@ After PR checks pass, sync the issue state to reflect the PR's current state:
 
 ### 8. Review
 
- Output the full contents of `/tmp/{issue-id}-coder-response.md` verbatim as Markdown text in your response message. Do not summarize. Reading the file with Read tool is not sufficient — tool results are not visible to PO; the content must appear in your text output. The goal of the review stage for PM and PO is to ensure that Coder's outcome is correctly implementing the plan, identify any gaps, new requirements, additional use cases, refactoring needs or code smells, and any other follow-up items that might arise.
+Output the full contents of `/tmp/{issue-id}-coder-response.md` verbatim as Markdown text in your response message. Do not summarize. Reading the file with Read tool is not sufficient — tool results are not visible to PO; the content must appear in your text output. The goal of the review stage for PM and PO is to ensure that Coder's outcome is correctly implementing the plan, identify any gaps, new requirements, additional use cases, refactoring needs or code smells, and any other follow-up items that might arise.
 
 PO might leave comments in the PR (general or attached to diff lines in specific files) or provide feedback directly in the conversation. Make sure you have an explicit answer from the PO whether the PR is approved or requires a **delta plan iteration**.
 
 Fetch the PR's general conversation and its review threads:
+
 ```
 gh pr view {pr-number} --comments
 /usr/local/libexec/adda-dev-runtime/bin/pr-review-threads pr {pr-number}
 ```
+
 `gh pr view --comments` returns the general PR conversation. `pr-review-threads pr {pr-number}` returns the **unresolved review threads** (resolution state + thread grouping) as a JSON envelope on stdout, and writes the full detail to a file.
 
 **On success** (`status: "ok"`, exit 0) the envelope carries a `result` payload; read `.result.resultsFile` and `jq` the file for detail:
+
 ```json
-{ "status": "ok",
-  "result": { "pr": { "number": 306, "total": 12, "unresolved": 3, "resolved": 9,
-                      "returnedUnresolved": 3, "moreUnresolvedAvailable": false, "maxUnresolved": 50 },
-              "resultsFile": "/tmp/pr-review-threads-pr-306-<ts>.json" },
-  "error": null }
+{
+    "status": "ok",
+    "result": {
+        "pr": {
+            "number": 306,
+            "total": 12,
+            "unresolved": 3,
+            "resolved": 9,
+            "returnedUnresolved": 3,
+            "moreUnresolvedAvailable": false,
+            "maxUnresolved": 50
+        },
+        "resultsFile": "/tmp/pr-review-threads-pr-306-<ts>.json"
+    },
+    "error": null
+}
 ```
+
 - `unresolved` is the true count; `returnedUnresolved` is how many are in the file (the unresolved set is windowed at `maxUnresolved`). If `moreUnresolvedAvailable` is `true`, the remainder surfaces on a later run once addressed threads are resolved.
 - Detail file shape: `{ pr:{…header…}, threads:[ {id, path, line, isOutdated, targetLine, hunkPreview, comments:[{author, body, url, createdAt}]} ], hunks:{ id → full diff hunk } }`. Slice it, e.g. `jq '[.threads[] | {id, path, line, isOutdated, body: .comments[0].body}]' <file>`; pull a full hunk only when needed via `jq '.hunks["<id>"]' <file>`. A thread flagged `commentsTruncated:true` has more comments than the inline preview — fetch them all with `pr-review-threads thread <id>`.
 
 **On error** (`status: "fail"`, non-zero exit, **no file written**) the envelope carries `error` with `reason` directly on it:
+
 ```json
-{ "status": "fail", "result": null, "error": { "reason": "pr_not_found", "message": "PR #999 not found in owner/repo", "details": {} } }
+{
+    "status": "fail",
+    "result": null,
+    "error": { "reason": "pr_not_found", "message": "PR #999 not found in owner/repo", "details": {} }
+}
 ```
+
 Branch on `error.reason`: `pr_not_found` / `repo_not_found` / `missing_env` / `invalid_config` are operator/config errors — fix and retry. `scan_limit_exceeded` (carries `total` + `ceiling` in `error.details`) means the PR has more review threads than the safe ceiling (`ADDA_DEV_PR_REVIEW_SCAN_CEILING`) — treat as anomalous and surface to PO rather than raising the ceiling blindly. Never read `resultsFile` on a non-zero exit — no file is written on the error path.
 
 If PO is satisfied with the outcome, the next step is on PO: **merge the PR**. Active PM work pauses until PO manually merges. If PO reports the merge, proceed to step 10.
@@ -219,7 +242,7 @@ This step is triggered only if PO explicitly reports that the PR was merged. PM 
 
 If PO does report the merge, ensure CI is green after merge to main using the `ci-gate` skill. Main is healthy when `ci-gate` resolves green.
 
-After CI is green, sync the full issue state (including any transition to a new feature branch):
+After CI is green, sync the full issue state (refreshes local state and moves to the main branch):
 
 ```bash
 /usr/local/libexec/adda-dev-runtime/bin/current-issue sync
@@ -233,15 +256,15 @@ Releases are tagged from `main`. The `release` workflow fires on any `v*` tag pu
 
 1. Confirm `main` CI is green.
 2. Summarize changes since the previous release and present the delta to PO:
-   ```bash
-   git log $(git describe --tags --abbrev=0)..HEAD --oneline
-   ```
-   Ask PO for the version number — PM never picks the version.
+    ```bash
+    git log $(git describe --tags --abbrev=0)..HEAD --oneline
+    ```
+    Ask PO for the version number — PM never picks the version.
 3. Tag and push:
-   ```bash
-   git tag vX.Y.Z
-   git push origin vX.Y.Z
-   ```
+    ```bash
+    git tag vX.Y.Z
+    git push origin vX.Y.Z
+    ```
 4. Ensure the release workflow completes successfully using the `ci-gate` skill. The release is not complete until `ci-gate` resolves green.
 5. Verify the resulting GitHub release has the launcher tarball attached.
 

@@ -20,7 +20,7 @@ export type { IssueStateStore } from "./current-issue/types";
 type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileReaderDep & FileWriterDep & FileSysDep;
 
 type CurrentIssueArgs =
-    | { subcommand: "switch"; issueId: string; skipRepoInit: boolean; issueStateOnly: boolean }
+    | { subcommand: "switch"; issueId: string; skipRepoInit: boolean }
     | { subcommand: "show" }
     | { subcommand: "sync"; skipRepoInit: boolean; issueStateOnly: boolean }
     | { subcommand: "clear"; skipRepoInit: boolean }
@@ -106,7 +106,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
             if (!issueId) {
                 throw new ScriptArgsError("usage: current-issue switch <id>");
             }
-            return { subcommand: "switch", issueId, skipRepoInit, issueStateOnly: false };
+            return { subcommand: "switch", issueId, skipRepoInit };
         }
 
         if (subcommand === "show") {
@@ -151,7 +151,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
     protected async execute(args: CurrentIssueArgs): Promise<void> {
         switch (args.subcommand) {
             case "switch":
-                this.emitOk(await executeSwitch(args.issueId, args.skipRepoInit, this.deps, this, args.issueStateOnly));
+                this.emitOk(await executeSwitch(args.issueId, args.skipRepoInit, this.deps, this, false));
                 return;
             case "show":
                 this.emitOk(await executeShow(this));
