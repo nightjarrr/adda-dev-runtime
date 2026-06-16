@@ -34,3 +34,16 @@ rm -rf node_modules/@oxlint/binding-linux-x64-musl \
        node_modules/@oxfmt/binding-linux-x64-musl
 
 rm -rf "${HOME}/.bun/install/cache"
+
+# Install pre-commit hook that gates commits on quality-gates (inside dev container only)
+PRE_COMMIT=.git/hooks/pre-commit
+if [ ! -f "$PRE_COMMIT" ]; then
+    cat > "$PRE_COMMIT" <<'HOOK'
+#!/bin/sh
+HOOK_BIN=/usr/local/libexec/adda-dev-runtime/bin/quality-gates
+if [ -x "$HOOK_BIN" ]; then
+    exec "$HOOK_BIN"
+fi
+HOOK
+    chmod +x "$PRE_COMMIT"
+fi
