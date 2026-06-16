@@ -40,6 +40,48 @@ function makeResolveFailResponse(reason: string, message: string, details: Recor
     return JSON.stringify({ status: "fail", result: null, error: { reason, message, details } });
 }
 
+/** Helper: build a raw issue response for gh api /repos/{owner}/{repo}/issues/{n} */
+function makeRawIssueResponse(
+    number: number,
+    title: string,
+    state: "open" | "closed",
+    id: number,
+    labels: string[],
+    parent_issue_url: string | null,
+): string {
+    return JSON.stringify({
+        number,
+        title,
+        state,
+        id,
+        labels: labels.map((name) => ({ name })),
+        parent_issue_url,
+    });
+}
+
+/** Helper: build a raw sub-issue line for gh api /repos/.../sub_issues NDJSON */
+function makeRawSubIssue(number: number, title: string, state: "open" | "closed", labels: string[]): string {
+    return JSON.stringify({
+        number,
+        title,
+        state,
+        labels: labels.map((name) => ({ name })),
+    });
+}
+
+/**
+ * Fallback handler for gh api commands from hierarchy functions.
+ * Returns a minimal valid issue with no parent, or empty for sub_issues.
+ */
+function defaultHierarchyApiResponse(url: string): string {
+    const issueMatch = url.match(/\/issues\/(\d+)(?:\/sub_issues)?$/);
+    const issueNumber = issueMatch ? Number(issueMatch[1]) : 28;
+    if (url.endsWith("/sub_issues")) {
+        return "";
+    }
+    return makeRawIssueResponse(issueNumber, `Issue #${issueNumber}`, "open", issueNumber * 1000 + 1, [], null);
+}
+
 // --- Mock factory ---
 
 interface MockDepsOptions {
@@ -49,6 +91,10 @@ interface MockDepsOptions {
     fileWriterWriteFile?: (pathPattern: string, content: string) => Promise<string>;
     fileSysDeleteFile?: (path: string) => Promise<void>;
     fileSysFileExists?: (path: string) => Promise<boolean>;
+    /** Optional custom handler for gh api calls from hierarchy functions.
+     * Receives the full command array; should return a ShellResult or null/undefined to fall through
+     * to the default hierarchy response (no parent, no children). */
+    hierarchyApi?: (command: string[]) => ShellResult | null | undefined;
 }
 
 function makeMockDeps(options: MockDepsOptions = {}): {
@@ -65,13 +111,18 @@ function makeMockDeps(options: MockDepsOptions = {}): {
     };
 
     // Default shell: clean status, successful gh issue, successful resolve (feature_branch), successful checkout
+    // Hierarchy API calls default to no parent and no children.
     const defaultShellRun = async (command: string[]): Promise<ShellResult> => {
         const cmd = command[0];
         if (cmd === "git" && command[1] === "status") {
             return makeShellResult({ stdout: "" });
         }
-        if (cmd === "gh") {
+        if (cmd === "gh" && command[1] === "issue") {
             return makeShellResult({ stdout: makeGhIssueResponse() });
+        }
+        if (cmd === "gh" && command[1] === "api") {
+            const url = command[command.length - 1] as string;
+            return makeShellResult({ stdout: defaultHierarchyApiResponse(url) });
         }
         if (cmd === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
             return makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/28-test-issue", "42") });
@@ -82,8 +133,25 @@ function makeMockDeps(options: MockDepsOptions = {}): {
         return makeShellResult();
     };
 
+    // gh api calls from hierarchy functions are always handled. Tests that need custom
+    // hierarchy responses can provide a hierarchyApi handler in options.
+    const wrappedRun = options.shellRun
+        ? async (command: string[]): Promise<ShellResult> => {
+              if (command[0] === "gh" && command[1] === "api") {
+                  const url = command[command.length - 1] as string;
+                  // Allow custom hierarchy handler
+                  if (options.hierarchyApi) {
+                      const result = options.hierarchyApi(command);
+                      if (result) return result;
+                  }
+                  return makeShellResult({ stdout: defaultHierarchyApiResponse(url) });
+              }
+              return options.shellRun!(command);
+          }
+        : defaultShellRun;
+
     const mockShell: Shell = {
-        run: mock(options.shellRun ?? defaultShellRun),
+        run: mock(wrappedRun),
         runSh: mock(async (_cmd: string) => makeShellResult()),
     };
 
@@ -460,7 +528,7 @@ describe("CurrentIssueScript", () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
-                    if (command[0] === "gh") {
+                    if (command[0] === "gh" && command[1] === "issue") {
                         return makeShellResult({
                             stdout: makeGhIssueResponse("My feature issue", ["feature", "phase: implement"], "OPEN"),
                         });
@@ -471,6 +539,10 @@ describe("CurrentIssueScript", () => {
                         });
                     }
                     if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
+                    if (command[0] === "gh" && command[1] === "api") {
+                        const url = command[command.length - 1] as string;
+                        return makeShellResult({ stdout: defaultHierarchyApiResponse(url) });
+                    }
                     return makeShellResult();
                 },
             });
@@ -488,7 +560,7 @@ describe("CurrentIssueScript", () => {
             expect(issue.title).toBe("My feature issue");
             expect(issue.type).toBe("feature");
             expect(issue.phase).toBe("phase: implement");
-            expect(issue.state).toBe("OPEN");
+            expect(issue.state).toBe("open");
             expect(issue.pr).toBe("42");
 
             const details = result.details as Record<string, string>;
@@ -500,7 +572,7 @@ describe("CurrentIssueScript", () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
-                    if (command[0] === "gh") {
+                    if (command[0] === "gh" && command[1] === "issue") {
                         return makeShellResult({
                             stdout: makeGhIssueResponse("Main issue", ["chore"], "OPEN"),
                         });
@@ -529,7 +601,7 @@ describe("CurrentIssueScript", () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
-                    if (command[0] === "gh") {
+                    if (command[0] === "gh" && command[1] === "issue") {
                         return makeShellResult({
                             stdout: makeGhIssueResponse("No-label issue", [], "CLOSED"),
                         });
@@ -550,8 +622,154 @@ describe("CurrentIssueScript", () => {
             const issue = result.issue as Record<string, string>;
             expect(issue.type).toBe("");
             expect(issue.phase).toBe("");
-            expect(issue.state).toBe("CLOSED");
+            expect(issue.state).toBe("closed");
             expect(issue.pr).toBe("");
+        });
+    });
+
+    describe("switch — hierarchy enrichment", () => {
+        test("hierarchy populated with parent, children, siblings — persisted in state", async () => {
+            // Scenario: issue #28, parent #10, children of #28 = [#30], siblings (parent's children) = [#30, #31], exclude self
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "gh" && command[1] === "issue") {
+                        return makeShellResult({
+                            stdout: makeGhIssueResponse("Hierarchy issue", ["feature", "phase: implement"], "OPEN"),
+                        });
+                    }
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
+                        return makeShellResult({
+                            stdout: makeResolveResponse("feature_branch", "feature/28-test", "42"),
+                        });
+                    }
+                    if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
+                    if (command[0] === "git" && command[1] === "pull") return makeShellResult();
+                    return makeShellResult();
+                },
+                hierarchyApi: (command: string[]) => {
+                    const url = command[command.length - 1] as string;
+                    if (url.includes("/issues/28") && url.endsWith("/sub_issues")) {
+                        return makeShellResult({ stdout: makeRawSubIssue(30, "Child", "open", ["feature"]) });
+                    }
+                    if (url.includes("/issues/28") && !url.includes("sub_issues")) {
+                        return makeShellResult({
+                            stdout: makeRawIssueResponse(
+                                28,
+                                "Hierarchy issue",
+                                "open",
+                                28001,
+                                ["feature"],
+                                "https://api.github.com/repos/o/r/issues/10",
+                            ),
+                        });
+                    }
+                    if (url.includes("/issues/10") && url.endsWith("/sub_issues")) {
+                        return makeShellResult({
+                            stdout: [
+                                makeRawSubIssue(30, "Child", "open", ["feature"]),
+                                makeRawSubIssue(31, "Sibling", "closed", ["chore"]),
+                            ].join("\n"),
+                        });
+                    }
+                    if (url.includes("/issues/10")) {
+                        return makeShellResult({
+                            stdout: makeRawIssueResponse(10, "Parent", "open", 10001, ["feature"], null),
+                        });
+                    }
+                    return null; // fall through to default
+                },
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
+            expect(code).toBe(0);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("ok");
+            const result = out.result as Record<string, unknown>;
+            const issue = result.issue as Record<string, unknown>;
+
+            expect(issue.id).toBe("28");
+
+            // parent is a GitHubIssueHeader
+            const parent = issue.parent as Record<string, unknown>;
+            expect(parent).not.toBeNull();
+            expect(parent.number).toBe(10);
+            expect(parent.title).toBe("Parent");
+            expect(parent.state).toBe("open");
+
+            // children array
+            const children = issue.children as Array<Record<string, unknown>>;
+            expect(children).toHaveLength(1);
+            expect(children[0].number).toBe(30);
+            expect(children[0].title).toBe("Child");
+
+            // siblings array (parent's children minus self)
+            const siblings = issue.siblings as Array<Record<string, unknown>>;
+            // Parent #10 has children #30, #31 — self (#28) filtered out
+            expect(siblings).toHaveLength(2);
+        });
+
+        test("orphan (no parent) — parent null, siblings empty", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "gh" && command[1] === "issue") {
+                        return makeShellResult({
+                            stdout: makeGhIssueResponse("Orphan issue", ["feature"], "OPEN"),
+                        });
+                    }
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
+                        return makeShellResult({
+                            stdout: makeResolveResponse("feature_branch", "feature/28-orphan", "42"),
+                        });
+                    }
+                    if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
+                    if (command[0] === "git" && command[1] === "pull") return makeShellResult();
+                    return makeShellResult();
+                },
+                // Default hierarchy response already returns no parent, no children
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
+            expect(code).toBe(0);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("ok");
+            const result = out.result as Record<string, unknown>;
+            const issue = result.issue as Record<string, unknown>;
+            expect(issue.parent).toBeNull();
+            expect(issue.children).toEqual([]);
+            expect(issue.siblings).toEqual([]);
+        });
+
+        test("hierarchy API fails — exits 1, fail envelope", async () => {
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "gh" && command[1] === "issue") {
+                        return makeShellResult({
+                            stdout: makeGhIssueResponse("Failing hierarchy", ["feature"], "OPEN"),
+                        });
+                    }
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
+                        return makeShellResult({
+                            stdout: makeResolveResponse("feature_branch", "feature/28-fail", "42"),
+                        });
+                    }
+                    if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
+                    if (command[0] === "git" && command[1] === "pull") return makeShellResult();
+                    return makeShellResult();
+                },
+                hierarchyApi: () => makeShellResult({ stdout: "", stderr: "HTTP 500", exitCode: 1 }),
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
+            expect(code).toBe(1);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
         });
     });
 
@@ -561,7 +779,8 @@ describe("CurrentIssueScript", () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
-                    if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
+                    if (command[0] === "gh" && command[1] === "issue")
+                        return makeShellResult({ stdout: makeGhIssueResponse() });
                     if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/28-test", "42") });
                     }
@@ -610,7 +829,8 @@ describe("CurrentIssueScript", () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
-                    if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
+                    if (command[0] === "gh" && command[1] === "issue")
+                        return makeShellResult({ stdout: makeGhIssueResponse() });
                     if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/28-test", "42") });
                     }
@@ -639,7 +859,8 @@ describe("CurrentIssueScript", () => {
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
-                    if (command[0] === "gh") return makeShellResult({ stdout: makeGhIssueResponse() });
+                    if (command[0] === "gh" && command[1] === "issue")
+                        return makeShellResult({ stdout: makeGhIssueResponse() });
                     if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
                         return makeShellResult({ stdout: makeResolveResponse("feature_branch", "feature/28-test", "42") });
                     }
@@ -673,11 +894,14 @@ describe("CurrentIssueScript", () => {
             title: "A test issue",
             type: "feature",
             phase: "phase:implement",
-            state: "OPEN",
+            state: "open",
             pr: "99",
+            parent: null,
+            children: [],
+            siblings: [],
         });
 
-        test("no active issue (ENOENT) — exits 0, ok envelope, all issue fields empty, details is {}", async () => {
+        test("no active issue (ENOENT) — exits 0, ok envelope, all issue fields empty including hierarchy defaults", async () => {
             const { deps, outLines } = makeMockDeps();
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show"]);
             expect(code).toBe(0);
@@ -685,13 +909,16 @@ describe("CurrentIssueScript", () => {
             expect(out.status).toBe("ok");
             expect(out.error).toBeNull();
             const result = out.result as Record<string, unknown>;
-            const issue = result.issue as Record<string, string>;
+            const issue = result.issue as Record<string, unknown>;
             expect(issue.id).toBe("");
             expect(issue.title).toBe("");
             expect(issue.type).toBe("");
             expect(issue.phase).toBe("");
             expect(issue.state).toBe("");
             expect(issue.pr).toBe("");
+            expect(issue.parent).toBeNull();
+            expect(issue.children).toEqual([]);
+            expect(issue.siblings).toEqual([]);
             expect(result.details).toEqual({});
         });
 
@@ -710,7 +937,7 @@ describe("CurrentIssueScript", () => {
             expect(issue.title).toBe("A test issue");
             expect(issue.type).toBe("feature");
             expect(issue.phase).toBe("phase:implement");
-            expect(issue.state).toBe("OPEN");
+            expect(issue.state).toBe("open");
             expect(issue.pr).toBe("99");
             expect(result.details).toEqual({});
         });
@@ -748,6 +975,70 @@ describe("CurrentIssueScript", () => {
             const error = out.error as Record<string, unknown>;
             expect(String(error.message)).toContain("usage: current-issue show");
         });
+
+        test("state with hierarchy fields — parent/children/siblings present in output", async () => {
+            const hierarchyState = JSON.stringify({
+                id: "42",
+                title: "Hierarchy issue",
+                type: "feature",
+                phase: "phase: implement",
+                state: "open",
+                pr: "99",
+                parent: {
+                    number: 10,
+                    title: "Parent",
+                    state: "open",
+                    type: "feature",
+                    phase: null,
+                    parent: null,
+                    labels: ["feature"],
+                },
+                children: [],
+                siblings: [
+                    { number: 12, title: "Sibling", state: "open", type: "chore", phase: null, parent: 10, labels: ["chore"] },
+                ],
+            });
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => hierarchyState,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show"]);
+            expect(code).toBe(0);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("ok");
+            expect(out.error).toBeNull();
+            const result = out.result as Record<string, unknown>;
+            const issue = result.issue as Record<string, unknown>;
+            const parent = issue.parent as Record<string, unknown> | null;
+            expect(parent).not.toBeNull();
+            expect(parent!.number).toBe(10);
+            expect(parent!.title).toBe("Parent");
+            const siblings = issue.siblings as Array<Record<string, unknown>>;
+            expect(siblings).toHaveLength(1);
+            expect(siblings[0].number).toBe(12);
+            const children = issue.children as Array<Record<string, unknown>>;
+            expect(children).toEqual([]);
+        });
+
+        test("state file without hierarchy fields is rejected — exits 1, fail envelope", async () => {
+            const oldStateJson = JSON.stringify({
+                id: "42",
+                title: "A test issue",
+                type: "feature",
+                phase: "phase:implement",
+                state: "open",
+                pr: "99",
+                // missing parent, children, siblings
+            });
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => oldStateJson,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show"]);
+            expect(code).toBe(1);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("state file is corrupt");
+        });
     });
 
     describe("sync", () => {
@@ -756,8 +1047,11 @@ describe("CurrentIssueScript", () => {
             title: "A test issue",
             type: "feature",
             phase: "phase:implement",
-            state: "OPEN",
+            state: "open",
             pr: "42",
+            parent: null,
+            children: [],
+            siblings: [],
         });
 
         test("no active issue (ENOENT) — exits 1, fail envelope, error contains 'no active issue to sync'", async () => {
@@ -777,8 +1071,11 @@ describe("CurrentIssueScript", () => {
                 title: "A test issue",
                 type: "feature",
                 phase: "phase:implement",
-                state: "OPEN",
+                state: "open",
                 pr: "42",
+                parent: null,
+                children: [],
+                siblings: [],
             });
             const { deps, outLines } = makeMockDeps({
                 fileReaderReadFile: async (_path: string) => emptyIdState,
@@ -1001,8 +1298,11 @@ describe("CurrentIssueScript", () => {
             title: "A test issue",
             type: "feature",
             phase: "phase: triage",
-            state: "OPEN",
+            state: "open",
             pr: "99",
+            parent: null,
+            children: [],
+            siblings: [],
         });
 
         test("no state file (ENOENT) — empty output, exit 0", async () => {
@@ -1102,7 +1402,7 @@ describe("CurrentIssueScript", () => {
             });
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "state"]);
             expect(code).toBe(0);
-            expect(outLines.join("").trim()).toBe("OPEN");
+            expect(outLines.join("").trim()).toBe("open");
         });
 
         test("field 'pr' — output '99', exit 0", async () => {
@@ -1120,8 +1420,11 @@ describe("CurrentIssueScript", () => {
                 title: "A test issue",
                 type: "feature",
                 phase: "phase: triage",
-                state: "OPEN",
+                state: "open",
                 pr: "",
+                parent: null,
+                children: [],
+                siblings: [],
             });
             const { deps, outLines } = makeMockDeps({
                 fileReaderReadFile: async (_path: string) => stateWithEmptyPr,
@@ -1138,8 +1441,11 @@ describe("CurrentIssueScript", () => {
             title: "A test issue",
             type: "feature",
             phase: "phase:implement",
-            state: "OPEN",
+            state: "open",
             pr: "99",
+            parent: null,
+            children: [],
+            siblings: [],
         });
 
         describe("readState", () => {
@@ -1196,7 +1502,7 @@ describe("CurrentIssueScript", () => {
                 expect(result?.title).toBe("A test issue");
                 expect(result?.type).toBe("feature");
                 expect(result?.phase).toBe("phase:implement");
-                expect(result?.state).toBe("OPEN");
+                expect(result?.state).toBe("open");
                 expect(result?.pr).toBe("99");
             });
 
@@ -1226,7 +1532,17 @@ describe("CurrentIssueScript", () => {
                 const { deps } = makeMockDeps();
                 const store = new SilentStore(deps);
                 await expect(
-                    store.writeState({ id: "1", title: "t", type: "feature", phase: "p", state: "OPEN", pr: "" }),
+                    store.writeState({
+                        id: "1",
+                        title: "t",
+                        type: "feature",
+                        phase: "p",
+                        state: "open",
+                        pr: "",
+                        parent: null,
+                        children: [],
+                        siblings: [],
+                    }),
                 ).rejects.toThrow("not supported");
             });
 

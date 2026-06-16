@@ -1,5 +1,6 @@
 import type { EnvDep, FileSysDep, ShellDep } from "@adda/lib";
 import { parseJson, requireOwnerRepo, ScriptZodValidationError } from "@adda/lib";
+import { fetchChildren, fetchParent, fetchSiblings } from "../issue-hierarchy";
 
 import { runRepoInitHook } from "./hook";
 import { resolveIssueBranch } from "./resolve";
@@ -55,19 +56,29 @@ export async function executeSwitch(
     // Step 6a: Pull from origin to ensure local branch is up to date
     await deps.shell.run(["git", "pull"]);
 
-    // Step 7: Write state and emit success
+    // Step 7: Enrich with hierarchy context (parallel, fails fast)
+    const [parentHeader, childrenHeaders, siblingHeaders] = await Promise.all([
+        fetchParent(deps, Number(issueId)),
+        fetchChildren(deps, Number(issueId)),
+        fetchSiblings(deps, Number(issueId)),
+    ]);
+
+    // Step 8: Write state and emit success
     const issueState: IssueState = {
         id: issueId,
         title,
         type: typeLabel,
         phase: phaseLabel,
-        state,
+        state: state === "CLOSED" ? "closed" : "open",
         pr: resolveData.pr,
+        parent: parentHeader,
+        children: childrenHeaders,
+        siblings: siblingHeaders,
     };
 
     await store.writeState(issueState);
 
-    // Step 8: Run repo-level init hook
+    // Step 9: Run repo-level init hook
     const hook = await runRepoInitHook(deps, skipRepoInit);
 
     return { issue: issueState, details: { branch, resolution: resolveData.resolution, hook } };

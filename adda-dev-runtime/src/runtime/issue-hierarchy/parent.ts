@@ -14,12 +14,13 @@ const IssueWithParentSchema = z.object({
     state: z.enum(["open", "closed"]),
     id: z.number(),
     labels: z.array(z.object({ name: z.string() })),
-    parent_issue_url: z.string().nullable(),
+    parent_issue_url: z.string().nullable().optional(),
 });
 
 // --- Internal helpers ---
 
-function parseParentNumber(parentUrl: string): number {
+function parseParentNumber(parentUrl: string | null | undefined): number | null {
+    if (!parentUrl) return null;
     const parts = parentUrl.replace(/\/+$/, "").split("/");
     return Number(parts[parts.length - 1]!);
 }
@@ -66,15 +67,15 @@ export async function runParent(
                     "--method",
                     "DELETE",
                     `/repos/${owner}/${repo}/issues/${parentNumber}/sub_issue`,
-                    "-f",
+                    "-F",
                     `sub_issue_id=${issue.id}`,
                 ]);
             }
         } else {
             // Set parent (optionally replace)
-            const replace = issue.parent_issue_url !== null;
-            const params = [`sub_issue_id=${issue.id}`];
-            if (replace) params.push("replace_parent=true");
+            const replace = !!issue.parent_issue_url;
+            const params = ["-F", `sub_issue_id=${issue.id}`];
+            if (replace) params.push("-F", "replace_parent=true");
 
             await deps.shell.run([
                 "gh",
@@ -82,7 +83,6 @@ export async function runParent(
                 "--method",
                 "POST",
                 `/repos/${owner}/${repo}/issues/${args.setParent}/sub_issues`,
-                "-f",
                 ...params,
             ]);
         }

@@ -88,15 +88,65 @@ Comments: 14
 Before starting the work on the new issue, register the current issue state using `current-issue switch`.
 
 1. Run `git status --porcelain`. If the output is non-empty (dirty working tree), surface the dirty-tree state to PO via `AskUserQuestion` and do not proceed until PO confirms or resolves the dirty tree.
-2. Run `/usr/local/libexec/adda-dev-runtime/bin/current-issue switch <id>`. The command emits a JSON envelope to stdout. Two representative shapes:
+2. Run `/usr/local/libexec/adda-dev-runtime/bin/current-issue switch <id>`. The command emits a JSON envelope to stdout. Four representative shapes:
 
-   Success — feature branch resolved:
+   Success — feature branch resolved (orphan issue with no children/siblings):
    ```json
    {
      "status": "ok",
      "result": {
-       "issue": { "id": "42", "title": "Add AVIF support", "type": "feature", "phase": "phase: impl-plan", "state": "OPEN", "pr": "37" },
+       "issue": { "id": "42", "title": "Add AVIF support", "type": "feature", "phase": "phase: impl-plan", "state": "open", "pr": "37", "parent": null, "children": [], "siblings": [] },
        "details": { "branch": "feature/42-avif-support", "resolution": "feature_branch", "hook": { "status": "ok", "output": "..." } }
+     },
+     "error": null
+   }
+   ```
+
+   Success — feature branch resolved (parent issue with children):
+   ```json
+   {
+     "status": "ok",
+     "result": {
+       "issue": {
+         "id": "340",
+         "title": "Issue hierarchy view improvements",
+         "type": "feature",
+         "phase": "phase: spec",
+         "state": "open",
+         "pr": "",
+         "parent": null,
+         "children": [
+           { "number": 345, "title": "Add parent subcommand to issue-hierarchy", "state": "open", "type": "chore", "phase": "phase: merged", "parent": 340, "labels": ["chore", "phase: merged"] },
+           { "number": 344, "title": "Add siblings subcommand to issue-hierarchy", "state": "open", "type": "chore", "phase": "phase: merged", "parent": 340, "labels": ["chore", "phase: merged"] }
+         ],
+         "siblings": []
+       },
+       "details": { "branch": "feature/340-issue-hierarchy-view-improvements", "resolution": "feature_branch", "hook": { "status": "ok", "output": "..." } }
+     },
+     "error": null
+   }
+   ```
+
+   Success — issue with hierarchy (parent + siblings populated):
+   ```json
+   {
+     "status": "ok",
+     "result": {
+       "issue": {
+         "id": "347",
+         "title": "Enrich current-issue switch and show with hierarchy context",
+         "type": "chore",
+         "phase": "phase: impl-done",
+         "state": "open",
+         "pr": "352",
+         "parent": { "number": 340, "title": "Issue hierarchy view improvements", "state": "open", "type": "feature", "phase": "phase: spec", "parent": null, "labels": ["feature", "phase: spec"] },
+         "children": [],
+         "siblings": [
+           { "number": 345, "title": "Add parent subcommand to issue-hierarchy", "state": "open", "type": "chore", "phase": "phase: merged", "parent": 340, "labels": ["chore", "phase: merged"] },
+           { "number": 344, "title": "Add siblings subcommand to issue-hierarchy", "state": "open", "type": "chore", "phase": "phase: merged", "parent": 340, "labels": ["chore", "phase: merged"] }
+         ]
+       },
+       "details": { "branch": "chore/347-enrich-current-issue-switch-and-show-with-hierarchy-context", "resolution": "feature_branch", "hook": { "status": "ok", "output": "..." } }
      },
      "error": null
    }
