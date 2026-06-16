@@ -329,7 +329,18 @@ adda-dev-runtime/src/lib/        # ScriptBase, capability interfaces, Bun implem
 1. `FROM oven/bun:<version>-slim AS bun-builder` — builder stage at top of Dockerfile
 2. `COPY package.json bun.lock tsconfig.json /build/` + `COPY adda-dev-runtime/src/ /build/adda-dev-runtime/src/` — package manifest, lockfile, and source copied into the builder
 3. `RUN bun install --frozen-lockfile` — installs all deps (dev + prod) for the build step; after compilation, `rm -rf node_modules && bun install --production --frozen-lockfile` reinstalls production-only deps for the runtime image
-4. Build runtime scripts: `bun build /build/adda-dev-runtime/src/runtime/*.ts --outdir /build/out/bin/ --target bun --packages=external --sourcemap=inline --banner "#!/usr/bin/env bun"` — shebang injected by banner, not present in source; `--packages=external` keeps production deps (e.g. Zod) as external imports resolved from `node_modules` at runtime rather than bundled into the executable
+4. Build runtime scripts — per-entry loop to avoid `import.meta.main` conflicts (see caveat below):
+    ```
+    for src in /build/adda-dev-runtime/src/runtime/*.ts; do
+        bun build "$src" \
+            --outdir /build/out/bin/ \
+            --target bun \
+            --packages=external \
+            --sourcemap=inline \
+            --banner '#!/usr/bin/env bun'
+    done
+    ```
+    Shebang injected by banner, not present in source; `--packages=external` keeps production deps (e.g. Zod) as external imports resolved from `node_modules` at runtime rather than bundled into the executable.
 5. Strip `.js` extensions from outputs → `chmod +x`. `out/` mirrors the target `bin/` layout.
 6. Final Tier 1 stage: `COPY --from=bun-builder /build/out/ /usr/local/libexec/adda-dev-runtime/` — Docker merges directories; bootstrap shell scripts already present under `bootstrap/` are untouched. `COPY --from=bun-builder /build/node_modules/ /usr/local/libexec/adda-dev-runtime/node_modules/` — production `node_modules` placed alongside the executables for runtime import resolution.
 
@@ -339,6 +350,8 @@ adda-dev-runtime/src/lib/        # ScriptBase, capability interfaces, Bun implem
 - `.git`
 
 No shebang or exec bit in TypeScript sources.
+
+**`import.meta.main` cross-import constraint:** Each entry-point module (any `.ts` file with `if (import.meta.main)`) must be built as a separate entry point — never via a multi-entry `bun build *.ts` glob. The per-entry `for src in ...` loop above enforces this. Additionally, entry-point modules **must not import from other entry-point modules**. When module A imports module B, Bun includes module B in A's bundle. If both have `import.meta.main` guards, `import.meta.main` evaluates to `true` for both in the same process, and the first guard to fire calls `process.exit()` before the intended handler runs. This is a design constraint: shared logic must live in modules without `import.meta.main` and be imported by both entry points.
 
 ---
 

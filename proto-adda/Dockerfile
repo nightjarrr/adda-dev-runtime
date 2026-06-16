@@ -23,12 +23,15 @@ COPY package.json bun.lock tsconfig.json /build/
 COPY adda-dev-runtime/src/lib/ /build/adda-dev-runtime/src/lib/
 COPY proto-adda/src/ /build/proto-adda/src/
 RUN bun install --frozen-lockfile \
-    && bun build /build/proto-adda/src/runtime/*.ts \
-        --outdir /build/out/bin/ \
-        --target bun \
-        --packages=external \
-        --sourcemap=inline \
-        --banner '#!/usr/bin/env bun' \
+    && for src in /build/proto-adda/src/runtime/*.ts; do \
+        bun build "$src" \
+            --outdir /build/out/bin/ \
+            --target bun \
+            --packages=external \
+            --sourcemap=inline \
+            --banner '#!/usr/bin/env bun' \
+        || exit 1; \
+    done \
     && for f in /build/out/bin/*.js; do mv "$f" "${f%.js}"; done \
     && chmod +x /build/out/bin/*
 
