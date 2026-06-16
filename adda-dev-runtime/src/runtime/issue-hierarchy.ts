@@ -3,6 +3,8 @@
 // Usage:
 //   issue-hierarchy children <issue-number>
 //   issue-hierarchy parent <issue-number> [--set <number>]
+//   issue-hierarchy siblings <issue-number>
+//   issue-hierarchy orphans [--include-closed]
 //
 // Inputs:
 //   GITHUB_OWNER, GITHUB_REPO — required for all subcommands
@@ -16,6 +18,7 @@ import { defaultDeps, ScriptArgsError, ScriptBase } from "@adda/lib";
 import { runChildren } from "./issue-hierarchy/children";
 import { runParent } from "./issue-hierarchy/parent";
 import { runSiblings } from "./issue-hierarchy/siblings";
+import { runOrphans } from "./issue-hierarchy/orphans";
 import type { IssueHierarchyArgs } from "./issue-hierarchy/types";
 
 export type { GitHubIssueHeader } from "@adda/lib";
@@ -44,6 +47,7 @@ export class IssueHierarchyScript extends ScriptBase<IssueHierarchyDeps, IssueHi
             strict: true,
             options: {
                 set: { type: "string" },
+                "include-closed": { type: "boolean", default: false },
             },
         };
     }
@@ -52,7 +56,7 @@ export class IssueHierarchyScript extends ScriptBase<IssueHierarchyDeps, IssueHi
         const subcommand = parsed.positionals[0];
         if (!subcommand) {
             throw new ScriptArgsError(
-                "subcommand is required: children <issue-number> | parent <issue-number> [--set <number>] | siblings <issue-number>",
+                "subcommand is required: children <issue-number> | parent <issue-number> [--set <number>] | siblings <issue-number> | orphans [--include-closed]",
             );
         }
 
@@ -85,7 +89,14 @@ export class IssueHierarchyScript extends ScriptBase<IssueHierarchyDeps, IssueHi
             return { subcommand: "siblings", issueNumber };
         }
 
-        throw new ScriptArgsError(`unknown subcommand '${subcommand}': expected 'children', 'parent', or 'siblings'`);
+        if (subcommand === "orphans") {
+            const includeClosed = !!parsed.values["include-closed"];
+            return { subcommand: "orphans", includeClosed };
+        }
+
+        throw new ScriptArgsError(
+            `unknown subcommand '${subcommand}': expected 'children', 'parent', 'siblings', or 'orphans'`,
+        );
     }
 
     protected async execute(args: IssueHierarchyArgs): Promise<void> {
@@ -94,6 +105,9 @@ export class IssueHierarchyScript extends ScriptBase<IssueHierarchyDeps, IssueHi
             this.emitOk(result);
         } else if (args.subcommand === "siblings") {
             const result = await runSiblings(this.deps, args);
+            this.emitOk(result);
+        } else if (args.subcommand === "orphans") {
+            const result = await runOrphans(this.deps, args);
             this.emitOk(result);
         } else {
             const result = await runParent(this.deps, args);
