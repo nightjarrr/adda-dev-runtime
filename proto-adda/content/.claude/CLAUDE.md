@@ -62,6 +62,12 @@ Every implementation task — regardless of size — follows this workflow from 
 
 Run `/usr/local/libexec/adda-dev-runtime/bin/current-issue show` to read the current issue state, then confirm with PO. PO can provide a different number. If no issue exists yet, use the `/new-issue` skill to create one.
 
+**Establish hierarchy context.** The `current-issue show` output includes `parent`, `children`, and `siblings` fields. Use these to understand the issue's place in the broader effort:
+
+- **Parent (if any):** Read the parent issue's title and body to understand the broader goal this issue contributes to. Fetch details with `gh issue view {parent-number} --json title,body,labels`.
+- **Siblings (if any):** Scan sibling titles and states. Determine whether siblings are immediately related to the current issue (e.g., sequential steps in a task breakdown) or merely logically grouped under the same parent. This distinction affects how you scope the work.
+- **Children (if any):** The current issue may be an umbrella or epic where the real work is decomposed into child issues. If children exist, consider whether work should target child issues rather than this one directly.
+
 Read the issue title, body, labels, and comments:
 
 ```bash
