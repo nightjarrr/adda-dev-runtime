@@ -15,6 +15,9 @@ jobs:
     permissions:
       contents: write
       packages: write
+      id-token: write
+      attestations: write
+      artifact-metadata: write
     steps:
       - uses: actions/checkout@v4
 
@@ -25,17 +28,35 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Stamp and push adda-dev-runtime :version :latest
+      - name: Prepare stamp Dockerfile
         run: |
-          printf 'ARG S\nFROM ${S}\nARG SHA\nENV ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${SHA}\n' \
-            | docker build \
-                --build-arg S="ghcr.io/nightjarrr/adda-dev-runtime:${{ github.sha }}" \
-                --build-arg SHA="${{ github.sha }}" \
-                -t ghcr.io/nightjarrr/adda-dev-runtime:${{ github.ref_name }} \
-                -t ghcr.io/nightjarrr/adda-dev-runtime:latest \
-                -
-          docker push ghcr.io/nightjarrr/adda-dev-runtime:${{ github.ref_name }}
-          docker push ghcr.io/nightjarrr/adda-dev-runtime:latest
+          cat > /tmp/stamp.Dockerfile << 'EOF'
+          ARG S
+          FROM ${S}
+          ARG SHA
+          ENV ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA=${SHA}
+          EOF
+
+      - name: Stamp and push adda-dev-runtime :version :latest
+        id: stamp
+        uses: docker/build-push-action@v6
+        with:
+          file: /tmp/stamp.Dockerfile
+          context: .
+          build-args: |
+            S=ghcr.io/nightjarrr/adda-dev-runtime:${{ github.sha }}
+            SHA=${{ github.sha }}
+          tags: |
+            ghcr.io/nightjarrr/adda-dev-runtime:${{ github.ref_name }}
+            ghcr.io/nightjarrr/adda-dev-runtime:latest
+          push: true
+
+      - name: Attest adda-dev-runtime build provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/nightjarrr/adda-dev-runtime
+          subject-digest: ${{ steps.stamp.outputs.digest }}
+          push-to-registry: true
 
       - name: Retag proto-adda :version :latest
         run: |
@@ -43,6 +64,19 @@ jobs:
             --tag ghcr.io/nightjarrr/proto-adda-dev-runtime:${{ github.ref_name }} \
             --tag ghcr.io/nightjarrr/proto-adda-dev-runtime:latest \
             ghcr.io/nightjarrr/proto-adda-dev-runtime:${{ github.sha }}
+
+      - name: Resolve proto-adda digest
+        id: proto-digest
+        run: |
+          digest=$(docker buildx imagetools inspect ghcr.io/nightjarrr/proto-adda-dev-runtime:${{ github.sha }} --format '{{json .Manifest}}' | jq -r '.digest')
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Attest proto-adda build provenance
+        uses: actions/attest@v4
+        with:
+          subject-name: ghcr.io/nightjarrr/proto-adda-dev-runtime
+          subject-digest: ${{ steps.proto-digest.outputs.digest }}
+          push-to-registry: true
 
       - name: Package launcher
         run: tar -czf adda-dev-launcher-${{ github.ref_name }}.tar.gz -C launcher .
