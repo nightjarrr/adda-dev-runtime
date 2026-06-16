@@ -46,7 +46,7 @@ Before asking anything, inspect the current conversation for information already
    /usr/local/libexec/adda-dev-runtime/bin/current-issue show
    ```
 
-   The command emits a JSON envelope. On success (`status: "ok"`), the `result.issue` object carries the issue id, title, and hierarchy data:
+   The command emits a JSON envelope. On success (`status: "ok"`), the `result.issue` object carries the issue id, title, and other fields. For this skill, only the id and title are relevant:
 
    ```json
    {
@@ -55,9 +55,7 @@ Before asking anything, inspect the current conversation for information already
        "issue": {
          "id": "273",
          "title": "Allow new-issue skill to set parent issue",
-         "type": "feature",
-         "phase": "phase: triage",
-         "state": "open"
+         ...
        }
      },
      "error": null
@@ -65,7 +63,7 @@ Before asking anything, inspect the current conversation for information already
    ```
 
    - If `status` is `"ok"` and `result.issue` is non-null, the active issue exists. Propose it as the parent to the user:
-     > "Make this a child of #273 — Allow new-issue skill to set parent issue?"
+     > "The current active issue is #273 — Allow new-issue skill to set parent issue. Should this new issue be a child of it?"
    - If `status` is `"fail"` or `result.issue` is null, there is no active issue context. Fall through — parent stays unset.
 
 3. **Otherwise.** Parent stays unset. No auto-inference from current-issue in the general case — most created issues are root-level.
