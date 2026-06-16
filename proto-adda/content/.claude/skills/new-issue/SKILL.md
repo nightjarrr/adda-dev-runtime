@@ -64,6 +64,8 @@ Before asking anything, inspect the current conversation for information already
 
    - If `status` is `"ok"` and `result.issue` is non-null, the active issue exists. Propose it as the parent to the user:
      > "The current active issue is #273 — Allow new-issue skill to set parent issue. Should this new issue be a child of it?"
+     - **User confirms** → set parent to the current issue.
+     - **User declines** → ask if they want to specify a different parent number, or proceed without one. If they give a number, use that. Otherwise, parent stays unset.
    - If `status` is `"fail"` or `result.issue` is null, there is no active issue context. Fall through — parent stays unset.
 
 3. **Otherwise.** Parent stays unset. No auto-inference from current-issue in the general case — most created issues are root-level.
@@ -81,16 +83,7 @@ Ask one question at a time and wait for the answer before proceeding — multi-q
 
 Always run this step, regardless of how the fields were gathered.
 
-First, output the current field values as plain text:
-
-```
-Type:   <type>
-Title:  <title>
-Body:   <body content, or "(empty)" if none>
-Parent: <#N — parent issue title, or "(none)" if no parent>
-```
-
-If parent was inferred in Step 1, resolve the title to display it in the confirmation block:
+**Before displaying the confirmation block**, if parent was inferred in Step 1, resolve its title:
 
 - **From current-issue breakdown:** The title was already returned in the `current-issue show` result. Use it directly.
 - **From explicit mention (`"child of #N"`):** Fetch the title:
@@ -103,7 +96,16 @@ If parent was inferred in Step 1, resolve the title to display it in the confirm
   - On success, stdout contains `{ "title": "..." }`. Extract and display the title.
   - On failure (exit non-zero), the parent does not exist or is inaccessible. Report the error and clear the parent field before showing the confirmation block.
 
-Then call `AskUserQuestion`:
+**Then display the confirmation block** with the current field values:
+
+```
+Type:   <type>
+Title:  <title>
+Body:   <body content, or "(empty)" if none>
+Parent: <#N — parent issue title, or "(none)" if no parent>
+```
+
+**Then call `AskUserQuestion`**:
 - Question: "How would you like to proceed?"
 - Options:
   - "Create now" — create the issue with the fields shown above.
@@ -174,7 +176,12 @@ Failure:
 
 **Result interpretation:**
 - If `status` is `"ok"`, the parent link was created successfully. Proceed to reporting.
-- If `status` is `"fail"` or the command exits non-zero, the issue was created but could not be linked. Report clearly:
+- If `status` is `"fail"` or the command exits non-zero, the issue was created but could not be linked. Check `error.reason` to differentiate:
+  - **`shell_error` with a 404 in the API response** → the parent issue does not exist. Tell the user the parent number may be wrong.
+  - **`shell_error` with other exit codes** → the API call failed (network, permissions, etc.). Suggest retrying.
+  - **`internal_error`** → verification after linking failed. The link may or may not have taken effect. Suggest checking manually.
+  
+  In all cases, report clearly:
 
   > "Issue #N was created but could not be attached to parent #{parent}. {error.message}. Use `issue-hierarchy parent #{N} --set {parent}` to retry."
 
@@ -210,75 +217,32 @@ Surface failures clearly and stop. Do not paper over them or retry silently — 
 
 ## Examples
 
-**Example 1 — type and title clear from conversational input:**
+The examples below illustrate the main flows. All produce the same `AskUserQuestion` at confirmation ("Create now", "Write body", "Revise") — only the inference, creation, and reply details vary.
 
-> "let's create a new feature issue to support AVIF input in the jpegify command"
+| Scenario | Type | Title | Body | Parent |
+|---|---|---|---|---|
+| "file a bug" | bug | inferred | — | — |
+| "create a chore to X as child of #N" | chore | inferred | inferred | #N |
+| "break this into sub-issues" | inferred | inferred | — | current issue |
+| "/new-issue-v2" (bare) | ask | ask | — | — |
+| User selects "Write body" | as set | as set | written | as set |
+| User selects "Revise" | discarded | discarded | discarded | discarded |
 
-Type (`feature`) and title inferred. Proceed to confirmation.
-
-Output:
-```
-Type:  feature
-Title: Support AVIF input in the jpegify command
-Body:  (empty)
-```
-
-`AskUserQuestion`: "How would you like to proceed?" → "Create now", "Write body", "Revise"
-
-> selects: "Create now"
-
-```bash
-gh issue create --title "Support AVIF input in the jpegify command" --body "" --label "feature" --label "phase: triage"
-```
-Reply: "Created #73 — Support AVIF input in the jpegify command — https://github.com/owner/repo/issues/73 — labels `feature` and `phase: triage`."
-
----
-
-**Example 2 — type unclear, ask first:**
-
-> "/new-issue-v2 rawtherapee times out on large RAW files"
-
-Title inferred, type unclear. Use `AskUserQuestion` with 4 type choices.
-
-> selects: `bug`
-
-Output:
-```
-Type:  bug
-Title: Rawtherapee times out on large RAW files
-Body:  (empty)
-```
-
-`AskUserQuestion`: "How would you like to proceed?" → "Create now", "Write body", "Revise"
-
-> selects: "Create now"
-
-```bash
-gh issue create --title "Rawtherapee times out on large RAW files" --body "" --label "bug" --label "phase: triage"
-```
-Reply: "Created #73 — Rawtherapee times out on large RAW files — https://github.com/owner/repo/issues/73 — labels `bug` and `phase: triage`."
-
----
-
-**Example 3 — body inferred from multi-sentence input:**
+**Example 1 — all fields inferred, body written to file:**
 
 > "We need to update pre-commit hook versions."
 > "The repo is pinned to stable versions from 2024 and we should refresh to current."
 > "Please file a chore task for this."
 
-All fields inferred, title and body summarized from multiline description. Output:
+All fields inferred, title and body summarized. Confirmation:
 ```
-Type:  chore
-Title: Update pre-commit hook versions to latest stable
-Body:  Currently the repo is using versions pinning, and version update was last done in 2024. Need to run a refresh to current stable versions.
+Type:   chore
+Title:  Update pre-commit hook versions to latest stable
+Body:   Currently the repo is using versions pinning, and version update was last done in 2024. Need to run a refresh to current stable versions.
+Parent: (none)
 ```
 
-`AskUserQuestion`: "How would you like to proceed?" → "Create now", "Write body", "Revise"
-
-> selects: "Create now"
-
-Write body to `/tmp/new-issue-body-3c9f14ab.md`, then:
-
+User selects "Create now". Write body to `/tmp/new-issue-body-3c9f14ab.md`, then:
 ```bash
 gh issue create --title "Update pre-commit hook versions to latest stable" --body-file "/tmp/new-issue-body-3c9f14ab.md" --label "chore" --label "phase: triage"
 ```
@@ -286,125 +250,31 @@ Reply: "Created #73 — Update pre-commit hook versions to latest stable — htt
 
 ---
 
-**Example 4 — no arguments:**
+**Example 2 — type and title asked, body empty:**
 
 > "/new-issue-v2"
 
-Nothing to infer from. Use `AskUserQuestion` with 4 type choices.
-
-> selects: `chore`
-
-Ask in plain text: "What should the issue title say?"
-
-> "Refresh pre-commit hook versions"
-
-Output:
+Nothing to infer. Ask type (selects: `bug`), ask title ("Rawtherapee times out on large RAW files"). Confirmation:
 ```
-Type:  chore
-Title: Refresh pre-commit hook versions
-Body:  (empty)
+Type:   bug
+Title:  Rawtherapee times out on large RAW files
+Body:   (empty)
+Parent: (none)
 ```
 
-`AskUserQuestion`: "How would you like to proceed?" → "Create now", "Write body", "Revise"
-
-> selects: "Create now"
-
+User selects "Create now":
 ```bash
-gh issue create --title "Refresh pre-commit hook versions" --body "" --label "chore" --label "phase: triage"
+gh issue create --title "Rawtherapee times out on large RAW files" --body "" --label "bug" --label "phase: triage"
 ```
-Reply: "Created #74 — Refresh pre-commit hook versions — https://github.com/owner/repo/issues/74 — labels `chore` and `phase: triage`."
+Reply: "Created #74 — Rawtherapee times out on large RAW files — https://github.com/owner/repo/issues/74 — labels `bug` and `phase: triage`."
 
 ---
 
-**Example 5 — writing a body:**
-
-Same as Example 4 up to confirmation. User selects "Write body":
-
-Ask: "What should the body say?"
-
-> "The repo is pinned to versions from 2024 and we should refresh to current."
-
-Output:
-```
-Type:  chore
-Title: Refresh pre-commit hook versions
-Body:  The repo is pinned to versions from 2024 and we should refresh to current.
-```
-
-`AskUserQuestion`: "How would you like to proceed?" → "Create now", "Write body", "Revise"
-
-> selects: "Create now"
-
-Write body to `/tmp/new-issue-body-7e2d05f1.md`, then:
-
-```bash
-gh issue create --title "Refresh pre-commit hook versions" --body-file "/tmp/new-issue-body-7e2d05f1.md" --label "chore" --label "phase: triage"
-```
-Reply: "Created #74 — Refresh pre-commit hook versions — https://github.com/owner/repo/issues/74 — labels `chore` and `phase: triage`."
-
----
-
-**Example 6 — model-triggered with context inference:**
-
-Earlier in conversation: "the ffmpeg timeout on large files is really annoying, we should fix that"
-
-> "track this as an issue"
-
-Infer: type=`bug`, title="FFmpeg times out on large files". Output:
-```
-Type:  bug
-Title: FFmpeg times out on large files
-Body:  (empty)
-```
-
-`AskUserQuestion`: "How would you like to proceed?" → "Create now", "Write body", "Revise"
-
-> selects: "Create now"
-
-```bash
-gh issue create --title "FFmpeg times out on large files" --body "" --label "bug" --label "phase: triage"
-```
-Reply: "Created #75 — FFmpeg times out on large files — https://github.com/owner/repo/issues/75 — labels `bug` and `phase: triage`."
-
----
-
-**Example 7 — going back to revise:**
-
-Same as Example 6 up to confirmation. User selects "Revise":
-
-All fields discarded. Use `AskUserQuestion` with 4 type choices.
-
-> selects: `feature`
-
-Ask in plain text: "What should the issue title say?"
-
-> "Add configurable timeout for FFmpeg commands"
-
-Output:
-```
-Type:  feature
-Title: Add configurable timeout for FFmpeg commands
-Body:  (empty)
-```
-
-`AskUserQuestion`: "How would you like to proceed?" → "Create now", "Write body", "Revise"
-
-> selects: "Create now"
-
-```bash
-gh issue create --title "Add configurable timeout for FFmpeg commands" --body "" --label "feature" --label "phase: triage"
-```
-Reply: "Created #74 — Add configurable timeout for FFmpeg commands — https://github.com/owner/repo/issues/74 — labels `feature` and `phase: triage`."
-
----
-
-**Example 8 — explicit parent from conversation:**
+**Example 3 — explicit parent from conversation:**
 
 > "create a chore for updating README as a child of #340"
 
-Step 1 infers: type=`chore`, title="Update the README", parent=`340`.
-
-Step 3 runs `gh issue view 340 --json title` to resolve the title. Confirmation shows:
+Step 1 infers type=`chore`, title="Update the README", parent=`340`. Step 3 fetches the parent title via `gh issue view 340 --json title`. Confirmation:
 ```
 Type:   chore
 Title:  Update the README
@@ -412,32 +282,23 @@ Body:   (empty)
 Parent: #340 — Issue hierarchy view improvements
 ```
 
-`AskUserQuestion`: "How would you like to proceed?" → "Create now", "Write body", "Revise"
-
-> selects: "Create now"
-
+User selects "Create now":
 ```bash
 gh issue create --title "Update the README" --body "" --label "chore" --label "phase: triage"
 ```
-
-Parse the issue number from the URL (e.g. `#401`). Then run:
+Parse the issue number from the URL (e.g. `#401`). Then:
 ```bash
 /usr/local/libexec/adda-dev-runtime/bin/issue-hierarchy parent 401 --set 340
 ```
-
 Reply: "Created #401 — Update the README — child of #340 — https://github.com/owner/repo/issues/401 — labels `chore` and `phase: triage`."
 
 ---
 
-**Example 9 — inferred parent via current-issue breakdown:**
+**Example 4 — inferred parent via current-issue breakdown:**
 
 > "break this into sub-issues" (while working on #273)
 
-Step 1 detects breakdown intent. Runs `current-issue show`, finds active issue #273, proposes it as parent.
-
-> User confirms: yes, parent is #273
-
-Confirmation shows:
+Step 1 detects breakdown intent, runs `current-issue show`, finds #273, proposes it. User confirms. Title asked ("Update README"). Confirmation:
 ```
 Type:   chore
 Title:  Update README
@@ -445,17 +306,12 @@ Body:   (empty)
 Parent: #273 — Allow new-issue skill to set parent issue
 ```
 
-`AskUserQuestion`: "How would you like to proceed?" → "Create now", "Write body", "Revise"
-
-> selects: "Create now"
-
+User selects "Create now":
 ```bash
 gh issue create --title "Update README" --body "" --label "chore" --label "phase: triage"
 ```
-
-Parse the issue number from the URL (e.g. `#402`). Then run:
+Parse the issue number from the URL (e.g. `#402`). Then:
 ```bash
 /usr/local/libexec/adda-dev-runtime/bin/issue-hierarchy parent 402 --set 273
 ```
-
 Reply: "Created #402 — Update README — child of #273 — https://github.com/owner/repo/issues/402 — labels `chore` and `phase: triage`."
