@@ -563,11 +563,20 @@ Built from `adda-dev-runtime/Dockerfile`. Published as `ghcr.io/{owner}/adda-dev
 
 | Tag | Updated when | Purpose |
 |---|---|---|
-| `edge` | Push to `main` | Most recent main-branch build, SHA-stamped |
+| `edge` | Push to `main`, weekly Sunday 04:00 UTC | Most recent main-branch build, SHA-stamped |
 | `latest` | Release tag push | Most recent versioned release |
 | `v{X.Y.Z}` | Release tag push | Immutable versioned release |
 | `{sha}` | Every CI build | Immutable commit-linked reference; primary intermediate tag |
 | `ci` | Every CI build | Latest CI build (mutable; overwritten each run) |
+
+**SLSA build provenance:** versioned release images (`:v{X.Y.Z}`, `:latest`) are attested with `actions/attest@v4` and the attestation pushed to GHCR. Consumers can verify provenance with:
+
+```bash
+gh attestation verify oci://ghcr.io/{owner}/adda-dev-runtime:{tag} --owner {owner}
+gh attestation verify oci://ghcr.io/{owner}/proto-adda-dev-runtime:{tag} --owner {owner}
+```
+
+Each attestation is signed with a short-lived Sigstore certificate, logged in the Rekor transparency log, and links the image digest to the exact commit and workflow run that produced it.
 
 ---
 
