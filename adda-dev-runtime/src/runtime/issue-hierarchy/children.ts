@@ -1,18 +1,9 @@
 // children subcommand handler for issue-hierarchy.
-import { z } from "zod";
 import type { EnvDep, ShellDep } from "@adda/lib";
 import { buildIssueHeader, parseJson, requireOwnerRepo, ScriptZodValidationError } from "@adda/lib";
 import type { GitHubIssueHeader } from "@adda/lib";
+import { RawIssueSchema } from "./types";
 import type { ChildrenResult, IssueHierarchyArgs } from "./types";
-
-// --- Schema for raw API response (sub_issues endpoint) ---
-
-export const RawIssueSchema = z.object({
-    number: z.number(),
-    title: z.string(),
-    state: z.enum(["open", "closed"]),
-    labels: z.array(z.object({ name: z.string() })),
-});
 
 // --- Fetch ---
 

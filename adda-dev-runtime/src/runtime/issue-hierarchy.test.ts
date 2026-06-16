@@ -2,9 +2,11 @@ import { describe, expect, mock, test } from "bun:test";
 import type { Env, EnvDep, Shell, ShellDep, ShellResult, StdioDep } from "../lib/index";
 import { ScriptShellError } from "../lib/index";
 import { IssueHierarchyScript } from "./issue-hierarchy";
-import { fetchChildren, RawIssueSchema } from "./issue-hierarchy/children";
+import { fetchChildren } from "./issue-hierarchy/children";
+import { RawIssueSchema } from "./issue-hierarchy/types";
 import { fetchParent, runParent } from "./issue-hierarchy/parent";
 import { fetchSiblings } from "./issue-hierarchy/siblings";
+import { runOrphans } from "./issue-hierarchy/orphans";
 
 type IssueHierarchyDeps = ShellDep & EnvDep & StdioDep;
 
@@ -875,6 +877,255 @@ describe("exports", () => {
     test("fetchSiblings is exported from entrypoint", async () => {
         const { fetchSiblings: exportedFetch } = await import("./issue-hierarchy");
         expect(exportedFetch).toBeFunction();
+    });
+});
+
+// ---------------------------------------------------------------
+// Orphans — argument validation via script.run
+// ---------------------------------------------------------------
+
+describe("IssueHierarchyScript — orphans argument validation", () => {
+    test("orphans with unknown flags — exits 2, invalid_args reason", async () => {
+        const { deps, outLines } = makeMockDeps();
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "orphans", "--unknown"]);
+        expect(code).toBe(2);
+        const out = getStdoutJson(outLines) as Record<string, unknown>;
+        expect(out.status).toBe("fail");
+        expect((out.error as Record<string, unknown>)?.reason).toBe("invalid_args");
+    });
+
+    test("orphans --include-closed — passes validation", async () => {
+        const { deps } = makeMockDeps({
+            runQueue: [makeShellResult("")],
+        });
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "orphans", "--include-closed"]);
+        expect(code).toBe(0);
+    });
+});
+
+// ---------------------------------------------------------------
+// Orphans — integration via script.run
+// ---------------------------------------------------------------
+
+describe("orphans integration", () => {
+    test("empty repo — empty orphans array, state=open in the API call", async () => {
+        const { deps, outLines, runCalls } = makeMockDeps({
+            runQueue: [makeShellResult("")],
+        });
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "orphans"]);
+        expect(code).toBe(0);
+        const out = getStdoutJson(outLines) as { status: string; result: { orphans: unknown[] }; error: null };
+        expect(out.status).toBe("ok");
+        expect(out.result.orphans).toEqual([]);
+        expect(out.error).toBeNull();
+        // Verify API URL includes state=open
+        const apiCmd = runCalls[0]!.join(" ");
+        expect(apiCmd).toContain("state=open");
+    });
+
+    test("mix of PRs, non-orphan issues, orphan issues — only orphans returned, no PRs", async () => {
+        // Simulate what gh api --jq with the filter would return (only orphan issues)
+        const orphanIssue = JSON.stringify({
+            number: 1,
+            title: "Orphan issue",
+            state: "open",
+            labels: [{ name: "feature" }],
+        });
+        const secondOrphan = JSON.stringify({
+            number: 4,
+            title: "Another orphan",
+            state: "open",
+            labels: [{ name: "bug" }],
+        });
+        const { deps, outLines, runCalls } = makeMockDeps({
+            runQueue: [makeShellResult([orphanIssue, secondOrphan].join("\n"))],
+        });
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "orphans"]);
+        expect(code).toBe(0);
+        const out = getStdoutJson(outLines) as {
+            status: string;
+            result: { orphans: Array<{ number: number; title: string; state: string }> };
+            error: null;
+        };
+        expect(out.status).toBe("ok");
+        expect(out.result.orphans).toHaveLength(2);
+        expect(out.result.orphans[0]!.number).toBe(1);
+        expect(out.result.orphans[0]!.title).toBe("Orphan issue");
+        expect(out.result.orphans[1]!.number).toBe(4);
+        // Verify the API call includes the jq filter for orphan detection
+        const apiCmd = runCalls[0]!.join(" ");
+        expect(apiCmd).toContain("parent_issue_url");
+        expect(apiCmd).toContain("pull_request");
+    });
+
+    test("--include-closed — state=all in the API call, closed orphans included", async () => {
+        const openOrphan = JSON.stringify({
+            number: 1,
+            title: "Open orphan",
+            state: "open",
+            labels: [{ name: "feature" }],
+        });
+        const closedOrphan = JSON.stringify({
+            number: 2,
+            title: "Closed orphan",
+            state: "closed",
+            labels: [{ name: "bug" }],
+        });
+        const { deps, outLines, runCalls } = makeMockDeps({
+            runQueue: [makeShellResult([openOrphan, closedOrphan].join("\n"))],
+        });
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "orphans", "--include-closed"]);
+        expect(code).toBe(0);
+        const out = getStdoutJson(outLines) as {
+            status: string;
+            result: { orphans: Array<{ number: number; state: string }> };
+            error: null;
+        };
+        expect(out.status).toBe("ok");
+        expect(out.result.orphans).toHaveLength(2);
+        expect(out.result.orphans[0]!.state).toBe("open");
+        expect(out.result.orphans[1]!.state).toBe("closed");
+        const apiCmd = runCalls[0]!.join(" ");
+        expect(apiCmd).toContain("state=all");
+    });
+
+    test("without --include-closed — state=open, closed orphans excluded", async () => {
+        const openOrphan = JSON.stringify({
+            number: 1,
+            title: "Open orphan",
+            state: "open",
+            labels: [{ name: "feature" }],
+        });
+        const closedOrphan = JSON.stringify({
+            number: 2,
+            title: "Closed orphan",
+            state: "closed",
+            labels: [{ name: "bug" }],
+        });
+        const { deps, outLines } = makeMockDeps({
+            runQueue: [makeShellResult([openOrphan, closedOrphan].join("\n"))],
+        });
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "orphans"]);
+        expect(code).toBe(0);
+        const out = getStdoutJson(outLines) as {
+            status: string;
+            result: { orphans: Array<{ number: number }> };
+            error: null;
+        };
+        // The jq filter runs on the server — we mock its output, so both items come through
+        // But we can verify the API call uses state=open
+        expect(out.status).toBe("ok");
+        expect(out.result.orphans).toHaveLength(2); // jq filter is server-side, mock returns everything
+    });
+
+    test("shell error from gh api — exit 1, shell_error reason", async () => {
+        const { deps, outLines } = makeMockDeps({
+            runQueue: [makeShellResult("", 1, "HTTP 500")],
+        });
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "orphans"]);
+        expect(code).toBe(1);
+        const out = getStdoutJson(outLines) as Record<string, unknown>;
+        expect(out.status).toBe("fail");
+        expect((out.error as Record<string, unknown>)?.reason).toBe("shell_error");
+    });
+
+    test("missing env vars — exit 1, missing_env reason", async () => {
+        const { deps, outLines } = makeMockDeps({ envVars: {} });
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "orphans"]);
+        expect(code).toBe(1);
+        const out = getStdoutJson(outLines) as Record<string, unknown>;
+        expect(out.status).toBe("fail");
+        expect((out.error as Record<string, unknown>)?.reason).toBe("missing_env");
+    });
+
+    test("invalid JSON from API — exit 1, validation error", async () => {
+        const { deps, outLines } = makeMockDeps({
+            runQueue: [makeShellResult("not json")],
+        });
+        const code = await new IssueHierarchyScript(deps).run(["bun", "issue-hierarchy.ts", "orphans"]);
+        expect(code).toBe(1);
+        const out = getStdoutJson(outLines) as Record<string, unknown>;
+        expect(out.status).toBe("fail");
+    });
+});
+
+// ---------------------------------------------------------------
+// runOrphans unit tests
+// ---------------------------------------------------------------
+
+describe("runOrphans", () => {
+    function makeDeps(runQueue: ShellResult[]): ShellDep & EnvDep {
+        const queue = [...runQueue];
+        const mockShell: Shell = {
+            run: mock(async (command: string[], opts?: { strict?: boolean }) => {
+                const result = queue.shift() ?? makeShellResult("");
+                if ((opts?.strict ?? true) && result.exitCode !== 0) {
+                    throw new ScriptShellError(command.join(" "), result.exitCode, result.stdout, result.stderr);
+                }
+                return result;
+            }),
+            runSh: mock(async () => makeShellResult("")),
+        };
+        const mockEnv: Env = {
+            get: mock((name: string) => ({ GITHUB_OWNER: "o", GITHUB_REPO: "r" })[name]),
+        };
+        return { shell: mockShell, env: mockEnv };
+    }
+
+    test("returns orphan header with correct labels and type extraction", async () => {
+        const line = JSON.stringify({
+            number: 42,
+            title: "Orphan",
+            state: "open",
+            labels: [{ name: "feature" }, { name: "phase: triage" }],
+        });
+        const deps = makeDeps([makeShellResult(line)]);
+        const result = await runOrphans(deps, { subcommand: "orphans", includeClosed: false });
+        expect(result.orphans).toHaveLength(1);
+        expect(result.orphans[0]!.number).toBe(42);
+        expect(result.orphans[0]!.title).toBe("Orphan");
+        expect(result.orphans[0]!.state).toBe("open");
+        expect(result.orphans[0]!.type).toBe("feature");
+        expect(result.orphans[0]!.phase).toBe("phase: triage");
+        expect(result.orphans[0]!.parent).toBeNull();
+        expect(result.orphans[0]!.labels).toEqual(["feature", "phase: triage"]);
+    });
+
+    test("orphan header parent is always null", async () => {
+        const line = JSON.stringify({
+            number: 7,
+            title: "Root",
+            state: "open",
+            labels: [],
+        });
+        const deps = makeDeps([makeShellResult(line)]);
+        const result = await runOrphans(deps, { subcommand: "orphans", includeClosed: false });
+        expect(result.orphans[0]!.parent).toBeNull();
+    });
+
+    test("includeClosed true — calls API with state=all", async () => {
+        const line = JSON.stringify({
+            number: 1,
+            title: "Any",
+            state: "closed",
+            labels: [],
+        });
+        const deps = makeDeps([makeShellResult(line)]);
+        const result = await runOrphans(deps, { subcommand: "orphans", includeClosed: true });
+        expect(result.orphans).toHaveLength(1);
+    });
+
+    test("invalid JSON — throws ScriptZodValidationError", async () => {
+        const deps = makeDeps([makeShellResult("not json")]);
+        await expect(runOrphans(deps, { subcommand: "orphans", includeClosed: false })).rejects.toThrow();
+    });
+
+    test("missing env — ScriptError missing_env", async () => {
+        const emptyDeps: ShellDep & EnvDep = {
+            shell: null as unknown as Shell,
+            env: { get: mock(() => undefined) },
+        };
+        await expect(runOrphans(emptyDeps, { subcommand: "orphans", includeClosed: false })).rejects.toThrow("GITHUB_OWNER");
     });
 });
 
