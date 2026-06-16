@@ -351,7 +351,7 @@ adda-dev-runtime/src/lib/        # ScriptBase, capability interfaces, Bun implem
 
 No shebang or exec bit in TypeScript sources.
 
-**`import.meta.main` cross-import constraint:** Each entry-point module (any `.ts` file with `if (import.meta.main)`) must be built as a separate entry point — never via a multi-entry `bun build *.ts` glob. The per-entry `for src in ...` loop above enforces this. Additionally, entry-point modules **must not import from other entry-point modules**. When module A imports module B, Bun includes module B in A's bundle. If both have `import.meta.main` guards, `import.meta.main` evaluates to `true` for both in the same process, and the first guard to fire calls `process.exit()` before the intended handler runs. This is a design constraint: shared logic must live in modules without `import.meta.main` and be imported by both entry points.
+**`import.meta.main` cross-import constraint:** Each entry-point module (any `.ts` file with `if (import.meta.main)`) must be built as a separate entry point — never via a multi-entry `bun build *.ts` glob. The per-entry `for src in ...` loop above enforces this. With per-entry builds, a module imported by another entry point has its unused `import.meta.main` guard tree-shaken away (because only the specific named exports that are actually imported survive). Cross-importing entry points is safe *only* when built per-entry.
 
 ---
 
