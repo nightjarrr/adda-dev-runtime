@@ -65,7 +65,7 @@ Before asking anything, inspect the current conversation for information already
    ```
 
    - If `status` is `"ok"` and `result.issue` is non-null, the active issue exists. Propose it as the parent to the user:
-     > "The current active issue is #273 — Allow new-issue skill to set parent issue. Should this new issue be a child of it?"
+     > "Make this a child of #273 — Allow new-issue skill to set parent issue?"
    - If `status` is `"fail"` or `result.issue` is null, there is no active issue context. Fall through — parent stays unset.
 
 3. **Otherwise.** Parent stays unset. No auto-inference from current-issue in the general case — most created issues are root-level.
