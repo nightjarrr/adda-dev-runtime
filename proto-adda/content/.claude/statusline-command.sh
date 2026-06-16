@@ -57,7 +57,7 @@ state="$(printf '%s' "$output" | jq -r '.result.issue.state // empty')"
 pr="$(printf '%s' "$output" | jq -r '.result.issue.pr // empty')"
 
 # Compute left-side visible length (no ANSI codes)
-if [[ "$state" == "CLOSED" ]]; then
+if [[ "$state" == "closed" ]]; then
     left_len=$(( 1 + ${#id} + 1 + 8 + 1 + ${#title} ))
 else
     left_len=$(( 1 + ${#id} + 1 + ${#title} ))
@@ -72,7 +72,7 @@ if [[ $pad -lt 2 ]]; then
     ctx_right=""
 fi
 
-if [[ "$state" == "CLOSED" ]]; then
+if [[ "$state" == "closed" ]]; then
     left_part="$(printf '\033[1;36m#%s\033[0m \033[2;36m[CLOSED]\033[0m \033[1;36m%s\033[0m' "$id" "$title")"
 else
     left_part="$(printf '\033[1;36m#%s\033[0m \033[1;36m%s\033[0m' "$id" "$title")"
