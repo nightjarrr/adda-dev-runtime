@@ -21,11 +21,7 @@ description: |
   Backlog health awareness:
   - "are all issues assigned to an epic?" / "any stray issues?"
   - "show me unparented issues" (orphans)
-allowed-tools: |
-  Bash(/usr/local/libexec/adda-dev-runtime/bin/issue-hierarchy *),
-  Bash(gh search issues *),
-  Bash(gh issue list *),
-  Skill(new-issue)
+allowed-tools: Bash(/usr/local/libexec/adda-dev-runtime/bin/issue-hierarchy *), Bash(gh search issues *), Bash(gh issue list *), Skill(new-issue)
 user-invocable: false
 ---
 
@@ -59,7 +55,7 @@ Use when the user asks what's under an epic or parent issue.
 /usr/local/libexec/adda-dev-runtime/bin/issue-hierarchy children <number>
 ```
 
-**Success — has children:**
+**Result shape:**
 ```json
 {
   "status": "ok",
@@ -81,18 +77,9 @@ Use when the user asks what's under an epic or parent issue.
 }
 ```
 
-**Success — no children:**
-```json
-{
-  "status": "ok",
-  "result": { "parent": 10, "children": [] },
-  "error": null
-}
-```
-
 **Interpretation:**
-- `result.children` is always an array. Length 0 means no sub-issues.
-- Each child has `number`, `title`, `state` (`"open"`/`"closed"`), `type` (first matching label or null), `phase` (first `phase:` label or null), `parent`, and `labels[]`.
+- `result.children` is always an array. An empty array (`[]`) means no sub-issues exist — the issue has no children yet or is not an epic.
+- Each child carries `number`, `title`, `state`, `type`, `phase`, `parent`, and `labels[]`.
 - Present the list to PO in a scannable format (table or bullet list), noting closed/merged status.
 
 ---
@@ -106,7 +93,7 @@ Use when the user asks about an issue's parent, wants to reparent, or wants to d
 /usr/local/libexec/adda-dev-runtime/bin/issue-hierarchy parent <number>
 ```
 
-**Success — has parent:**
+**Result shape (has parent):**
 ```json
 {
   "status": "ok",
@@ -126,14 +113,7 @@ Use when the user asks about an issue's parent, wants to reparent, or wants to d
 }
 ```
 
-**Success — no parent (root-level):**
-```json
-{
-  "status": "ok",
-  "result": { "issue": 42, "parent": null },
-  "error": null
-}
-```
+When the issue has no parent, `result.parent` is `null` instead.
 
 **Set parent (reparent):**
 ```bash
@@ -145,38 +125,11 @@ Use when the user asks about an issue's parent, wants to reparent, or wants to d
 /usr/local/libexec/adda-dev-runtime/bin/issue-hierarchy parent <child-number> --set NONE
 ```
 
-**Success — parent set:**
-```json
-{
-  "status": "ok",
-  "result": {
-    "issue": 5,
-    "parent": {
-      "number": 10,
-      "title": "New parent",
-      "state": "open",
-      "type": "feature",
-      "phase": null,
-      "parent": null,
-      "labels": ["feature"]
-    }
-  },
-  "error": null
-}
-```
-
-**Success — parent unset:**
-```json
-{
-  "status": "ok",
-  "result": { "issue": 5, "parent": null },
-  "error": null
-}
-```
+Both `--set` and `--set NONE` return the same result shape as the read variant above — `parent` contains the new parent object after a set, or is `null` after an unset.
 
 **Interpretation:**
 - `result.parent` is `null` when the issue is root-level. Tell the user it has no parent.
-- `result.parent` is an object when it has a parent. Include the parent title in your response.
+- `result.parent` is a `GitHubIssueHeader` object when it has a parent. Include the parent title in your response.
 - On `--set` / `--set NONE`, success means the operation completed and was verified by re-fetching.
 - On failure with `reason: "shell_error"` and a 404 in stderr, the target parent does not exist. Suggest checking the issue number.
 - On `reason: "internal_error"`, the relationship was set but verification failed — the link may have taken effect. Suggest manual verification via `issue-hierarchy parent <N>`.
@@ -191,7 +144,7 @@ Use when the user asks "what else is under the same parent" or "show siblings".
 /usr/local/libexec/adda-dev-runtime/bin/issue-hierarchy siblings <number>
 ```
 
-**Success — has siblings:**
+**Result shape:**
 ```json
 {
   "status": "ok",
@@ -213,19 +166,10 @@ Use when the user asks "what else is under the same parent" or "show siblings".
 }
 ```
 
-**Success — no parent or no siblings:**
-```json
-{
-  "status": "ok",
-  "result": { "issue": 5, "siblings": [] },
-  "error": null
-}
-```
-
 **Interpretation:**
 - `result.siblings` is `[]` when the issue has no parent (and therefore no siblings) or is the only child.
 - Each sibling has the same `GitHubIssueHeader` shape as children above.
-- Filter based on `state` if the user wants only open/closed siblings.
+- Filter on `state` if the user wants only open/closed siblings.
 
 ---
 
@@ -242,7 +186,7 @@ Include closed issues:
 /usr/local/libexec/adda-dev-runtime/bin/issue-hierarchy orphans --include-closed
 ```
 
-**Success — orphans found:**
+**Result shape:**
 ```json
 {
   "status": "ok",
@@ -263,19 +207,11 @@ Include closed issues:
 }
 ```
 
-**Success — no orphans (all issues have parents):**
-```json
-{
-  "status": "ok",
-  "result": { "orphans": [] },
-  "error": null
-}
-```
-
 **Interpretation:**
-- By default only open issues are returned. Pass `--include-closed` when the user wants the full picture (e.g., backlog health check).
+- An empty array (`[]`) means every issue has a parent — no orphans.
+- By default only open issues are returned. Pass `--include-closed` for the full picture (e.g., backlog health check).
 - Each orphan has `parent: null` by definition.
-- If the user wants to clean up orphans, suggest reparenting via `issue-hierarchy parent <N> --set <M>` or discuss with PO which epic each orphan belongs to.
+- To clean up orphans, suggest reparenting via `issue-hierarchy parent <N> --set <M>` or discuss with PO which epic each orphan belongs to.
 
 ---
 
@@ -289,7 +225,6 @@ Use when the user wants to find issues across the repo by keyword, description, 
 
 ```bash
 gh search issues "<query>" \
-  --repo nightjarrr/adda-dev-runtime \
   --json number,title,state,labels,url \
   --limit 30
 ```
@@ -421,6 +356,19 @@ Each sub-issue is created independently — there is no batch-create command.
 If the user wants to break the *current active issue* into sub-issues, mention the active issue number explicitly so `new-issue`'s parent inference picks it up.
 
 ---
+
+## Conversation examples
+
+| User says | What the model should do |
+|---|---|
+| "what's still open under #348?" | Run `issue-hierarchy children 348`, filter `children` by `state: open`, present as a table with number, title, type, and status |
+| "show me the parent of #358" | Run `issue-hierarchy parent 358`, read `result.parent` — if null say it's root-level; otherwise show the parent title and number |
+| "what else is under the same parent as #347?" | Run `issue-hierarchy siblings 347`, filter out the issue itself from the list, present the remaining siblings |
+| "are there any orphan issues?" / "show me what has no parent" | Run `issue-hierarchy orphans`, present the list. If empty, report "all issues have a parent." |
+| "list all open bugs" | Run `gh issue list --json number,title,state,labels,url --label bug --state open --limit 50`, present the results |
+| "find issues about the CI pipeline" | Run `gh search issues "CI pipeline" --json number,title,state,labels,url --limit 30`, present matches or report none found |
+| "move #358 under #200" | First run `gh issue view 200 --json title` to confirm the target, then confirm with PO: "Move #358 (Streamline new-issue skill...) under #200 (Epic: Proto ADDA)?" On confirmation, run `issue-hierarchy parent 358 --set 200` |
+| "break this down into sub-issues" | For each sub-issue the user describes, invoke the `new-issue` skill with explicit parent reference (e.g., "create a chore for X as a child of #348") so its parent inference picks it up |
 
 ## General failure handling
 
