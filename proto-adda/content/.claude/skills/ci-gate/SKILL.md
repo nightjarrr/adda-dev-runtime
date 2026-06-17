@@ -71,7 +71,7 @@ Dispatch the `ci-monitor` agent (subagent name: `ci-monitor`) with the `mode` an
 
 ## On success result
 
-Report the result to PO with 🟢🟢:
+PO scans the conversation for visual status at a glance — the 🟢🟢 prefix is the anchor they look for. Always lead the report with it:
 
 ```
 🟢🟢 CI is green (<elapsed>)
@@ -81,7 +81,7 @@ Then proceed with the SDLC step.
 
 ## On error result
 
-Report the result to PO with 🟡🟡:
+Same visual-scanning pattern for errors — the 🟡🟡 prefix tells PO the CI tooling itself failed, not the build. Always lead with it:
 
 ```
 🟡🟡 <detail>
@@ -98,7 +98,7 @@ Report the result to PO with 🟡🟡:
 
 ## On failure result
 
-Report the result to PO with 🔴🔴:
+The 🔴🔴 prefix signals a real CI failure that needs attention — PO can see it immediately without reading the details. Always lead with it:
 
 ```
 🔴🔴 CI failed
