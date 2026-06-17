@@ -37,6 +37,10 @@ RUN bun install --frozen-lockfile \
 
 FROM ghcr.io/nightjarrr/adda-dev-runtime:${BASE_TAG}
 
+# Why: pipefail ensures that piped commands fail if any stage fails, not just
+# the last. Required by hadolint (DL4006) and a build-integrity best practice.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
+
 # Build steps require root to write to /usr/local; Tier 1 leaves USER as adda.
 USER root
 

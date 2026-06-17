@@ -544,6 +544,8 @@ These conventions apply to all images in the tier stack.
 
 **Dockerfile quality:** hadolint runs in CI on every Dockerfile change.
 
+**SHELL pipefail:** All Dockerfiles set `SHELL ["/bin/bash", "-o", "pipefail"]` after each `FROM` in the runtime stage. This satisfies hadolint DL4006 and ensures that piped commands (e.g. `echo | sha256sum -c`) fail if *any* stage in the pipeline fails, not just the last. The directive applies to all subsequent `RUN` commands and does not affect build stages that use `/bin/sh`.
+
 **TypeScript compilation:** Bun executables are compiled in a multi-stage build. A `bun-builder` stage compiles `.ts` source files to extensionless executables; the runtime stage copies only the compiled output and pruned `node_modules`.
 
 **GHCR distribution:** production images are published to GHCR. Each build is tagged with its commit SHA for immutable reference.

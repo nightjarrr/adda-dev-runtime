@@ -35,6 +35,26 @@ Apply all bash conventions above.
   (hadolint suppression must be the line immediately before the `RUN` instruction).
 - All `RUN` steps must pass `hadolint` (enforced in CI `base.yml`).
 
+## SHA256 verification for curl downloads in Dockerfiles
+
+- **Purpose:** Every binary or archive downloaded via `curl` in a Dockerfile is verified against a hardcoded SHA256 hash to provide tamper resistance and supply chain integrity. The hash is embedded as a literal string (never an `ARG` — ARG is overridable at build time and defeats the protection).
+
+- **Pattern:** After each `curl` download, add a `sha256sum -c` line in the `&&` chain:
+  ```dockerfile
+  RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "<url>" \
+          -o <file> \
+      && echo "<sha256>  <file>" | sha256sum -c \
+      && ... (extract/install the artifact) ...
+  ```
+
+- **Hash sourcing:**
+  - When the upstream project publishes a checksum file (e.g., GitHub CLI's `checksums.txt`, Bun's `SHASUMS256.txt`), use the hash from that file.
+  - When no published checksum file exists (e.g., micro, delta), download the artifact, compute the hash locally with `sha256sum`, and hardcode it.
+
+- **Version bump procedure:** When bumping a tool version, recompute the SHA256 for that version's artifact and update both the hash in the verification command and the hash in the version comment block at the top of the Dockerfile.
+
+- **Adding a new curl-installed program:** After adding the `curl` download line, immediately add a `sha256sum -c` verification line with a hardcoded hash before using the artifact. Document the hash in the version comment block at the top of the Dockerfile.
+
 ## Bun/TypeScript
 
 Source placement by tier and purpose:

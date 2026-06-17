@@ -8,11 +8,22 @@
 # AI tooling and project-specific dependencies.
 #
 # Pinned versions (update via chore Issue when bumping):
+#   SHA256 hashes below are verified with `sha256sum -c` after each curl download.
+#   When bumping a version, update the corresponding hash alongside.
+#   To obtain a new hash:
+#     - GitHub CLI, Bun: fetch the release's published checksum file
+#     - Other tools: download artifact and compute with `sha256sum`
+#
 #   Base image:    debian:12.11-slim              # 2026-05-22 (current Debian 12 point release)
 #   GitHub CLI:    2.91.0                        # Apr 22, 2026
+#     SHA256:      f87e4ea0bd55abad3c9c565f4fdb2eb040adabe5638a5a2e0917253cb58fdc3a
 #   Micro:         2.0.15
+#     SHA256:      267d238eac1e26ed053d13d4d48bd421b87f9eb538b604f0b2f74a85598b6cc2
 #   Delta:         0.19.2
+#     SHA256:      f1ea01ca7728ce3462debc359f39dfc7cbbc1a63224b71fefabf92042864aa1b  (binary tarball)
+#     SHA256:      90f1b33b86f3517500786f36523464eb6d6e2f57da34e65f378c0d4dcd6878de  (themes.gitconfig)
 #   Bun:           1.3.14                        # 2026-05-24
+#     SHA256:      a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7
 # ======================================================================
 
 ARG BUN_VERSION=1.3.14
@@ -46,6 +57,11 @@ RUN bun install --frozen-lockfile \
 # ======================================================================
 
 FROM debian:12.11-slim
+
+# Why: pipefail ensures that piped commands (e.g. echo | sha256sum -c) fail
+# if any stage in the pipeline fails, not just the last. This satisfies
+# hadolint DL4006 and is a build-integrity best practice.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # ----------------------------------------------------------------------
 # Environment defaults that apply for both build and runtime.
@@ -103,6 +119,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ----------------------------------------------------------------------
 RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/cli/cli/releases/download/v2.91.0/gh_2.91.0_linux_amd64.deb" \
         -o /tmp/gh.deb \
+    && echo "f87e4ea0bd55abad3c9c565f4fdb2eb040adabe5638a5a2e0917253cb58fdc3a  /tmp/gh.deb" | sha256sum -c \
     && apt-get install -y --no-install-recommends /tmp/gh.deb \
     && rm /tmp/gh.deb \
     && rm -rf /var/lib/apt/lists/*
@@ -116,6 +133,7 @@ ENV MICRO_VERSION=2.0.15 \
     VISUAL=micro
 RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/micro-editor/micro/releases/download/v${MICRO_VERSION}/micro-${MICRO_VERSION}-linux64-static.tar.gz" \
         -o /tmp/micro.tar.gz \
+    && echo "267d238eac1e26ed053d13d4d48bd421b87f9eb538b604f0b2f74a85598b6cc2  /tmp/micro.tar.gz" | sha256sum -c \
     && tar -xzf /tmp/micro.tar.gz -C /tmp \
     && mv /tmp/micro-${MICRO_VERSION}/micro /usr/local/bin/micro \
     && rm /tmp/micro.tar.gz \
@@ -128,6 +146,7 @@ RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com
 ENV DELTA_VERSION=0.19.2
 RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/delta-${DELTA_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
         -o /tmp/delta.tar.gz \
+    && echo "f1ea01ca7728ce3462debc359f39dfc7cbbc1a63224b71fefabf92042864aa1b  /tmp/delta.tar.gz" | sha256sum -c \
     && tar -xzf /tmp/delta.tar.gz -C /tmp \
     && mv /tmp/delta-${DELTA_VERSION}-x86_64-unknown-linux-musl/delta /usr/local/bin/delta \
     && rm /tmp/delta.tar.gz \
@@ -139,6 +158,7 @@ RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com
     && mkdir -p /etc/delta \
     && curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://raw.githubusercontent.com/dandavison/delta/${DELTA_VERSION}/themes.gitconfig" \
         -o /etc/delta/themes.gitconfig \
+    && echo "90f1b33b86f3517500786f36523464eb6d6e2f57da34e65f378c0d4dcd6878de  /etc/delta/themes.gitconfig" | sha256sum -c \
     && git config --system include.path /etc/delta/themes.gitconfig \
     && git config --system delta.features mellow-barbet \
     && git config --system delta.side-by-side false
@@ -155,6 +175,7 @@ ENV BUN_VERSION=${BUN_VERSION}
 RUN apt-get update && apt-get install -y --no-install-recommends unzip \
     && curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64-baseline.zip" \
         -o /tmp/bun.zip \
+    && echo "a063908ae08b7852ca10939bbdc6ceed3ddabce8fb9402dce83d65d73b36e6c7  /tmp/bun.zip" | sha256sum -c \
     && unzip -j /tmp/bun.zip 'bun-linux-x64-baseline/bun' -d /usr/local/bin/ \
     && rm /tmp/bun.zip \
     && ln -s /usr/local/bin/bun /usr/local/bin/node \
