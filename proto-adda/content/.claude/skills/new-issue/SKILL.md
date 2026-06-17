@@ -265,7 +265,7 @@ Reply: "Created #73 — Update pre-commit hook versions to latest stable — htt
 
 **Example 2 — ambiguous request resolved through conversation:**
 
-> "/new-issue-v2"
+> "/new-issue"
 
 No prior context. Phase 1 begins: "Sure! What would you like to create an issue about?" User says "There's a bug in the image upload dialog — it crashes when I select a RAW file." Type and title are now clear.
 
