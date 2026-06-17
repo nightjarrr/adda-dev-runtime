@@ -58,6 +58,11 @@ RUN bun install --frozen-lockfile \
 
 FROM debian:12.11-slim
 
+# Why: pipefail ensures that piped commands (e.g. echo | sha256sum -c) fail
+# if any stage in the pipeline fails, not just the last. This satisfies
+# hadolint DL4006 and is a build-integrity best practice.
+SHELL ["/bin/bash", "-o", "pipefail"]
+
 # ----------------------------------------------------------------------
 # Environment defaults that apply for both build and runtime.
 # TZ is supplied by the launcher at run time (-e TZ=...) and read by
@@ -112,9 +117,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # ----------------------------------------------------------------------
 # GitHub CLI (gh) — installed from the official .deb release
 # ----------------------------------------------------------------------
-# Why: echo-to-sha256sum pipe is used deliberately for inline verification;
-# /bin/bash in debian:12-slim supports pipefail natively.
-# hadolint ignore=DL4006
 RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/cli/cli/releases/download/v2.91.0/gh_2.91.0_linux_amd64.deb" \
         -o /tmp/gh.deb \
     && echo "f87e4ea0bd55abad3c9c565f4fdb2eb040adabe5638a5a2e0917253cb58fdc3a  /tmp/gh.deb" | sha256sum -c \
@@ -129,9 +131,6 @@ RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com
 ENV MICRO_VERSION=2.0.15 \
     EDITOR=micro \
     VISUAL=micro
-# Why: echo-to-sha256sum pipe is used deliberately for inline verification;
-# /bin/bash in debian:12-slim supports pipefail natively.
-# hadolint ignore=DL4006
 RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/micro-editor/micro/releases/download/v${MICRO_VERSION}/micro-${MICRO_VERSION}-linux64-static.tar.gz" \
         -o /tmp/micro.tar.gz \
     && echo "267d238eac1e26ed053d13d4d48bd421b87f9eb538b604f0b2f74a85598b6cc2  /tmp/micro.tar.gz" | sha256sum -c \
@@ -145,9 +144,6 @@ RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com
 # Static (musl) binary; no runtime dependencies.
 # ----------------------------------------------------------------------
 ENV DELTA_VERSION=0.19.2
-# Why: echo-to-sha256sum pipe is used deliberately for inline verification;
-# /bin/bash in debian:12-slim supports pipefail natively.
-# hadolint ignore=DL4006
 RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/dandavison/delta/releases/download/${DELTA_VERSION}/delta-${DELTA_VERSION}-x86_64-unknown-linux-musl.tar.gz" \
         -o /tmp/delta.tar.gz \
     && echo "f1ea01ca7728ce3462debc359f39dfc7cbbc1a63224b71fefabf92042864aa1b  /tmp/delta.tar.gz" | sha256sum -c \
@@ -175,8 +171,7 @@ RUN curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com
 ARG BUN_VERSION
 ENV BUN_VERSION=${BUN_VERSION}
 # Why: unzip is not version-pinned for the same reason as the main apt block above.
-# The echo-to-sha256sum pipe is deliberate; /bin/bash in debian:12-slim supports pipefail.
-# hadolint ignore=DL3008,DL4006
+# hadolint ignore=DL3008
 RUN apt-get update && apt-get install -y --no-install-recommends unzip \
     && curl -fsSL --retry 3 --retry-delay 10 --retry-all-errors "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64-baseline.zip" \
         -o /tmp/bun.zip \
