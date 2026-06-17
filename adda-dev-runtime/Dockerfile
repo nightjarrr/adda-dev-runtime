@@ -61,7 +61,7 @@ FROM debian:12.11-slim
 # Why: pipefail ensures that piped commands (e.g. echo | sha256sum -c) fail
 # if any stage in the pipeline fails, not just the last. This satisfies
 # hadolint DL4006 and is a build-integrity best practice.
-SHELL ["/bin/bash", "-o", "pipefail"]
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # ----------------------------------------------------------------------
 # Environment defaults that apply for both build and runtime.
