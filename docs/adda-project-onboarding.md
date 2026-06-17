@@ -4,7 +4,7 @@ A checklist for setting up a new GitHub repository as an ADDA project. Designed 
 
 **Companion documents:**
 - [ADDA SDLC master doc](https://github.com/nightjarrr/molim/blob/main/docs/adda-sdlc.md) — the vendor-agnostic Agentic SDLC design that this guide supports
-- [ADDA Dev Runtime — conceptual design](adda-dev-runtime-design.md) — the runtime's architecture (Tier 1/2/3), design principles, and threat model. The "host" referenced by this guide is the runtime container; the "project" is a Tier 3 repository in that model
+- [ADDA Dev Runtime — conceptual design](adda-dev-runtime-design.md) — the runtime's architecture (Tier 1/2/3), design principles, and threat model. The "project" in this guide is a Tier 3 repository in that model
 - [ADDA Dev Runtime — technical design](adda-dev-runtime-technical-design.md) — implementation details for Tier 3 compliance (init hook, quality gates, repository layout)
 
 ---
@@ -25,7 +25,7 @@ Configure the repository after creation, before the first agent-driven commit re
   - Dismiss stale reviews on push: off
   - Require review thread resolution: on
   - Required status checks (added after CI is wired up — see CI/CD section)
-  - Non-fast-forward updates
+  - Non-fast-forward updates — prevents force pushes; the branch is only advanceable by adding commits
   - Deletion prevention
 - [ ] **Merge settings** — all three merge methods may remain enabled (merge commit, squash, rebase). Delete branch on merge recommended.
 - [ ] **Wiki** — disable unless needed. Issues and `docs/` serve the documentation role.
@@ -47,7 +47,7 @@ Standard files every project should carry.
 - [ ] **Issue templates** — `.github/ISSUE_TEMPLATE/` — at minimum a bug report and a feature request template.
 - [ ] **PR template** — `.github/pull_request_template.md` — reminder checklist for the PR author.
 - [ ] **`.gitignore`** — per-project language and tooling exclusions.
-- [ ] **Pre-commit hooks** — must be configured per project language. Runs quality gates locally before each commit, providing rapid feedback before CI. Use a hook config (e.g. `.pre-commit-config.yaml`) that mirrors the quality gates.
+- [ ] **Pre-commit hooks** — must be configured per project language. Invokes the `quality-gates` script locally before each commit, providing rapid feedback before CI. Use a hook config (e.g. `.pre-commit-config.yaml`) that runs `quality-gates`.
 
 ---
 
