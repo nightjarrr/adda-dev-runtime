@@ -32,6 +32,8 @@ Configure the repository after creation, before the first agent-driven commit re
 - [ ] **Discussions** — disable unless needed.
 - [ ] **Allow auto-merge** — disable; merge is a manual PO action.
 - [ ] **Allow update branch** — enable. Lets the agent keep PR branches up to date with `main` as it advances without manual rebase.
+- [ ] **Description and topics** — set a concise repository description and relevant topics for discoverability.
+- [ ] **Tag protection** — create a tag protection rule for release tags (e.g. `v*`) to prevent accidental deletion or forced update.
 
 ---
 
@@ -39,7 +41,7 @@ Configure the repository after creation, before the first agent-driven commit re
 
 Standard files every project should carry.
 
-- [ ] **README** — project name, purpose, quick-start, pointer to SDLC workflow.
+- [ ] **README** — project name, purpose, quick-start, pointer to SDLC workflow. Include badges for CI status, latest release version, and any relevant project metadata.
 - [ ] **LICENSE** — MIT, Apache 2.0, or project-appropriate license.
 - [ ] **CONTRIBUTING** — how to open issues, submit PRs, and engage with the project.
 - [ ] **SECURITY** — how to report vulnerabilities.
@@ -95,8 +97,6 @@ These items are considered relevant to a well-configured ADDA project but need f
 
 - **Branch naming rules** — enforce ADDA branch naming (`type/issue-id-slug`) via the ruleset. Ensures consistency but adds friction for non-standard branch names.
 - **Merge message format** — squash merge defaults (PR title + all commits) vs. a more curated format. Affects `git log` readability.
-- **Tag protection** — prevents accidental deletion or forced update of release tags. Relevant for the release workflow.
 - **Squash merge restriction** — limiting to squash-only reduces history complexity but loses individual commit structure from feature branches.
-- **Repository topics / description** — discoverability via GitHub search.
 - **Security settings** — private vulnerability reporting, Dependabot alerts, secret scanning. Depends on repo visibility and GitHub plan.
 - **Copilot code review** — automated AI review on PRs. Useful but adds noise on small changes.
