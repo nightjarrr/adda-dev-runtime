@@ -1,12 +1,11 @@
 ---
 name: ci-gate
 description: >
-  Invoke when CI must pass before the current SDLC step can proceed — e.g. to
-  monitor CI on a feature branch push, watch PR checks, track CI after a merge
-  to main, or verify a release tag workflow. Dispatches ci-monitor, interprets
-  the result, iterates on code_fix failures with a loop-break rule in the coding
-  phase, and applies context-aware triage. The current step is not complete
-  until CI is green.
+  Invoke when CI must pass before the current SDLC step can proceed, or
+  automatically after any action PM takes that triggers a CI run (push commits,
+  open a PR, cut a release). Also invoke when PO reports a merge — monitor CI on
+  main after the merge. Dispatches ci-monitor, interprets the result, iterates on
+  code_fix failures with a loop-break rule, and applies context-aware triage.
 user-invocable: false
 ---
 
