@@ -69,13 +69,23 @@ Dispatch the `ci-monitor` agent (subagent name: `ci-monitor`) with the `mode` an
 **Confidence:** [high | medium | low]
 ```
 
-All results surfaced to PO must include a double-circle emoji prefix for visual scanning: 🟢🟢 for success, 🟡🟡 for script/ci-watch error, 🔴🔴 for CI failure.
-
 ## On success result
 
-Report to PO: 🟢🟢 CI is green (include elapsed time from `ci-monitor`'s result). Then proceed with the SDLC step.
+Report the result to PO with 🟢🟢:
+
+```
+🟢🟢 CI is green (<elapsed>)
+```
+
+Then proceed with the SDLC step.
 
 ## On error result
+
+Report the result to PO with 🟡🟡:
+
+```
+🟡🟡 <detail>
+```
 
 `ci-monitor` returns `**Result:** error` when the `ci-watch` script itself could not run. Act as follows:
 
@@ -87,6 +97,14 @@ Report to PO: 🟢🟢 CI is green (include elapsed time from `ci-monitor`'s res
 - **Any other error** — surface the 🟡🟡 detail to PO immediately and wait for direction.
 
 ## On failure result
+
+Report the result to PO with 🔴🔴:
+
+```
+🔴🔴 CI failed
+Classification: <type>
+Run URL: <url>
+```
 
 Act on the `classification` field and the current SDLC context.
 
