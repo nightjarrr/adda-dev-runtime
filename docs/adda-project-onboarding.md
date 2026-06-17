@@ -57,7 +57,7 @@ ADDA-specific files that a project needs to participate in the SDLC.
 
 - [ ] **Agent context file** — project-specific orientation for the AI agent: repo layout, conventions, toolchain. The file name depends on the Tier 2 implementation (e.g. `CLAUDE.md` for proto-adda).
 - [ ] **`.adda-init.sh`** — repo-level init hook, if project dependencies must be installed. See technical design (Tier 3 → Init hook) for the spec.
-- [ ] **`.quality-gates.toml`** — quality gate definitions. Required — without it, agent commits are not gated. An absent file means no checks run. See technical design (Tier 3 → Repository layout) for the file name and structure. See Quality Gates Reference below for configuration guidance.
+- [ ] **`.quality-gates.toml`** — quality gate definitions. Required — without it, quality gates error and fail. See technical design (Tier 3 → Repository layout) for the file name and structure. See Quality Gates Reference below for configuration guidance.
 - [ ] **`docs/architecture.md`** — project architecture reference for agents.
 - [ ] **`docs/conventions.md`** — coding and naming conventions.
 - [ ] **SDLC labels** — bootstrap the standard label set by running the `ensure-github-labels` skill (available in proto-adda and other Tier 2 implementations).
@@ -80,7 +80,7 @@ GitHub Actions required for the SDLC to operate.
 
 The `.quality-gates.toml` file lists commands that must pass before code is committed or pushed. Each non-comment line is a command; a zero exit status means PASS.
 
-- **Required:** the file must exist and be non-empty for quality gates to be enforced. An absent file means no checks run — agent commits proceed un-gated.
+- **Required:** the file must exist and be non-empty for quality gates to be enforced. An absent file causes quality gates to error and fail.
 - **Ordering:** auto-fixers before verifiers, so verifiers run on already-fixed code (e.g. `ruff check --fix .` before `ruff check .`).
 - **Tool variant choice:** auto-fixing variants (e.g. `--fix`, `--format` in place) are preferred when available — they reduce friction. The verifier after them catches what the fixer missed.
 - **What PASS means:** a command that auto-fixes and exits 0 counts as PASS. Files may have been modified even on a green run.
