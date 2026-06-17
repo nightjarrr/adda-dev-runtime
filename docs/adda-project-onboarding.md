@@ -3,21 +3,21 @@
 A checklist for setting up a new GitHub repository as an ADDA project. Designed to be followed by a human Project Owner working with an ADDA agent team.
 
 **Companion documents:**
-- [Conceptual design](adda-dev-runtime-design.md) — tier architecture, design principles, threat model
-- [Technical design](adda-dev-runtime-technical-design.md) — Tier 3 infrastructure spec (init hook, quality gates, repository layout)
-- [ADDA SDLC master doc](https://github.com/nightjarrr/molim/blob/main/docs/adda-sdlc.md) — vendor-agnostic SDLC design
+- [ADDA SDLC master doc](https://github.com/nightjarrr/molim/blob/main/docs/adda-sdlc.md) — the vendor-agnostic Agentic SDLC design that this guide supports
+- [ADDA Dev Runtime — conceptual design](adda-dev-runtime-design.md) — the runtime's architecture (Tier 1/2/3), design principles, and threat model. The "host" referenced by this guide is the runtime container; the "project" is a Tier 3 repository in that model
+- [ADDA Dev Runtime — technical design](adda-dev-runtime-technical-design.md) — implementation details for Tier 3 compliance (init hook, quality gates, repository layout)
 
 ---
 
 ## Prerequisites
 
-A machine running the ADDA Dev Runtime launcher (see [host system setup guide](host-system-setup.md) for host preparation). A GitHub account with a scoped token for the new repository.
+A GitHub repository (public or private — no practical difference for ADDA features) owned by a GitHub account with admin access, with Issues enabled. A machine running the ADDA Dev Runtime launcher (see [host system setup guide](host-system-setup.md) for host preparation). A GitHub token scoped to the repository.
 
 ---
 
 ## GitHub repo setup
 
-Configure the repository before any code is pushed.
+Configure the repository after creation, before the first agent-driven commit reaches it.
 
 - [ ] **Branch ruleset** — create a ruleset targeting the default branch (`main`) with:
   - Pull request required
@@ -31,7 +31,7 @@ Configure the repository before any code is pushed.
 - [ ] **Wiki** — disable unless needed. Issues and `docs/` serve the documentation role.
 - [ ] **Discussions** — disable unless needed.
 - [ ] **Allow auto-merge** — disable; merge is a manual PO action.
-- [ ] **Allow update branch** — enable; lets PR branches track `main` as it advances.
+- [ ] **Allow update branch** — enable. Lets the agent keep PR branches up to date with `main` as it advances without manual rebase.
 
 ---
 
@@ -47,7 +47,7 @@ Standard files every project should carry.
 - [ ] **Issue templates** — `.github/ISSUE_TEMPLATE/` — at minimum a bug report and a feature request template.
 - [ ] **PR template** — `.github/pull_request_template.md` — reminder checklist for the PR author.
 - [ ] **`.gitignore`** — per-project language and tooling exclusions.
-- [ ] **Pre-commit hooks** — optional but recommended. Can run quality gates locally before each commit. Use a hook config (e.g. `.pre-commit-config.yaml`) that mirrors the quality gates.
+- [ ] **Pre-commit hooks** — must be configured per project language. Runs quality gates locally before each commit, providing rapid feedback before CI. Use a hook config (e.g. `.pre-commit-config.yaml`) that mirrors the quality gates.
 
 ---
 
@@ -55,13 +55,13 @@ Standard files every project should carry.
 
 ADDA-specific files that a project needs to participate in the SDLC.
 
-- [ ] **`CLAUDE.md`** — project-specific agent context: repo layout, conventions, toolchain. See technical design for the file structure.
+- [ ] **Agent context file** — project-specific orientation for the AI agent: repo layout, conventions, toolchain. The file name depends on the Tier 2 implementation (e.g. `CLAUDE.md` for proto-adda).
 - [ ] **`.adda-init.sh`** — repo-level init hook, if project dependencies must be installed. See technical design (Tier 3 → Init hook) for the spec.
-- [ ] **`.quality-gates.toml`** — quality gate definitions. See technical design (Tier 3 → Repository layout) for the file name and structure. See Quality Gates Reference below for configuration guidance.
+- [ ] **`.quality-gates.toml`** — quality gate definitions. Required — without it, agent commits are not gated. An absent file means no checks run. See technical design (Tier 3 → Repository layout) for the file name and structure. See Quality Gates Reference below for configuration guidance.
 - [ ] **`docs/architecture.md`** — project architecture reference for agents.
 - [ ] **`docs/conventions.md`** — coding and naming conventions.
-- [ ] **SDLC labels** — bootstrap the standard label set by running the `ensure-github-labels` tool.
-- [ ] **Dockerfile** — optional. Only needed when the project requires OS-level tooling not in Tier 1.
+- [ ] **SDLC labels** — bootstrap the standard label set by running the `ensure-github-labels` skill (available in proto-adda and other Tier 2 implementations).
+- [ ] **Dockerfile** — optional. Only needed when the project requires OS-level tooling not present in Tier 1 or Tier 2.
 - [ ] **`CHANGELOG.md`** — running changelog with an `UPCOMING` section.
 
 ---
@@ -70,7 +70,7 @@ ADDA-specific files that a project needs to participate in the SDLC.
 
 GitHub Actions required for the SDLC to operate.
 
-- [ ] **CI workflow** — runs on push to any branch and on PR. Runs quality gates (tests, typecheck, lint, format) and any build step. Required checks from this workflow are wired into the branch ruleset.
+- [ ] **CI workflow** — runs on push to any branch and on PR. Runs the same commands defined in `.quality-gates.toml` (tests, typecheck, lint, format) plus any project-specific build step. Required checks from this workflow are wired into the branch ruleset.
 - [ ] **Release workflow** — fires on `v*` tag pushes. Publishes artifacts, creates a GitHub release. Only needed if the project produces distributable artifacts.
 - [ ] **Dependabot** — enable for dependency updates. Configure version update schedule and reviewers.
 
@@ -80,6 +80,7 @@ GitHub Actions required for the SDLC to operate.
 
 The `.quality-gates.toml` file lists commands that must pass before code is committed or pushed. Each non-comment line is a command; a zero exit status means PASS.
 
+- **Required:** the file must exist and be non-empty for quality gates to be enforced. An absent file means no checks run — agent commits proceed un-gated.
 - **Ordering:** auto-fixers before verifiers, so verifiers run on already-fixed code (e.g. `ruff check --fix .` before `ruff check .`).
 - **Tool variant choice:** auto-fixing variants (e.g. `--fix`, `--format` in place) are preferred when available — they reduce friction. The verifier after them catches what the fixer missed.
 - **What PASS means:** a command that auto-fixes and exits 0 counts as PASS. Files may have been modified even on a green run.
