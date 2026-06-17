@@ -1,12 +1,11 @@
 ---
 name: ci-gate
 description: >
-  Invoke when CI must pass before the current SDLC step can proceed — e.g. to
-  monitor CI on a feature branch push, watch PR checks, track CI after a merge
-  to main, or verify a release tag workflow. Dispatches ci-monitor, interprets
-  the result, iterates on code_fix failures with a loop-break rule in the coding
-  phase, and applies context-aware triage. The current step is not complete
-  until CI is green.
+  Invoke when CI must pass before the current SDLC step can proceed, or
+  automatically after any action PM takes that triggers a CI run (push commits,
+  open a PR, cut a release). Also invoke when PO reports a merge — monitor CI on
+  main after the merge. Dispatches ci-monitor, interprets the result, iterates on
+  code_fix failures with a loop-break rule, and applies context-aware triage.
 user-invocable: false
 ---
 
@@ -71,34 +70,54 @@ Dispatch the `ci-monitor` agent (subagent name: `ci-monitor`) with the `mode` an
 
 ## On success result
 
-Report to PO: CI is green (include elapsed time from `ci-monitor`'s result). Then proceed with the SDLC step.
+PO scans the conversation for visual status at a glance — the 🟢🟢 prefix is the anchor they look for. Always lead the report with it:
+
+```
+🟢🟢 CI is green (<elapsed>)
+```
+
+Then proceed with the SDLC step.
 
 ## On error result
 
+Same visual-scanning pattern for errors — the 🟡🟡 prefix tells PO the CI tooling itself failed, not the build. Always lead with it:
+
+```
+🟡🟡 <detail>
+```
+
 `ci-monitor` returns `**Result:** error` when the `ci-watch` script itself could not run. Act as follows:
 
-- **Timing indicator** (detail contains "no push run found" or similar, indicating the script ran before CI infrastructure had a chance to schedule the runs) — return to **Dispatch ci-monitor** and retry once. If the retry also returns `error`, surface the detail to PO and wait for direction.
+- **Timing indicator** (detail contains "no push run found" or similar, indicating the script ran before CI infrastructure had a chance to schedule the runs) — return to **Dispatch ci-monitor** and retry once. If the retry also returns `error`, surface the 🟡🟡 detail to PO and wait for direction.
 - **Ref resolution error** (detail contains "cannot resolve branch", "cannot resolve tag", "cannot resolve" a PR or commit) — two sub-cases:
   - *Format mismatch*: the ref doesn't match the expected syntax for the mode — a `pr` ref should be a plain integer; a `branch` ref should be a valid branch name (no spaces, not a bare number); a `tag` ref should match a version pattern (e.g. `vX.Y.Z`). If clearly violated, re-dispatch once with a corrected ref.
   - *Correct format, wrong data*: the ref is syntactically valid but drawn from the wrong identifier — e.g., an issue ID used where a PR number was expected. Check the dispatch context: if you can identify the correct value from context, re-dispatch once with it.
-  - In either sub-case, if the re-dispatch also returns `error`, or no correction can be identified, surface the detail to PO and wait for direction.
-- **Any other error** — surface the detail to PO immediately and wait for direction.
+  - In either sub-case, if the re-dispatch also returns `error`, or no correction can be identified, surface the 🟡🟡 detail to PO and wait for direction.
+- **Any other error** — surface the 🟡🟡 detail to PO immediately and wait for direction.
 
 ## On failure result
+
+The 🔴🔴 prefix signals a real CI failure that needs attention — PO can see it immediately without reading the details. Always lead with it:
+
+```
+🔴🔴 CI failed
+Classification: <type>
+Run URL: <url>
+```
 
 Act on the `classification` field and the current SDLC context.
 
 ### transient (any context)
 
-Surface `ci-monitor`'s result to PO including the failing run URL. Ask PO to re-run the failed workflow — the GitHub access token does not grant permission to trigger workflow re-runs directly. Wait for PO confirmation, then return to **Dispatch ci-monitor** above and dispatch again.
+Surface 🔴🔴 `ci-monitor`'s result to PO including the failing run URL. Ask PO to re-run the failed workflow — the GitHub access token does not grant permission to trigger workflow re-runs directly. Wait for PO confirmation, then return to **Dispatch ci-monitor** above and dispatch again.
 
 ### ci_infra (any context)
 
-Surface `ci-monitor`'s full result to PO. Wait for PO direction before proceeding.
+Surface 🔴🔴 `ci-monitor`'s full result to PO. Wait for PO direction before proceeding.
 
 ### unclear (any context)
 
-Surface `ci-monitor`'s full result to PO. Wait for PO direction before proceeding.
+Surface 🔴🔴 `ci-monitor`'s full result to PO. Wait for PO direction before proceeding.
 
 ### code_fix
 
@@ -110,12 +129,12 @@ Dispatch Coder (`coder` subagent) with: the current implementation plan, Coder's
 
 > If no previous Coder response exists (e.g. a change was made directly in-session rather than via Coder dispatch), summarize your own recent changes into an equivalent structured input before dispatching.
 
-**Loop-break:** Track consecutive `code_fix` dispatches. The counter resets to zero on any green run, `transient`, `ci_infra`, or `unclear` failure; only `code_fix` increments it. After **3 consecutive `code_fix` failures**: stop the loop. Compile a per-iteration summary — for each of the 3 failed iterations, note what `ci-monitor` identified as the root cause and what fix was attempted. Surface this summary to PO and wait for direction.
+**Loop-break:** Track consecutive `code_fix` dispatches. The counter resets to zero on any green run, `transient`, `ci_infra`, or `unclear` failure; only `code_fix` increments it. After **3 consecutive `code_fix` failures**: stop the loop. Compile a per-iteration summary — for each of the 3 failed iterations, note what `ci-monitor` identified as the root cause and what fix was attempted. Surface this 🔴🔴 summary to PO and wait for direction.
 
 #### Post-merge main context
 
-Do not commit or push to main. Surface `ci-monitor`'s result to PO. Propose the following path forward: reopen the issue, recreate the feature branch, and follow the full SDLC process to produce a fix via the normal PR gate.
+Do not commit or push to main. Surface 🔴🔴 `ci-monitor`'s result to PO. Propose the following path forward: reopen the issue, recreate the feature branch, and follow the full SDLC process to produce a fix via the normal PR gate.
 
 #### Release/tag context
 
-Surface `ci-monitor`'s result to PO. Propose a recovery path for PO to consider: create a fix branch, route the fix through the normal PR gate, then cut a new tag once main is green. Wait for PO's direction before taking any action.
+Surface 🔴🔴 `ci-monitor`'s result to PO. Propose a recovery path for PO to consider: create a fix branch, route the fix through the normal PR gate, then cut a new tag once main is green. Wait for PO's direction before taking any action.
