@@ -165,8 +165,10 @@ Verify all commits are pushed (`git push` if needed — Coder pushes as part of 
 To open PR, run:
 
 ```bash
-gh pr create --title "..." --body "..."
+gh pr create --title "{issue-id} - [{type}] {description}" --body "..."
 ```
+
+PR title follows the format `{issue-id} - [{type}] {description}` — for example `272 - [docs] Add ADDA project onboarding guide` or `377 - [bug] Fix new-issue skill AskUserQuestion calls`. The `issue-id` links the PR to the issue, the `type` matches the issue type label (`feature`, `chore`, `docs`, `bug`), and the `description` is a short summary of the change.
 
 When the PR is opened, watch PR checks using the `ci-gate` skill. Step 7 is not complete until `ci-gate` resolves green.
 
