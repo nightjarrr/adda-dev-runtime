@@ -182,7 +182,7 @@ Output the full contents of `/tmp/{issue-id}-coder-response.md` verbatim in your
 
 PO might leave comments in the PR (general or attached to diff lines) or provide feedback directly in the conversation. Get an explicit answer from PO: is the PR approved or does it require a **delta plan iteration**?
 
-**PR comments with questions.** When PO leaves a question in a PR comment, answer it directly in the conversation — do not answer by modifying the document or code. Only make changes if PO explicitly asks for them. Interpreting a question as a change request bypasses the discussion step and risks building in the wrong direction.
+**PR comments with questions.** When PO asks a question in a PR comment, answer it directly in the conversation — do not answer by modifying the document or code. Only make changes if PO explicitly asks for them. Interpreting a question as a change request bypasses the discussion step and risks building in the wrong direction.
 
 Fetch the PR's general conversation and its review threads:
 
