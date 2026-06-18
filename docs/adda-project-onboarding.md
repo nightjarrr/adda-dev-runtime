@@ -28,7 +28,7 @@ Configure the repository after creation, before the first agent-driven commit re
   - Non-fast-forward updates — prevents force pushes; the branch is only advanceable by adding commits
   - Deletion prevention
   Also consider a **branch naming ruleset** for non-`main` branches enforcing `{type}/{issue-id}-{slug}` (where type is one of `feature`, `chore`, `docs`, `bug`). Exclusion patterns can be added to allow integrations (e.g. Dependabot) or other non-ADDA workflows.
-- [ ] **Merge settings** — all three merge methods may remain enabled (merge commit, squash, rebase). Delete branch on merge recommended.
+- [ ] **Merge settings** — all three merge methods may remain enabled, but set **squash** as the default. Most PRs should be squash-merged; merge commit or rebase are exceptions for specific cases. Delete branch on merge recommended.
 - [ ] **Wiki** — disable unless needed. Issues and `docs/` serve the documentation role.
 - [ ] **Discussions** — disable unless needed.
 - [ ] **Allow auto-merge** — disable; merge is a manual PO action.
@@ -96,7 +96,5 @@ The `.quality-gates.toml` file lists commands that must pass before code is comm
 
 These items need further discussion before becoming firm recommendations.
 
-- **Merge message format** — squash merge defaults (PR title + all commits) vs. a more curated format. Affects `git log` readability.
-- **Squash merge restriction** — limiting to squash-only reduces history complexity but loses individual commit structure from feature branches.
 - **Security settings** — private vulnerability reporting, Dependabot alerts, secret scanning. Depends on repo visibility and GitHub plan.
 - **Copilot code review** — automated AI review on PRs. Useful but adds noise on small changes.
