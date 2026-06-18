@@ -75,8 +75,7 @@ ADDA-specific files that a project needs to participate in the SDLC.
 - [ ] **`docs/architecture.md`** — project architecture reference for agents.
 - [ ] **`docs/conventions.md`** — coding and naming conventions.
 - [ ] **SDLC labels** — bootstrap the standard label set by running the `ensure-github-labels` skill (available in proto-adda and other Tier 2 implementations).
-- [ ] **Dockerfile** — optional. Only needed when the project requires OS-level tooling not present in Tier 1 or Tier 2.
-- [ ] **`CHANGELOG.md`** — running changelog with an `UPCOMING` section (see repository layout in Tier 3 section of technical design). Not yet supported in proto-adda; included as a placeholder for future SDLC tooling.
+- [ ] **Dockerfile** — optional. Only needed when the project requires OS-level tooling not present in Tier 1 or Tier 2. See Optional Dockerfile section in the technical design for details.
 
 ---
 
