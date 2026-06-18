@@ -41,6 +41,9 @@ Configure the repository after creation, before the first agent-driven commit re
 - [ ] **Allow auto-merge** — disable; merge is a manual PO action.
 - [ ] **Allow update branch** — enable. Lets the agent keep PR branches up to date with `main` as it advances without manual rebase.
 - [ ] **Description and topics** — set a concise repository description and relevant topics for discoverability.
+- [ ] **Private vulnerability reporting** — enable so security researchers can report issues privately.
+- [ ] **Dependabot alerts** — enable to receive notifications about vulnerable dependencies.
+- [ ] **Secret scanning** — enable (GitHub toggle) and add a secret scan step (e.g. Gitleaks) to the CI workflow as a required status check.
 - [ ] **Tag protection** — create a tag protection rule for release tags (e.g. `v*`) to prevent accidental deletion or forced update.
 
 ---
@@ -97,10 +100,3 @@ The `.quality-gates.toml` file lists commands that must pass before code is comm
 - **Non-interactive:** all commands must be fully automated — no prompts or stdin input.
 - **Existing project start:** if starting from an existing codebase, run auto-fixers once and commit the result before wiring up quality gates as a hard requirement.
 
----
-
-## To be reviewed
-
-These items need further discussion before becoming firm recommendations.
-
-- **Security settings** — private vulnerability reporting, Dependabot alerts, secret scanning. Depends on repo visibility and GitHub plan.
