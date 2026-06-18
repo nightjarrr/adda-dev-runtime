@@ -1,5 +1,9 @@
 {
   "autoMemoryDirectory": "/workspace/.claude/memory",
+  "attribution": {
+    "commit": "Co-Authored-By: __CO_AUTHOR_NAME__ <__CO_AUTHOR_EMAIL__>",
+    "pr": "Co-Authored-By: __CO_AUTHOR_NAME__ <__CO_AUTHOR_EMAIL__>"
+  },
   "env": {
     "ADDA_STATUSLINE_CTX_RED_THRESHOLD": "80"
   },

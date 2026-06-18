@@ -68,7 +68,7 @@ RUN for f in /usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/*.sh.sou
 # Claude config — staged in image; hook copies to ~/.claude/ at container start
 # ----------------------------------------------------------------------
 COPY proto-adda/content/.claude/ /usr/local/share/adda-dev-runtime/.claude/
-COPY proto-adda/content/templates/.claude.json.template /usr/local/share/adda-dev-runtime/templates/.claude.json.template
+COPY proto-adda/content/templates/ /usr/local/share/adda-dev-runtime/templates/
 
 # ----------------------------------------------------------------------
 # Tier 2 runtime executables — built by bun-builder stage above
