@@ -46,7 +46,7 @@ Ask one question at a time and wait for the answer — multi-question flows feel
 
 > "Is this about new functionality, a defect in existing functionality, a maintenance task, or a documentation update?"
 
-Present these as a single `AskUserQuestion` with one option per type, each with its one-line description (matching the Inputs section above). The user's selection resolves the type directly. If type is now determined but the title remains unclear, return to context-gathering conversation — do not ask for a title directly.
+Present these as a single `AskUserQuestion` with `header`: "Issue type", `question`: "What type of issue is this?", and one option per type, each with its one-line description (matching the Inputs section above). The user's selection resolves the type directly. If type is now determined but the title remains unclear, return to context-gathering conversation — do not ask for a title directly.
 
 **Proceed only when ready.** You need at least type and title to be clearly inferable before moving on. Do not proceed if either is still ambiguous.
 
@@ -112,12 +112,14 @@ Body:   <body content>
 Parent: <#N — parent issue title, or "(none)" if no parent>
 ```
 
-**Then call `AskUserQuestion`** with a single option:
-- Question: "Create this issue?"
-- Options:
+**Then call `AskUserQuestion`** with:
+- `header`: "New issue"
+- `question`: "Create this issue?"
+- Two options:
   - "Yes, create it" — create the issue with the fields shown above.
+  - "No, let me adjust" — provide feedback to correct the inferred values.
 
-`AskUserQuestion` always provides a free-text "Other" input. If the user types custom input there, interpret it as feedback on the proposed values — they may want to correct the title, add body detail, or change the type. Update the relevant field(s) based on their input, then loop back to re-display the confirmation block. If the correction is ambiguous, ask a clarifying question rather than guessing.
+If the user selects "Yes, create it", proceed to Phase 3. If the user types custom input (the free-text "Other" option), interpret it as feedback on the proposed values — they may want to correct the title, add body detail, or change the type. Update the relevant field(s) based on their input, then loop back to re-display the confirmation block. If the correction is ambiguous, ask a clarifying question rather than guessing.
 
 After 3 correction rounds, create the issue with whatever values you have rather than continuing to iterate — the user can always edit the issue after creation.
 
