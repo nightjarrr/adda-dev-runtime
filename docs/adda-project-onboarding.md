@@ -22,8 +22,8 @@ Configure the repository after creation, before the first agent-driven commit re
 - [ ] **Default branch** — set to `main`. This name is referenced throughout ADDA documentation and tooling.
 - [ ] **Branch ruleset** — create a ruleset targeting the default branch (`main`) with:
   - Pull request required
-  - Required approving reviews: 1
-  - Dismiss stale reviews on push: off
+  - Required approving reviews: 1 (team context; set to 0 for solo-operated repos — the PR author cannot approve their own pull request)
+  - Dismiss stale reviews on push: off (team context; irrelevant in solo mode)
   - Require review thread resolution: on
   - Required status checks (added after CI is wired up — see CI/CD section):
     - "Require branches to be up to date before merging" **must** be enabled — prevents stale test results from satisfying the check requirement
