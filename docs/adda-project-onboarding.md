@@ -27,6 +27,7 @@ Configure the repository after creation, before the first agent-driven commit re
   - Required status checks (added after CI is wired up — see CI/CD section)
   - Non-fast-forward updates — prevents force pushes; the branch is only advanceable by adding commits
   - Deletion prevention
+  Also consider a **branch naming ruleset** for non-`main` branches enforcing `{type}/{issue-id}-{slug}` (where type is one of `feature`, `chore`, `docs`, `bug`). Exclusion patterns can be added to allow integrations (e.g. Dependabot) or other non-ADDA workflows.
 - [ ] **Merge settings** — all three merge methods may remain enabled (merge commit, squash, rebase). Delete branch on merge recommended.
 - [ ] **Wiki** — disable unless needed. Issues and `docs/` serve the documentation role.
 - [ ] **Discussions** — disable unless needed.
@@ -93,9 +94,8 @@ The `.quality-gates.toml` file lists commands that must pass before code is comm
 
 ## To be reviewed
 
-These items are considered relevant to a well-configured ADDA project but need further discussion before becoming firm recommendations.
+These items need further discussion before becoming firm recommendations.
 
-- **Branch naming rules** — enforce ADDA branch naming (`type/issue-id-slug`) via the ruleset. Ensures consistency but adds friction for non-standard branch names.
 - **Merge message format** — squash merge defaults (PR title + all commits) vs. a more curated format. Affects `git log` readability.
 - **Squash merge restriction** — limiting to squash-only reduces history complexity but loses individual commit structure from feature branches.
 - **Security settings** — private vulnerability reporting, Dependabot alerts, secret scanning. Depends on repo visibility and GitHub plan.
