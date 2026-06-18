@@ -14,9 +14,9 @@ If you fork this project and make improvements, you are welcome to describe your
 
 ## Development setup
 
-This repository is designed to be developed from inside the ADDA Dev Runtime itself. See [docs/self-hosting.md](docs/self-hosting.md) for how development works from within the containerized environment.
+This repository is designed to be developed from inside the ADDA Dev Runtime. See the [README](README.md#requirements) for host system prerequisites (Docker, tmux, keyring, etc.) and setup instructions.
 
-**Toolchain:**
+**Container toolchain:**
 - [Bun](https://bun.sh) — JavaScript/TypeScript runtime (pre-installed in the dev runtime)
 - `oxlint` / `oxfmt` — linting and formatting (repo devDependencies, invoke via `bun run oxlint` / `bun run oxfmt`)
 - `tsc` — TypeScript type checking (invoke via `bun run tsc --noEmit`)

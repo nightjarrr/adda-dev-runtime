@@ -5,10 +5,9 @@ A concise description of the change.
 ## Type of change
 
 - [ ] Bug fix
-- [ ] New feature
-- [ ] Refactor
+- [ ] Feature
+- [ ] Chore (maintenance, refactoring, CI, configuration)
 - [ ] Documentation
-- [ ] CI / configuration
 
 ## Checklist
 
