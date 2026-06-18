@@ -104,4 +104,3 @@ The `.quality-gates.toml` file lists commands that must pass before code is comm
 These items need further discussion before becoming firm recommendations.
 
 - **Security settings** — private vulnerability reporting, Dependabot alerts, secret scanning. Depends on repo visibility and GitHub plan.
-- **Copilot code review** — automated AI review on PRs. Useful but adds noise on small changes.
