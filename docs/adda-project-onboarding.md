@@ -19,6 +19,7 @@ A GitHub repository (public or private — no practical difference for ADDA feat
 
 Configure the repository after creation, before the first agent-driven commit reaches it.
 
+- [ ] **Default branch** — set to `main`. This name is referenced throughout ADDA documentation and tooling.
 - [ ] **Branch ruleset** — create a ruleset targeting the default branch (`main`) with:
   - Pull request required
   - Required approving reviews: 1
@@ -27,7 +28,7 @@ Configure the repository after creation, before the first agent-driven commit re
   - Required status checks (added after CI is wired up — see CI/CD section)
   - Non-fast-forward updates — prevents force pushes; the branch is only advanceable by adding commits
   - Deletion prevention
-  Also consider a **branch naming ruleset** for non-`main` branches enforcing `{type}/{issue-id}-{slug}` (where type is one of `feature`, `chore`, `docs`, `bug`). Exclusion patterns can be added to allow integrations (e.g. Dependabot) or other non-ADDA workflows.
+- [ ] **Branch naming ruleset** — optional but recommended. A separate ruleset for non-`main` branches enforcing `{type}/{issue-id}-{slug}` (where type is one of `feature`, `chore`, `docs`, `bug`). Exclusion patterns can be added to allow integrations (e.g. Dependabot) or other non-ADDA workflows.
 - [ ] **Merge settings** — all three merge methods may remain enabled, but set **squash** as the default. Most PRs should be squash-merged; merge commit or rebase are exceptions for specific cases. Commit message format:
 
   | Method | Title | Body |
@@ -41,9 +42,9 @@ Configure the repository after creation, before the first agent-driven commit re
 - [ ] **Allow auto-merge** — disable; merge is a manual PO action.
 - [ ] **Allow update branch** — enable. Lets the agent keep PR branches up to date with `main` as it advances without manual rebase.
 - [ ] **Description and topics** — set a concise repository description and relevant topics for discoverability.
-- [ ] **Private vulnerability reporting** — enable so security researchers can report issues privately.
+- [ ] **Private vulnerability reporting** — enable to receive notifications about security issues.
 - [ ] **Dependabot alerts** — enable to receive notifications about vulnerable dependencies.
-- [ ] **Secret scanning** — enable (GitHub toggle) and add a secret scan step (e.g. Gitleaks) to the CI workflow as a required status check.
+- [ ] **Secret scanning (GitHub toggle)** — enable in repository settings for automatic detection of known credential patterns.
 - [ ] **Tag protection** — create a tag protection rule for release tags (e.g. `v*`) to prevent accidental deletion or forced update.
 
 ---
@@ -58,9 +59,9 @@ Standard files every project should carry.
 - [ ] **SECURITY** — how to report vulnerabilities.
 - [ ] **CODE_OF_CONDUCT** — community guidelines.
 - [ ] **Issue templates** — `.github/ISSUE_TEMPLATE/` — at minimum a bug report and a feature request template.
-- [ ] **PR template** — `.github/pull_request_template.md` — reminder checklist for the PR author.
+- [ ] **PR template** — `.github/pull_request_template.md` — reminder checklist for human contributors. ADDA agents generate PR bodies programmatically and do not use the template.
 - [ ] **`.gitignore`** — per-project language and tooling exclusions.
-- [ ] **Pre-commit hooks** — must be configured per project language. Invokes the `quality-gates` script locally before each commit, providing rapid feedback before CI. Use a hook config (e.g. `.pre-commit-config.yaml`) that runs `quality-gates`.
+- [ ] **Pre-commit hooks** — must be configured per project toolset. Invokes the `quality-gates` script locally before each commit, providing rapid feedback before CI. Use a hook config (e.g. `.pre-commit-config.yaml`) that runs `quality-gates`.
 
 ---
 
@@ -68,14 +69,14 @@ Standard files every project should carry.
 
 ADDA-specific files that a project needs to participate in the SDLC.
 
-- [ ] **Agent context file** — project-specific orientation for the AI agent: repo layout, conventions, toolchain. The file name depends on the Tier 2 implementation (e.g. `CLAUDE.md` for proto-adda).
+- [ ] **Agent context file** — project-specific orientation for the AI agent: repo layout, conventions, toolchain. The file name depends on the Tier 2 implementation (e.g. `CLAUDE.md` for proto-adda). See technical design (Tier 3 → Repository layout) for the expected location and structure.
 - [ ] **`.adda-init.sh`** — repo-level init hook, if project dependencies must be installed. See technical design (Tier 3 → Init hook) for the spec.
 - [ ] **`.quality-gates.toml`** — quality gate definitions. Required — without it, quality gates error and fail. See technical design (Tier 3 → Repository layout) for the file name and structure. See Quality Gates Reference below for configuration guidance.
 - [ ] **`docs/architecture.md`** — project architecture reference for agents.
 - [ ] **`docs/conventions.md`** — coding and naming conventions.
 - [ ] **SDLC labels** — bootstrap the standard label set by running the `ensure-github-labels` skill (available in proto-adda and other Tier 2 implementations).
 - [ ] **Dockerfile** — optional. Only needed when the project requires OS-level tooling not present in Tier 1 or Tier 2.
-- [ ] **`CHANGELOG.md`** — running changelog with an `UPCOMING` section.
+- [ ] **`CHANGELOG.md`** — running changelog with an `UPCOMING` section. Not yet supported in proto-adda; included as a placeholder for future SDLC tooling.
 
 ---
 
@@ -83,7 +84,7 @@ ADDA-specific files that a project needs to participate in the SDLC.
 
 GitHub Actions required for the SDLC to operate.
 
-- [ ] **CI workflow** — runs on push to any branch and on PR. Runs the same commands defined in `.quality-gates.toml` (tests, typecheck, lint, format) plus any project-specific build step. Required checks from this workflow are wired into the branch ruleset.
+- [ ] **CI workflow** — runs on push to any branch and on PR. Runs the same commands defined in `.quality-gates.toml` (tests, typecheck, lint, format) plus a secret scanning step (e.g. Gitleaks) and any project-specific build step. Required checks from this workflow are wired into the branch ruleset.
 - [ ] **Release workflow** — fires on `v*` tag pushes. Publishes artifacts, creates a GitHub release. Only needed if the project produces distributable artifacts.
 - [ ] **Dependabot** — enable for dependency updates. Configure version update schedule and reviewers.
 
