@@ -61,9 +61,6 @@ Per mount, the requirements and the container's behaviour when each is unmet:
 
 ## 2. Container obligations
 
-The image MUST:
+The launcher treats the image as an opaque object: it runs the image named in its configuration and inspects nothing about its contents. No image property is checked and refused, so there are **no Enforced container obligations**. One SHOULD obligation exists:
 
-| Requirement | Notes |
-|-------------|-------|
-| Run as user `adda`, UID 1000 / GID 1000 | Matches the ownership of the launcher-provided mounts. |
-| Provide `/usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh` | The launcher runs it via `docker exec` to open an interactive shell into the running container. |
+- The image SHOULD provide an executable at `/usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh`. The launcher `docker exec`s it to open an interactive shell window; if it is absent, that window fails to open, but the main session is unaffected.
