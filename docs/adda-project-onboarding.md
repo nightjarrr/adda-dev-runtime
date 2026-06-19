@@ -43,8 +43,11 @@ Configure the repository after creation, before the first agent-driven commit re
   | Squash | PR_TITLE | COMMIT_MESSAGES (all commits from the branch) |
 
   Delete branch on merge recommended.
-- [ ] **Wiki** — disable unless needed. Issues and `docs/` serve the documentation role.
-- [ ] **Discussions** — disable unless needed.
+- [ ] **Wiki** — disable. Issues and `docs/` serve the documentation role.
+- [ ] **Discussions** — disable.
+- [ ] **Projects** — disable.
+- [ ] **Sponsorships** — disable.
+- [ ] **Auto-close issues with merged linked pull requests** — enable. Issues linked to a PR via closing keywords are closed automatically on merge.
 - [ ] **Allow auto-merge** — disable; merge is a manual PO action.
 - [ ] **Allow update branch** — enable. Lets the agent keep PR branches up to date with `main` as it advances without manual rebase.
 - [ ] **Description and topics** — set a concise repository description and relevant topics for discoverability.
@@ -56,6 +59,7 @@ Configure the repository after creation, before the first agent-driven commit re
   - Restrict updates
   - No status checks (the tag push triggers the release workflow; checks would block the push before CI can run)
 - [ ] **Tag naming ruleset** — prevents creation of arbitrary tags outside `v*`. Same technique as branch naming: include `~ALL`, exclude `v*`, restrict creations.
+- [ ] **Release immutability** — enable. Prevents modification of release assets and tags after publication.
 
 ---
 
