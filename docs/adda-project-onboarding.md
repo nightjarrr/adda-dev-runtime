@@ -75,7 +75,7 @@ Standard files every project should carry.
 - [ ] **Issue templates** — `.github/ISSUE_TEMPLATE/` — at minimum a bug report and a feature request template.
 - [ ] **PR template** — `.github/pull_request_template.md` — reminder checklist for human contributors. ADDA agents generate PR bodies programmatically and do not use the template.
 - [ ] **`.gitignore`** — per-project language and tooling exclusions.
-- [ ] **Pre-commit hooks** — must be configured per project toolset. Invokes the `quality-gates` script locally before each commit, providing rapid feedback before CI. Use a hook config (e.g. `.pre-commit-config.yaml`) that runs `quality-gates`.
+- [ ] **Pre-commit hooks** — a pre-commit hook invoking `quality-gates` must be installed. Install method depends on the project's tech stack; for ADDA projects, `.adda-init.sh` is the conventional place to wire this up.
 
 ---
 
