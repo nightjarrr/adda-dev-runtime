@@ -8,11 +8,11 @@ The key words MUST, MUST NOT, SHALL, SHOULD, and MAY are to be interpreted as de
 
 Versioning is semantic. The `0.x` series is unstable and MAY change incompatibly between minor versions while the contract is reduced toward its minimal form; `1.0.0` will mark the first stable contract, after which all versions within a major are backward-compatible. Before `1.0.0`, a launcher and container image interoperate only at the same minor version.
 
-This version documents the **de facto** contract — the requirements the current container actually checks. Each requirement carries the container's behaviour when it is unmet:
+This version documents the **de facto** contract — the requirements actually checked today. Every requirement is owed by one party and verified by the other; its level is the verifying party's reaction when the requirement is unmet:
 
-- **Enforced** — the container aborts bootstrap (the launcher MUST satisfy it).
-- **Expected** — the container warns but proceeds (the launcher SHOULD satisfy it).
-- **Optional** — the launcher MAY provide it.
+- **Enforced** — the verifying party aborts (the owing party MUST satisfy it).
+- **Expected** — the verifying party warns but proceeds (the owing party SHOULD satisfy it).
+- **Optional** — the requirement need not be met (MAY).
 
 ## 1. Launcher obligations
 
