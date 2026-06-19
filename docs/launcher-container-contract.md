@@ -52,9 +52,18 @@ Per mount, the requirements and the container's behaviour when each is unmet:
 
 ### 1.3 Hardening
 
-The launcher SHOULD run the container with `--cap-drop ALL`, `--security-opt no-new-privileges`, `--read-only`, and `--network none`. The container verifies each and warns, but proceeds. *(Expected)*
+| Flag | Level |
+|------|-------|
+| `--cap-drop ALL` | Expected |
+| `--security-opt no-new-privileges` | Expected |
+| `--read-only` | Expected |
+| `--network none` | Expected |
 
 ## 2. Container obligations
 
-- The image SHALL run as user `adda` with UID 1000 and GID 1000, matching the ownership of the launcher-provided mounts.
-- The image SHALL provide an executable at `/usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh`, which the launcher runs via `docker exec` to open an interactive shell into the running container.
+The image MUST:
+
+| Requirement | Notes |
+|-------------|-------|
+| Run as user `adda`, UID 1000 / GID 1000 | Matches the ownership of the launcher-provided mounts. |
+| Provide `/usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh` | The launcher runs it via `docker exec` to open an interactive shell into the running container. |
