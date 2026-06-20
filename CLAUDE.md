@@ -147,3 +147,15 @@ edge image on main merge → versioned release on tag.
 ## Conventions
 
 Script and Dockerfile conventions: `docs/conventions.md`.
+
+## Epics
+
+All issues in this repo belong under a top-level epic. When filing a new issue,
+place it as a child of the appropriate epic. Epics are top-level issues with the
+`epic` label; they track no direct work — only their child issues do.
+
+| # | Epic | Scope |
+|---|---|---|
+| #201 | ADDA Dev Runtime (Tier 1) | Entrypoint and hooks, Bun scripting infrastructure, runtime CLI tools (`current-issue`, `ci-watch`, `quality-gates`, `issue-hierarchy`, etc.) |
+| #200 | Proto ADDA (Tier 2) | Claude Code config (settings, skills, agents, CLAUDE.md), Tier 2 hooks and scripts |
+| #205 | CI/CD, Docker Builds, Publishing and Release | Build pipeline, GHCR publishing, release workflows, image provenance |
