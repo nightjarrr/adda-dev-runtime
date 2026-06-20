@@ -43,8 +43,12 @@ function parseParentRef(url: string): { owner: string; repo: string; number: num
     return { owner: match[1]!, repo: match[2]!, number: Number(match[3]!) };
 }
 
-async function fetchIssueById(deps: ShellDep & EnvDep, issueNumber: number): Promise<z.infer<typeof IssueWithParentSchema>> {
-    const { owner, repo } = requireOwnerRepo(deps);
+async function fetchIssueById(
+    deps: ShellDep & EnvDep,
+    issueNumber: number,
+    ownerRepo?: { owner: string; repo: string },
+): Promise<z.infer<typeof IssueWithParentSchema>> {
+    const { owner, repo } = ownerRepo ?? requireOwnerRepo(deps);
     const result = await deps.shell.run(["gh", "api", `/repos/${owner}/${repo}/issues/${issueNumber}`]);
     const raw = parseJson(result.stdout);
     const parsed = IssueWithParentSchema.safeParse(raw);
@@ -60,12 +64,11 @@ export async function fetchParent(deps: ShellDep & EnvDep, issueNumber: number):
 
     const { owner, repo, number: parentNumber } = parseParentRef(issue.parent_issue_url);
 
-    let parentRaw: unknown;
+    let parentIssue: z.infer<typeof IssueWithParentSchema>;
     try {
-        const result = await deps.shell.run(["gh", "api", `/repos/${owner}/${repo}/issues/${parentNumber}`]);
-        parentRaw = parseJson(result.stdout);
+        parentIssue = await fetchIssueById(deps, parentNumber, { owner, repo });
     } catch (e) {
-        if (e instanceof ScriptShellError) {
+        if (e instanceof ScriptShellError && /HTTP 4\d\d/.test(e.verboseStderr ?? "")) {
             throw new IssueHierarchyError(
                 "foreign_repo_inaccessible",
                 `parent of issue #${issueNumber} is in ${owner}/${repo} (issues/${parentNumber}) which is not accessible`,
@@ -75,11 +78,8 @@ export async function fetchParent(deps: ShellDep & EnvDep, issueNumber: number):
         throw e;
     }
 
-    const parsed = IssueWithParentSchema.safeParse(parentRaw);
-    if (!parsed.success) throw new ScriptZodValidationError("unexpected parent issue response", parsed.error, parentRaw);
-
-    const parentRepo = parseRepositoryUrl(parsed.data.repository_url);
-    return buildIssueHeader({ ...parsed.data, parent: undefined, owner: parentRepo.owner, repo: parentRepo.repo });
+    const parentRepo = parseRepositoryUrl(parentIssue.repository_url);
+    return buildIssueHeader({ ...parentIssue, parent: undefined, owner: parentRepo.owner, repo: parentRepo.repo });
 }
 
 export async function runParent(

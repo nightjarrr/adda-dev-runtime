@@ -241,13 +241,6 @@ GitHub sub-issues support cross-repo parent-child links. Every `GitHubIssueHeade
 - `error.details.parentUrl` carries the full API URL.
 - Suggestion: verify token scopes or use a token with access to the foreign repo.
 
-**`current-issue switch` and `current-issue sync`:**
-- These degrade gracefully when the parent is in an inaccessible foreign repo.
-- `result.issue.parent` is `null`, `result.issue.siblings` is `[]`.
-- `result.details.hierarchyWarning` is set to a string explaining why (names the foreign repo).
-- The switch itself still succeeds — the issue is switched to and its branch is checked out.
-- Re-run `current-issue sync` after gaining access to the foreign repo to restore full hierarchy.
-
 **`parent --set` is always same-repo:**
 - The PAT is scoped to the current repo. Cross-repo parent assignment is not possible via this tool.
 

@@ -826,6 +826,53 @@ describe("fetchParent", () => {
         // IssueHierarchyError extends ScriptError
         expect((caught as { reason?: string }).reason).toBe("foreign_repo_inaccessible");
     });
+
+    test("foreign repo fetch fails with HTTP 403 — throws IssueHierarchyError with foreign_repo_inaccessible", async () => {
+        const queue = [
+            makeShellResult(makeRawIssue(5, "Child", "open", 50, [], "https://api.github.com/repos/other/repo/issues/10")),
+            makeShellResult("", 1, "HTTP 403: Forbidden"),
+        ];
+        const mockShell: Shell = {
+            run: mock(async (command: string[], opts?: { strict?: boolean }) => {
+                const result = queue.shift() ?? makeShellResult("");
+                if ((opts?.strict ?? true) && result.exitCode !== 0) {
+                    throw new ScriptShellError(command.join(" "), result.exitCode, result.stdout, result.stderr);
+                }
+                return result;
+            }),
+            runSh: mock(async () => makeShellResult("")),
+        };
+        const mockEnv: Env = {
+            get: mock((name: string) => ({ GITHUB_OWNER: "o", GITHUB_REPO: "r" })[name]),
+        };
+        const deps = { shell: mockShell, env: mockEnv };
+        const err = await fetchParent(deps, 5).catch((e: unknown) => e);
+        expect((err as { reason?: string }).reason).toBe("foreign_repo_inaccessible");
+    });
+
+    test("foreign repo fetch fails with non-HTTP-4xx error — re-throws original ScriptShellError", async () => {
+        const queue = [
+            makeShellResult(makeRawIssue(5, "Child", "open", 50, [], "https://api.github.com/repos/other/repo/issues/10")),
+            makeShellResult("", 1, "connection refused"),
+        ];
+        const mockShell: Shell = {
+            run: mock(async (command: string[], opts?: { strict?: boolean }) => {
+                const result = queue.shift() ?? makeShellResult("");
+                if ((opts?.strict ?? true) && result.exitCode !== 0) {
+                    throw new ScriptShellError(command.join(" "), result.exitCode, result.stdout, result.stderr);
+                }
+                return result;
+            }),
+            runSh: mock(async () => makeShellResult("")),
+        };
+        const mockEnv: Env = {
+            get: mock((name: string) => ({ GITHUB_OWNER: "o", GITHUB_REPO: "r" })[name]),
+        };
+        const deps = { shell: mockShell, env: mockEnv };
+        const err = await fetchParent(deps, 5).catch((e: unknown) => e);
+        expect(err).toBeInstanceOf(ScriptShellError);
+        expect((err as { reason?: string }).reason).toBe("shell_error");
+    });
 });
 
 // ---------------------------------------------------------------

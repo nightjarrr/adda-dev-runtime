@@ -824,8 +824,9 @@ describe("CurrentIssueScript", () => {
             expect(out.result).toBeNull();
         });
 
-        test("parent fetch fails with foreign_repo_inaccessible — switch succeeds with null parent and hierarchyWarning", async () => {
+        test("parent fetch fails with foreign_repo_inaccessible — switch succeeds with null parent and hierarchyWarning, fetchSiblings not called", async () => {
             // Simulate fetchIssueById succeeding (has cross-repo parent url) but foreign repo fetch throwing
+            const foreignSubIssuesCalls: string[] = [];
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -845,6 +846,10 @@ describe("CurrentIssueScript", () => {
                 },
                 hierarchyApi: (command: string[]) => {
                     const url = command[command.length - 1] as string;
+                    // Track sub_issues calls to the foreign repo parent
+                    if (url.includes("/repos/foreign/repo/") && url.endsWith("/sub_issues")) {
+                        foreignSubIssuesCalls.push(url);
+                    }
                     // fetchIssueById for #28: returns issue with cross-repo parent URL
                     if (url.includes("/issues/28") && !url.endsWith("/sub_issues")) {
                         return makeShellResult({
@@ -879,6 +884,66 @@ describe("CurrentIssueScript", () => {
             const details = result.details as Record<string, unknown>;
             expect(typeof details.hierarchyWarning).toBe("string");
             expect((details.hierarchyWarning as string).length).toBeGreaterThan(0);
+            // fetchSiblings must not be called — no sub_issues request to the foreign repo parent
+            expect(foreignSubIssuesCalls).toHaveLength(0);
+        });
+
+        test("parent fetch fails with non-foreign_repo_inaccessible error — switch propagates the error", async () => {
+            // When the foreign repo fetch fails with a non-HTTP-4xx error (e.g. connection refused),
+            // fetchParent re-throws the original ScriptShellError, and switch must not degrade gracefully.
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "gh" && command[1] === "issue") {
+                        return makeShellResult({
+                            stdout: makeGhIssueResponse("Cross-repo child", ["feature"], "OPEN"),
+                        });
+                    }
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
+                        return makeShellResult({
+                            stdout: makeResolveResponse("feature_branch", "feature/28-cross-repo", "42"),
+                        });
+                    }
+                    if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
+                    if (command[0] === "git" && command[1] === "pull") return makeShellResult();
+                    return makeShellResult();
+                },
+                hierarchyApi: (command: string[]) => {
+                    const url = command[command.length - 1] as string;
+                    // fetchIssueById for #28: returns issue with cross-repo parent URL
+                    if (url.includes("/issues/28") && !url.endsWith("/sub_issues")) {
+                        return makeShellResult({
+                            stdout: makeRawIssueResponse(
+                                28,
+                                "Cross-repo child",
+                                "open",
+                                28001,
+                                ["feature"],
+                                "https://api.github.com/repos/foreign/repo/issues/5",
+                            ),
+                        });
+                    }
+                    // Foreign repo fetch fails with connection refused (no HTTP 4xx)
+                    if (url.includes("/repos/foreign/repo/") && !url.endsWith("/sub_issues")) {
+                        throw new ScriptShellError(command.join(" "), 1, "", "connection refused");
+                    }
+                    return makeShellResult({ stdout: defaultHierarchyApiResponse(url) });
+                },
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
+            // Must fail — non-inaccessible errors propagate
+            expect(code).toBe(1);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
+            const error = out.error as Record<string, unknown>;
+            // The propagated error is a ScriptShellError (reason: "shell_error")
+            expect(error.reason).toBe("shell_error");
+            // hierarchyWarning must NOT appear in details
+            const detailsFields = Object.keys(out);
+            expect(detailsFields).not.toContain("hierarchyWarning");
         });
     });
 

@@ -25,6 +25,7 @@ export type { GitHubIssueHeader } from "@adda/lib";
 export { fetchChildren } from "./issue-hierarchy/children";
 export { fetchParent } from "./issue-hierarchy/parent";
 export { fetchSiblings } from "./issue-hierarchy/siblings";
+export { IssueHierarchyError } from "./issue-hierarchy/types";
 
 type IssueHierarchyDeps = ShellDep & EnvDep & StdioDep;
 

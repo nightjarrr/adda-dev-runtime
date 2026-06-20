@@ -1,7 +1,7 @@
 import type { EnvDep, FileSysDep, ShellDep } from "@adda/lib";
 import type { GitHubIssueHeader } from "@adda/lib";
 import { parseJson, requireOwnerRepo, ScriptZodValidationError } from "@adda/lib";
-import { fetchChildren, fetchParent, fetchSiblings } from "../issue-hierarchy";
+import { fetchChildren, fetchParent, fetchSiblings, IssueHierarchyError } from "../issue-hierarchy";
 
 import { runRepoInitHook } from "./hook";
 import { resolveIssueBranch } from "./resolve";
@@ -55,20 +55,26 @@ export async function executeSwitch(
     const resolveData = await resolveIssueBranch(deps, issueId);
 
     // Step 5: Enrich with hierarchy context
-    // Parent: degrade gracefully on inaccessible foreign repo
+    // Parent: degrade gracefully only on foreign_repo_inaccessible; all other errors propagate
     let parentHeader: GitHubIssueHeader | null = null;
     let hierarchyWarning: string | undefined;
+    let parentInaccessible = false;
     try {
         parentHeader = await fetchParent(deps, Number(issueId));
     } catch (e) {
-        hierarchyWarning = e instanceof Error ? e.message : String(e);
+        if (e instanceof IssueHierarchyError && e.reason === "foreign_repo_inaccessible") {
+            hierarchyWarning = e.message;
+            parentInaccessible = true;
+        } else {
+            throw e;
+        }
     }
 
     // Children: always current repo — hard fail on any error
-    // Siblings: pass cached parent (null on failure → returns [] without fetching)
+    // Siblings: skip entirely when parent was inaccessible (avoid a no-op fetch)
     const [childrenHeaders, siblingHeaders] = await Promise.all([
         fetchChildren(deps, Number(issueId)),
-        fetchSiblings(deps, Number(issueId), parentHeader),
+        parentInaccessible ? Promise.resolve([]) : fetchSiblings(deps, Number(issueId), parentHeader),
     ]);
 
     // Step 6: Determine branch
