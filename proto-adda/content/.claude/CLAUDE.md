@@ -62,7 +62,7 @@ Every implementation task follows this workflow from start to finish. Begin at s
 
 Run `current-issue show` to read the current issue state, then confirm with PO. PO may provide a different number. If no issue exists yet, use the `/new-issue` skill.
 
-**Establish hierarchy context.** The `current-issue show` output includes `parent`, `children`, and `siblings` fields for understanding the issue's place in the broader effort:
+**Establish hierarchy context.** Run `current-issue show --with-hierarchy` to include `parent`, `children`, and `siblings` in the output, for understanding the issue's place in the broader effort:
 
 - **Parent (if any):** Read the parent issue's title and body to understand the broader goal. Fetch details with `gh issue view {parent-number} --json title,body,labels`.
 - **Siblings (if any):** Scan sibling titles and states. Assess whether siblings are sequential steps or merely grouped under the same parent — this affects how you scope the work.

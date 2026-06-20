@@ -266,6 +266,19 @@ describe("CurrentIssueScript", () => {
             const error = out.error as Record<string, unknown>;
             expect(String(error.message)).toContain("--skip-repo-init is not valid for 'get'");
         });
+
+        test("show --with-hierarchy — exits 0, ok envelope", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => {
+                    const enoent = Object.assign(new Error("ENOENT: no such file or directory"), { code: "ENOENT" });
+                    throw enoent;
+                },
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show", "--with-hierarchy"]);
+            expect(code).toBe(0);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("ok");
+        });
     });
 
     describe("switch — environment validation", () => {
@@ -905,7 +918,7 @@ describe("CurrentIssueScript", () => {
             siblings: [],
         });
 
-        test("no active issue (ENOENT) — exits 0, ok envelope, all issue fields empty including hierarchy defaults", async () => {
+        test("no active issue (ENOENT) — exits 0, ok envelope, scalar fields empty, hierarchy keys absent", async () => {
             const { deps, outLines } = makeMockDeps();
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show"]);
             expect(code).toBe(0);
@@ -920,13 +933,13 @@ describe("CurrentIssueScript", () => {
             expect(issue.phase).toBe("");
             expect(issue.state).toBe("");
             expect(issue.pr).toBe("");
-            expect(issue.parent).toBeNull();
-            expect(issue.children).toEqual([]);
-            expect(issue.siblings).toEqual([]);
+            expect("parent" in issue).toBe(false);
+            expect("children" in issue).toBe(false);
+            expect("siblings" in issue).toBe(false);
             expect(result.details).toEqual({});
         });
 
-        test("active issue — exits 0, ok envelope, issue fields match state", async () => {
+        test("active issue — exits 0, ok envelope, scalar fields match state, hierarchy keys absent", async () => {
             const { deps, outLines } = makeMockDeps({
                 fileReaderReadFile: async (_path: string) => validStateJson,
             });
@@ -936,13 +949,16 @@ describe("CurrentIssueScript", () => {
             expect(out.status).toBe("ok");
             expect(out.error).toBeNull();
             const result = out.result as Record<string, unknown>;
-            const issue = result.issue as Record<string, string>;
+            const issue = result.issue as Record<string, unknown>;
             expect(issue.id).toBe("42");
             expect(issue.title).toBe("A test issue");
             expect(issue.type).toBe("feature");
             expect(issue.phase).toBe("phase:implement");
             expect(issue.state).toBe("open");
             expect(issue.pr).toBe("99");
+            expect("parent" in issue).toBe(false);
+            expect("children" in issue).toBe(false);
+            expect("siblings" in issue).toBe(false);
             expect(result.details).toEqual({});
         });
 
@@ -970,17 +986,62 @@ describe("CurrentIssueScript", () => {
             expect(String(error.message)).toContain("state file is corrupt");
         });
 
-        test("extra positional arg — exits 2, fail envelope with 'usage: current-issue show'", async () => {
+        test("extra positional arg — exits 2, fail envelope with 'usage: current-issue show [--with-hierarchy]'", async () => {
             const { deps, outLines } = makeMockDeps();
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show", "42"]);
             expect(code).toBe(2);
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("fail");
             const error = out.error as Record<string, unknown>;
-            expect(String(error.message)).toContain("usage: current-issue show");
+            expect(String(error.message)).toContain("usage: current-issue show [--with-hierarchy]");
         });
 
-        test("state with hierarchy fields — parent/children/siblings present in output", async () => {
+        test("--with-hierarchy flag — parent/children/siblings present in output", async () => {
+            const hierarchyState = JSON.stringify({
+                id: "42",
+                title: "Hierarchy issue",
+                type: "feature",
+                phase: "phase: implement",
+                state: "open",
+                pr: "99",
+                owner: "testowner",
+                repo: "testrepo",
+                parent: {
+                    number: 10,
+                    title: "Parent",
+                    state: "open",
+                    type: "feature",
+                    phase: null,
+                    parent: null,
+                    labels: ["feature"],
+                },
+                children: [],
+                siblings: [
+                    { number: 12, title: "Sibling", state: "open", type: "chore", phase: null, parent: 10, labels: ["chore"] },
+                ],
+            });
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => hierarchyState,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show", "--with-hierarchy"]);
+            expect(code).toBe(0);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("ok");
+            expect(out.error).toBeNull();
+            const result = out.result as Record<string, unknown>;
+            const issue = result.issue as Record<string, unknown>;
+            const parent = issue.parent as Record<string, unknown> | null;
+            expect(parent).not.toBeNull();
+            expect(parent!.number).toBe(10);
+            expect(parent!.title).toBe("Parent");
+            const siblings = issue.siblings as Array<Record<string, unknown>>;
+            expect(siblings).toHaveLength(1);
+            expect(siblings[0].number).toBe(12);
+            const children = issue.children as Array<Record<string, unknown>>;
+            expect(children).toEqual([]);
+        });
+
+        test("default show with hierarchy state — hierarchy fields absent from output", async () => {
             const hierarchyState = JSON.stringify({
                 id: "42",
                 title: "Hierarchy issue",
@@ -1014,15 +1075,20 @@ describe("CurrentIssueScript", () => {
             expect(out.error).toBeNull();
             const result = out.result as Record<string, unknown>;
             const issue = result.issue as Record<string, unknown>;
-            const parent = issue.parent as Record<string, unknown> | null;
-            expect(parent).not.toBeNull();
-            expect(parent!.number).toBe(10);
-            expect(parent!.title).toBe("Parent");
-            const siblings = issue.siblings as Array<Record<string, unknown>>;
-            expect(siblings).toHaveLength(1);
-            expect(siblings[0].number).toBe(12);
-            const children = issue.children as Array<Record<string, unknown>>;
-            expect(children).toEqual([]);
+            expect(issue.id).toBe("42");
+            expect("parent" in issue).toBe(false);
+            expect("children" in issue).toBe(false);
+            expect("siblings" in issue).toBe(false);
+        });
+
+        test("--with-hierarchy on non-show subcommand — exits 2, error contains '--with-hierarchy is not valid for'", async () => {
+            const { deps, outLines } = makeMockDeps();
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "sync", "--with-hierarchy"]);
+            expect(code).toBe(2);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("--with-hierarchy is not valid for 'sync'");
         });
 
         test("state file without hierarchy fields is rejected — exits 1, fail envelope", async () => {

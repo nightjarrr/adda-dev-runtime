@@ -52,6 +52,8 @@ export interface IssueStateView {
     siblings: GitHubIssueHeader[];
 }
 
+export type FlatIssueStateView = Omit<IssueStateView, "parent" | "children" | "siblings">;
+
 export const EMPTY_ISSUE_VIEW: IssueStateView = {
     id: "",
     title: "",
@@ -66,6 +68,17 @@ export const EMPTY_ISSUE_VIEW: IssueStateView = {
     siblings: [],
 };
 
+export const EMPTY_FLAT_ISSUE_VIEW: FlatIssueStateView = {
+    id: "",
+    title: "",
+    type: "",
+    phase: "",
+    state: "",
+    pr: "",
+    owner: "",
+    repo: "",
+};
+
 export type HookResult =
     | { status: "ok"; output: string }
     | { status: "failed"; output: string }
@@ -73,7 +86,7 @@ export type HookResult =
     | { status: "absent" };
 
 export type CurrentIssueResult = {
-    issue: IssueStateView;
+    issue: IssueStateView | FlatIssueStateView;
     details: Record<string, unknown>;
 };
 
