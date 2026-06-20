@@ -27,6 +27,8 @@ const DEFAULT_STATE: IssueState = {
     phase: "",
     state: "open",
     pr: "",
+    owner: "testowner",
+    repo: "testrepo",
     parent: null,
     children: [],
     siblings: [],

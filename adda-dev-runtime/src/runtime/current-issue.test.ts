@@ -562,6 +562,8 @@ describe("CurrentIssueScript", () => {
             expect(issue.phase).toBe("phase: implement");
             expect(issue.state).toBe("open");
             expect(issue.pr).toBe("42");
+            expect(issue.owner).toBe("testowner");
+            expect(issue.repo).toBe("testrepo");
 
             const details = result.details as Record<string, string>;
             expect(details.branch).toBe("feature/28-my-feature");
@@ -896,6 +898,8 @@ describe("CurrentIssueScript", () => {
             phase: "phase:implement",
             state: "open",
             pr: "99",
+            owner: "testowner",
+            repo: "testrepo",
             parent: null,
             children: [],
             siblings: [],
@@ -984,6 +988,8 @@ describe("CurrentIssueScript", () => {
                 phase: "phase: implement",
                 state: "open",
                 pr: "99",
+                owner: "testowner",
+                repo: "testrepo",
                 parent: {
                     number: 10,
                     title: "Parent",
@@ -1039,6 +1045,30 @@ describe("CurrentIssueScript", () => {
             const error = out.error as Record<string, unknown>;
             expect(String(error.message)).toContain("state file is corrupt");
         });
+
+        test("state file without owner/repo fields is rejected — exits 1, fail envelope, error contains 'state file is corrupt'", async () => {
+            const oldStateJson = JSON.stringify({
+                id: "42",
+                title: "A test issue",
+                type: "feature",
+                phase: "phase:implement",
+                state: "open",
+                pr: "99",
+                // missing owner, repo
+                parent: null,
+                children: [],
+                siblings: [],
+            });
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => oldStateJson,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "show"]);
+            expect(code).toBe(1);
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("fail");
+            const error = out.error as Record<string, unknown>;
+            expect(String(error.message)).toContain("state file is corrupt");
+        });
     });
 
     describe("sync", () => {
@@ -1049,6 +1079,8 @@ describe("CurrentIssueScript", () => {
             phase: "phase:implement",
             state: "open",
             pr: "42",
+            owner: "testowner",
+            repo: "testrepo",
             parent: null,
             children: [],
             siblings: [],
@@ -1073,6 +1105,8 @@ describe("CurrentIssueScript", () => {
                 phase: "phase:implement",
                 state: "open",
                 pr: "42",
+                owner: "testowner",
+                repo: "testrepo",
                 parent: null,
                 children: [],
                 siblings: [],
@@ -1112,6 +1146,8 @@ describe("CurrentIssueScript", () => {
             phase: "phase:implement",
             state: "open",
             pr: "42",
+            owner: "testowner",
+            repo: "testrepo",
             parent: null,
             children: [],
             siblings: [],
@@ -1378,6 +1414,8 @@ describe("CurrentIssueScript", () => {
             phase: "phase: triage",
             state: "open",
             pr: "99",
+            owner: "testowner",
+            repo: "testrepo",
             parent: null,
             children: [],
             siblings: [],
@@ -1500,6 +1538,8 @@ describe("CurrentIssueScript", () => {
                 phase: "phase: triage",
                 state: "open",
                 pr: "",
+                owner: "testowner",
+                repo: "testrepo",
                 parent: null,
                 children: [],
                 siblings: [],
@@ -1521,6 +1561,8 @@ describe("CurrentIssueScript", () => {
             phase: "phase:implement",
             state: "open",
             pr: "99",
+            owner: "testowner",
+            repo: "testrepo",
             parent: null,
             children: [],
             siblings: [],
@@ -1617,6 +1659,8 @@ describe("CurrentIssueScript", () => {
                         phase: "p",
                         state: "open",
                         pr: "",
+                        owner: "testowner",
+                        repo: "testrepo",
                         parent: null,
                         children: [],
                         siblings: [],

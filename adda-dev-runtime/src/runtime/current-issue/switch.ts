@@ -16,7 +16,7 @@ export async function executeSwitch(
     issueStateOnly = false,
 ): Promise<CurrentIssueResult> {
     // Step 1: Validate env vars
-    requireOwnerRepo(deps);
+    const { owner, repo } = requireOwnerRepo(deps);
 
     // Step 2: Check dirty tree (skip if issueStateOnly)
     if (!issueStateOnly) {
@@ -81,6 +81,8 @@ export async function executeSwitch(
         phase: phaseLabel,
         state: state === "CLOSED" ? "closed" : "open",
         pr: resolveData.pr,
+        owner,
+        repo,
         parent: parentHeader,
         children: childrenHeaders,
         siblings: siblingHeaders,
