@@ -5,7 +5,7 @@ import { ScriptError } from "@adda/lib";
 
 // --- Error types ---
 
-export type IssueHierarchyReason = BaseReason | GithubReason;
+export type IssueHierarchyReason = BaseReason | GithubReason | "foreign_repo_inaccessible";
 
 export class IssueHierarchyError extends ScriptError<IssueHierarchyReason> {}
 
@@ -16,6 +16,7 @@ export const RawIssueSchema = z.object({
     title: z.string(),
     state: z.enum(["open", "closed"]),
     labels: z.array(z.object({ name: z.string() })),
+    repository_url: z.string(),
 });
 
 // --- Arg types ---

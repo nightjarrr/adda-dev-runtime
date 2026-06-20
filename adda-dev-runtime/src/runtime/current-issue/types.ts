@@ -12,6 +12,8 @@ const hierarchyEntrySchema = z.object({
     phase: z.string().nullable(),
     parent: z.number().nullable(),
     labels: z.array(z.string()),
+    owner: z.string(),
+    repo: z.string(),
 });
 
 export const IssueStateSchema = z.object({

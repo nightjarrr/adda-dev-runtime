@@ -83,12 +83,19 @@ function getStdoutJson(outLines: string[]): unknown {
 
 // --- Raw sub-issue builder ---
 
-function makeRawSubIssue(number: number, title: string, state: "open" | "closed", labels: string[]): string {
+function makeRawSubIssue(
+    number: number,
+    title: string,
+    state: "open" | "closed",
+    labels: string[],
+    repository_url = "https://api.github.com/repos/o/r",
+): string {
     return JSON.stringify({
         number,
         title,
         state,
         labels: labels.map((name) => ({ name })),
+        repository_url,
     });
 }
 
@@ -101,6 +108,7 @@ function makeRawIssue(
     id: number,
     labels: string[],
     parent_issue_url: string | null,
+    repository_url = "https://api.github.com/repos/o/r",
 ): string {
     return JSON.stringify({
         number,
@@ -109,6 +117,7 @@ function makeRawIssue(
         id,
         labels: labels.map((name) => ({ name })),
         parent_issue_url,
+        repository_url,
     });
 }
 
@@ -615,6 +624,35 @@ describe("fetchChildren", () => {
         const deps = makeShellDeps([makeShellResult("not json")]);
         await expect(fetchChildren(deps, 5)).rejects.toThrow();
     });
+
+    test("sub_issue with foreign repository_url — returned header has foreign owner/repo", async () => {
+        const line = makeRawSubIssue(7, "Foreign child", "open", ["feature"], "https://api.github.com/repos/other/repo");
+        const deps = makeShellDeps([makeShellResult(line)]);
+        const result = await fetchChildren(deps, 10);
+        expect(result).toHaveLength(1);
+        expect(result[0]!.number).toBe(7);
+        expect(result[0]!.owner).toBe("other");
+        expect(result[0]!.repo).toBe("repo");
+    });
+
+    test("ownerRepo param overrides env for sub_issues API call", async () => {
+        const runCalls: string[][] = [];
+        const mockShell: Shell = {
+            run: mock(async (command: string[]) => {
+                runCalls.push(command);
+                return makeShellResult("");
+            }),
+            runSh: mock(async () => makeShellResult("")),
+        };
+        const mockEnv: Env = {
+            get: mock((name: string) => ({ GITHUB_OWNER: "o", GITHUB_REPO: "r" })[name]),
+        };
+        const deps = { shell: mockShell, env: mockEnv };
+        await fetchChildren(deps, 10, { owner: "foreign", repo: "repo" });
+        const callUrl = runCalls[0]!.join(" ");
+        expect(callUrl).toContain("/repos/foreign/repo/issues/10/sub_issues");
+        expect(callUrl).not.toContain("/repos/o/r/");
+    });
 });
 
 // ---------------------------------------------------------------
@@ -628,6 +666,7 @@ describe("RawIssueSchema", () => {
             title: "Test",
             state: "open",
             labels: [{ name: "bug" }],
+            repository_url: "https://api.github.com/repos/o/r",
         });
         expect(result.success).toBe(true);
     });
@@ -715,6 +754,77 @@ describe("fetchParent", () => {
     test("invalid JSON from gh api — throws ScriptZodValidationError", async () => {
         const deps = makeDeps([makeShellResult("not json")]);
         await expect(fetchParent(deps, 1)).rejects.toThrow();
+    });
+
+    test("cross-repo parent URL — API called on foreign owner/repo, returned header has foreign owner/repo", async () => {
+        const deps = makeDeps([
+            // fetchIssueById: child issue with cross-repo parent URL
+            makeShellResult(makeRawIssue(5, "Child", "open", 50, [], "https://api.github.com/repos/other/repo/issues/10")),
+            // fetchParent: fetches /repos/other/repo/issues/10
+            makeShellResult(
+                makeRawIssue(10, "Foreign Parent", "open", 100, ["feature"], null, "https://api.github.com/repos/other/repo"),
+            ),
+        ]);
+        const result = await fetchParent(deps, 5);
+        expect(result).not.toBeNull();
+        expect(result!.number).toBe(10);
+        expect(result!.owner).toBe("other");
+        expect(result!.repo).toBe("repo");
+    });
+
+    test("cross-repo parent URL — gh api call uses foreign owner/repo path", async () => {
+        const runCalls: string[][] = [];
+        const queue = [
+            makeShellResult(makeRawIssue(5, "Child", "open", 50, [], "https://api.github.com/repos/other/repo/issues/10")),
+            makeShellResult(
+                makeRawIssue(10, "Foreign Parent", "open", 100, [], null, "https://api.github.com/repos/other/repo"),
+            ),
+        ];
+        const mockShell: Shell = {
+            run: mock(async (command: string[]) => {
+                runCalls.push(command);
+                return queue.shift() ?? makeShellResult("");
+            }),
+            runSh: mock(async () => makeShellResult("")),
+        };
+        const mockEnv: Env = {
+            get: mock((name: string) => ({ GITHUB_OWNER: "o", GITHUB_REPO: "r" })[name]),
+        };
+        const deps = { shell: mockShell, env: mockEnv };
+        await fetchParent(deps, 5);
+        const parentFetchCmd = runCalls[1]!.join(" ");
+        expect(parentFetchCmd).toContain("/repos/other/repo/issues/10");
+        expect(parentFetchCmd).not.toContain("/repos/o/r/");
+    });
+
+    test("foreign repo fetch returns non-zero — throws IssueHierarchyError with foreign_repo_inaccessible", async () => {
+        const queue = [
+            makeShellResult(makeRawIssue(5, "Child", "open", 50, [], "https://api.github.com/repos/other/repo/issues/10")),
+            makeShellResult("", 1, "HTTP 404: Not Found"),
+        ];
+        const mockShell: Shell = {
+            run: mock(async (command: string[], opts?: { strict?: boolean }) => {
+                const result = queue.shift() ?? makeShellResult("");
+                if ((opts?.strict ?? true) && result.exitCode !== 0) {
+                    throw new ScriptShellError(command.join(" "), result.exitCode, result.stdout, result.stderr);
+                }
+                return result;
+            }),
+            runSh: mock(async () => makeShellResult("")),
+        };
+        const mockEnv: Env = {
+            get: mock((name: string) => ({ GITHUB_OWNER: "o", GITHUB_REPO: "r" })[name]),
+        };
+        const deps = { shell: mockShell, env: mockEnv };
+        let caught: unknown;
+        try {
+            await fetchParent(deps, 5);
+        } catch (e) {
+            caught = e;
+        }
+        expect(caught).toBeDefined();
+        // IssueHierarchyError extends ScriptError
+        expect((caught as { reason?: string }).reason).toBe("foreign_repo_inaccessible");
     });
 });
 
@@ -930,12 +1040,14 @@ describe("orphans integration", () => {
             title: "Orphan issue",
             state: "open",
             labels: [{ name: "feature" }],
+            repository_url: "https://api.github.com/repos/o/r",
         });
         const secondOrphan = JSON.stringify({
             number: 4,
             title: "Another orphan",
             state: "open",
             labels: [{ name: "bug" }],
+            repository_url: "https://api.github.com/repos/o/r",
         });
         const { deps, outLines, runCalls } = makeMockDeps({
             runQueue: [makeShellResult([orphanIssue, secondOrphan].join("\n"))],
@@ -964,12 +1076,14 @@ describe("orphans integration", () => {
             title: "Open orphan",
             state: "open",
             labels: [{ name: "feature" }],
+            repository_url: "https://api.github.com/repos/o/r",
         });
         const closedOrphan = JSON.stringify({
             number: 2,
             title: "Closed orphan",
             state: "closed",
             labels: [{ name: "bug" }],
+            repository_url: "https://api.github.com/repos/o/r",
         });
         const { deps, outLines, runCalls } = makeMockDeps({
             runQueue: [makeShellResult([openOrphan, closedOrphan].join("\n"))],
@@ -995,12 +1109,14 @@ describe("orphans integration", () => {
             title: "Open orphan",
             state: "open",
             labels: [{ name: "feature" }],
+            repository_url: "https://api.github.com/repos/o/r",
         });
         const closedOrphan = JSON.stringify({
             number: 2,
             title: "Closed orphan",
             state: "closed",
             labels: [{ name: "bug" }],
+            repository_url: "https://api.github.com/repos/o/r",
         });
         const { deps, outLines } = makeMockDeps({
             runQueue: [makeShellResult([openOrphan, closedOrphan].join("\n"))],
@@ -1078,6 +1194,7 @@ describe("runOrphans", () => {
             title: "Orphan",
             state: "open",
             labels: [{ name: "feature" }, { name: "phase: triage" }],
+            repository_url: "https://api.github.com/repos/o/r",
         });
         const deps = makeDeps([makeShellResult(line)]);
         const result = await runOrphans(deps, { subcommand: "orphans", includeClosed: false });
@@ -1097,6 +1214,7 @@ describe("runOrphans", () => {
             title: "Root",
             state: "open",
             labels: [],
+            repository_url: "https://api.github.com/repos/o/r",
         });
         const deps = makeDeps([makeShellResult(line)]);
         const result = await runOrphans(deps, { subcommand: "orphans", includeClosed: false });
@@ -1109,6 +1227,7 @@ describe("runOrphans", () => {
             title: "Any",
             state: "closed",
             labels: [],
+            repository_url: "https://api.github.com/repos/o/r",
         });
         const deps = makeDeps([makeShellResult(line)]);
         const result = await runOrphans(deps, { subcommand: "orphans", includeClosed: true });
@@ -1336,5 +1455,62 @@ describe("fetchSiblings", () => {
     test("invalid JSON — throws ScriptZodValidationError", async () => {
         const deps = makeDeps([makeShellResult("not json")]);
         await expect(fetchSiblings(deps, 1)).rejects.toThrow();
+    });
+
+    test("cachedParent = null — returns empty array without any API calls", async () => {
+        const deps = makeDeps([]);
+        const result = await fetchSiblings(deps, 5, null);
+        expect(result).toEqual([]);
+        expect((deps.shell.run as ReturnType<typeof mock>).mock.calls).toHaveLength(0);
+    });
+
+    test("cachedParent = cross-repo GitHubIssueHeader — fetchChildren called with parent's owner/repo", async () => {
+        const runCalls: string[][] = [];
+        const queue = [
+            // fetchChildren: sub_issues for parent in foreign/repo (returned as NDJSON in one response)
+            makeShellResult(
+                [
+                    makeRawSubIssue(5, "Target", "open", ["bug"], "https://api.github.com/repos/foreign/repo"),
+                    makeRawSubIssue(9, "Sibling", "open", ["feature"], "https://api.github.com/repos/foreign/repo"),
+                ].join("\n"),
+            ),
+        ];
+        const mockShell: Shell = {
+            run: mock(async (command: string[], opts?: { strict?: boolean }) => {
+                runCalls.push(command);
+                const result = queue.shift() ?? makeShellResult("");
+                if ((opts?.strict ?? true) && result.exitCode !== 0) {
+                    throw new ScriptShellError(command.join(" "), result.exitCode, result.stdout, result.stderr);
+                }
+                return result;
+            }),
+            runSh: mock(async () => makeShellResult("")),
+        };
+        const mockEnv: Env = {
+            get: mock((name: string) => ({ GITHUB_OWNER: "o", GITHUB_REPO: "r" })[name]),
+        };
+        const deps = { shell: mockShell, env: mockEnv };
+
+        const cachedParent = {
+            number: 10,
+            title: "Foreign Parent",
+            state: "open" as const,
+            type: "feature" as const,
+            phase: null,
+            parent: null,
+            labels: ["feature"],
+            owner: "foreign",
+            repo: "repo",
+        };
+
+        const result = await fetchSiblings(deps, 5, cachedParent);
+        // Self (#5) is filtered out, sibling (#9) is returned
+        expect(result).toHaveLength(1);
+        expect(result[0]!.number).toBe(9);
+
+        // Verify fetchChildren was called on foreign/repo, not the current repo
+        const childrenCall = runCalls[0]!.join(" ");
+        expect(childrenCall).toContain("/repos/foreign/repo/issues/10/sub_issues");
+        expect(childrenCall).not.toContain("/repos/o/r/");
     });
 });

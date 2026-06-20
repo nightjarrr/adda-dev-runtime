@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { ScriptError } from "./errors";
-import { buildIssueHeader, requireOwnerRepo } from "./github";
+import { buildIssueHeader, parseRepositoryUrl, requireOwnerRepo } from "./github";
 
 // --- buildIssueHeader ---
 
@@ -12,13 +12,25 @@ describe("buildIssueHeader", () => {
             state: string;
             labels: Array<{ name: string }>;
             parent?: number;
+            owner: string;
+            repo: string;
         }> = {},
-    ): { number: number; title: string; state: string; labels: Array<{ name: string }>; parent?: number } {
+    ): {
+        number: number;
+        title: string;
+        state: string;
+        labels: Array<{ name: string }>;
+        parent?: number;
+        owner: string;
+        repo: string;
+    } {
         return {
             number: 42,
             title: "Test Issue",
             state: "open",
             labels: [{ name: "feature" }, { name: "phase: impl-plan" }],
+            owner: "testowner",
+            repo: "testrepo",
             ...overrides,
         };
     }
@@ -93,6 +105,45 @@ describe("buildIssueHeader", () => {
     test("returns first type label in encounter order", () => {
         const header = buildIssueHeader(makeRaw({ labels: [{ name: "docs" }, { name: "bug" }] }));
         expect(header.type).toBe("docs");
+    });
+
+    test("owner and repo are set from raw input", () => {
+        const header = buildIssueHeader(makeRaw({ owner: "myorg", repo: "myrepo" }));
+        expect(header.owner).toBe("myorg");
+        expect(header.repo).toBe("myrepo");
+    });
+});
+
+// --- parseRepositoryUrl ---
+
+describe("parseRepositoryUrl", () => {
+    test("valid URL — returns owner and repo", () => {
+        const result = parseRepositoryUrl("https://api.github.com/repos/nightjarrr/adda-dev-runtime");
+        expect(result).toEqual({ owner: "nightjarrr", repo: "adda-dev-runtime" });
+    });
+
+    test("valid URL with trailing slash — returns owner and repo", () => {
+        const result = parseRepositoryUrl("https://api.github.com/repos/myorg/myrepo/");
+        expect(result).toEqual({ owner: "myorg", repo: "myrepo" });
+    });
+
+    test("malformed URL — throws ScriptError with validation_error reason", () => {
+        let caught: unknown;
+        try {
+            parseRepositoryUrl("https://github.com/repos/o/r");
+        } catch (e) {
+            caught = e;
+        }
+        expect(caught).toBeInstanceOf(ScriptError);
+        expect((caught as ScriptError).reason).toBe("validation_error");
+    });
+
+    test("empty string — throws ScriptError with validation_error reason", () => {
+        expect(() => parseRepositoryUrl("")).toThrow(ScriptError);
+    });
+
+    test("URL missing repo segment — throws ScriptError with validation_error reason", () => {
+        expect(() => parseRepositoryUrl("https://api.github.com/repos/owner")).toThrow(ScriptError);
     });
 });
 

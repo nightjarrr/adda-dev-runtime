@@ -1,6 +1,6 @@
 // orphans subcommand handler for issue-hierarchy.
 import type { EnvDep, ShellDep } from "@adda/lib";
-import { buildIssueHeader, parseJson, requireOwnerRepo, ScriptZodValidationError } from "@adda/lib";
+import { buildIssueHeader, parseJson, parseRepositoryUrl, requireOwnerRepo, ScriptZodValidationError } from "@adda/lib";
 import { RawIssueSchema } from "./types";
 import type { OrphansResult, IssueHierarchyArgs } from "./types";
 
@@ -27,7 +27,8 @@ export async function runOrphans(
         const raw = parseJson(line);
         const parsed = RawIssueSchema.safeParse(raw);
         if (!parsed.success) throw new ScriptZodValidationError("unexpected issue response", parsed.error, raw);
-        return buildIssueHeader(parsed.data);
+        const issueRepo = parseRepositoryUrl(parsed.data.repository_url);
+        return buildIssueHeader({ ...parsed.data, owner: issueRepo.owner, repo: issueRepo.repo });
     });
 
     return { orphans };

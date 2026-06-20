@@ -1,14 +1,18 @@
 // children subcommand handler for issue-hierarchy.
 import type { EnvDep, ShellDep } from "@adda/lib";
-import { buildIssueHeader, parseJson, requireOwnerRepo, ScriptZodValidationError } from "@adda/lib";
+import { buildIssueHeader, parseJson, parseRepositoryUrl, requireOwnerRepo, ScriptZodValidationError } from "@adda/lib";
 import type { GitHubIssueHeader } from "@adda/lib";
 import { RawIssueSchema } from "./types";
 import type { ChildrenResult, IssueHierarchyArgs } from "./types";
 
 // --- Fetch ---
 
-export async function fetchChildren(deps: ShellDep & EnvDep, parentNumber: number): Promise<GitHubIssueHeader[]> {
-    const { owner, repo } = requireOwnerRepo(deps);
+export async function fetchChildren(
+    deps: ShellDep & EnvDep,
+    parentNumber: number,
+    ownerRepo?: { owner: string; repo: string },
+): Promise<GitHubIssueHeader[]> {
+    const { owner, repo } = ownerRepo ?? requireOwnerRepo(deps);
     const result = await deps.shell.run([
         "gh",
         "api",
@@ -25,7 +29,8 @@ export async function fetchChildren(deps: ShellDep & EnvDep, parentNumber: numbe
         const raw = parseJson(line);
         const parsed = RawIssueSchema.safeParse(raw);
         if (!parsed.success) throw new ScriptZodValidationError("unexpected sub_issues response", parsed.error, raw);
-        return buildIssueHeader({ ...parsed.data, parent: parentNumber });
+        const childRepo = parseRepositoryUrl(parsed.data.repository_url);
+        return buildIssueHeader({ ...parsed.data, parent: parentNumber, owner: childRepo.owner, repo: childRepo.repo });
     });
 }
 

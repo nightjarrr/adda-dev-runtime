@@ -43,7 +43,7 @@ All `issue-hierarchy` subcommands emit a JSON envelope on stdout. Parse and bran
 { "status": "fail", "result": null, "error": { "reason": "<reason_code>", "message": "<human message>", "details": {} } }
 ```
 
-Failure reason codes: `invalid_args` (bad input, exit 2), `shell_error` (gh API call failed, exit 1), `validation_error` (API response didn't match expected schema, exit 1), `internal_error` (write-then-verify mismatch, exit 1).
+Failure reason codes: `invalid_args` (bad input, exit 2), `shell_error` (gh API call failed, exit 1), `validation_error` (API response didn't match expected schema, exit 1), `internal_error` (write-then-verify mismatch, exit 1), `foreign_repo_inaccessible` (parent/sibling is in a foreign repo the token cannot access; `details.parentUrl` carries the full URL, exit 1).
 
 ---
 
@@ -69,7 +69,9 @@ Use when the user asks what's under an epic or parent issue.
         "type": "feature",
         "phase": "phase: planning",
         "parent": 10,
-        "labels": ["feature", "phase: planning"]
+        "labels": ["feature", "phase: planning"],
+        "owner": "nightjarrr",
+        "repo": "adda-dev-runtime"
       }
     ]
   },
@@ -79,7 +81,8 @@ Use when the user asks what's under an epic or parent issue.
 
 **Interpretation:**
 - `result.children` is always an array. An empty array (`[]`) means no sub-issues exist — the issue has no children yet or is not an epic.
-- Each child carries `number`, `title`, `state`, `type`, `phase`, `parent`, and `labels[]`.
+- Each child carries `number`, `title`, `state`, `type`, `phase`, `parent`, `labels[]`, `owner`, and `repo`.
+- When `owner`/`repo` match the current repo the child is same-repo. When they differ, the child lives in `{owner}/{repo}` — reference it as `{owner}/{repo}#{number}` rather than just `#{number}`.
 - Present the list to PO in a scannable format (table or bullet list), noting closed/merged status.
 
 ---
@@ -106,7 +109,9 @@ Use when the user asks about an issue's parent, wants to reparent, or wants to d
       "type": "feature",
       "phase": null,
       "parent": null,
-      "labels": ["feature"]
+      "labels": ["feature"],
+      "owner": "nightjarrr",
+      "repo": "adda-dev-runtime"
     }
   },
   "error": null
@@ -129,10 +134,11 @@ Both `--set` and `--set NONE` return the same result shape as the read variant a
 
 **Interpretation:**
 - `result.parent` is `null` when the issue is root-level. Tell the user it has no parent.
-- `result.parent` is a `GitHubIssueHeader` object when it has a parent. Include the parent title in your response.
+- `result.parent` is a `GitHubIssueHeader` object when it has a parent. Include the parent title and repo (`owner/repo#number` if cross-repo) in your response.
 - On `--set` / `--set NONE`, success means the operation completed and was verified by re-fetching.
 - On failure with `reason: "shell_error"` and a 404 in stderr, the target parent does not exist. Suggest checking the issue number.
 - On `reason: "internal_error"`, the relationship was set but verification failed — the link may have taken effect. Suggest manual verification via `issue-hierarchy parent <N>`.
+- On `reason: "foreign_repo_inaccessible"`, the parent exists but is in a foreign repo that is not accessible with the current token. `error.message` names the repo. `error.details.parentUrl` has the full API URL. `--set` always uses the current repo (cross-repo parent assignment is not supported).
 
 ---
 
@@ -158,7 +164,9 @@ Use when the user asks "what else is under the same parent" or "show siblings".
         "type": "feature",
         "phase": null,
         "parent": 10,
-        "labels": ["feature"]
+        "labels": ["feature"],
+        "owner": "nightjarrr",
+        "repo": "adda-dev-runtime"
       }
     ]
   },
@@ -168,8 +176,10 @@ Use when the user asks "what else is under the same parent" or "show siblings".
 
 **Interpretation:**
 - `result.siblings` is `[]` when the issue has no parent (and therefore no siblings) or is the only child.
-- Each sibling has the same `GitHubIssueHeader` shape as children above.
+- Each sibling has the same `GitHubIssueHeader` shape as children above, including `owner` and `repo`.
+- When `owner`/`repo` differ from the current repo, the sibling is in a foreign repo — reference it as `{owner}/{repo}#{number}`.
 - Filter on `state` if the user wants only open/closed siblings.
+- On `reason: "foreign_repo_inaccessible"`, the parent exists but is in an inaccessible foreign repo. `error.details.parentUrl` has the full URL.
 
 ---
 
@@ -199,7 +209,9 @@ Include closed issues:
         "type": "feature",
         "phase": null,
         "parent": null,
-        "labels": ["feature"]
+        "labels": ["feature"],
+        "owner": "nightjarrr",
+        "repo": "adda-dev-runtime"
       }
     ]
   },
@@ -212,6 +224,37 @@ Include closed issues:
 - By default only open issues are returned. Pass `--include-closed` for the full picture (e.g., backlog health check).
 - Each orphan has `parent: null` by definition.
 - To clean up orphans, suggest reparenting via `issue-hierarchy parent <N> --set <M>` or discuss with PO which epic each orphan belongs to.
+
+---
+
+## Cross-repo hierarchy
+
+GitHub sub-issues support cross-repo parent-child links. Every `GitHubIssueHeader` carries `owner` and `repo` fields that identify where the issue lives.
+
+**Same-repo vs cross-repo:**
+- When `owner`/`repo` match the current repo, the entry is same-repo — display as `#{number}`.
+- When they differ, the entry is cross-repo — display as `{owner}/{repo}#{number}` so PO can distinguish it from a same-repo issue with the same number.
+
+**`issue-hierarchy parent` and `issue-hierarchy siblings`:**
+- If the parent URL points to a foreign repo that is not accessible with the current token, the command hard-fails with `foreign_repo_inaccessible`.
+- `error.message` names the foreign repo and issue URL.
+- `error.details.parentUrl` carries the full API URL.
+- Suggestion: verify token scopes or use a token with access to the foreign repo.
+
+**`current-issue switch` and `current-issue sync`:**
+- These degrade gracefully when the parent is in an inaccessible foreign repo.
+- `result.issue.parent` is `null`, `result.issue.siblings` is `[]`.
+- `result.details.hierarchyWarning` is set to a string explaining why (names the foreign repo).
+- The switch itself still succeeds — the issue is switched to and its branch is checked out.
+- Re-run `current-issue sync` after gaining access to the foreign repo to restore full hierarchy.
+
+**`parent --set` is always same-repo:**
+- The PAT is scoped to the current repo. Cross-repo parent assignment is not possible via this tool.
+
+**`issue-hierarchy children <n>`:**
+- Always queries the current repo's sub-issues for the given parent.
+- The response may include cross-repo children (with their `owner`/`repo` populated from `repository_url`).
+- Children of a foreign-repo parent are only accessible via that parent's repo — not via this command in the current repo context.
 
 ---
 
@@ -362,7 +405,7 @@ If the user wants to break the *current active issue* into sub-issues, mention t
 | User says | What the model should do |
 |---|---|
 | "what's still open under #348?" | Run `issue-hierarchy children 348`, filter `children` by `state: open`, present as a table with number, title, type, and status |
-| "show me the parent of #358" | Run `issue-hierarchy parent 358`, read `result.parent` — if null say it's root-level; otherwise show the parent title and number |
+| "show me the parent of #358" | Run `issue-hierarchy parent 358`, read `result.parent` — if null say it's root-level; otherwise show the parent title and number (include `owner/repo#N` format if cross-repo) |
 | "what else is under the same parent as #347?" | Run `issue-hierarchy siblings 347`, filter out the issue itself from the list, present the remaining siblings |
 | "are there any orphan issues?" / "show me what has no parent" | Run `issue-hierarchy orphans`, present the list. If empty, report "all issues have a parent." |
 | "list all open bugs" | Run `gh issue list --json number,title,state,labels,url --label bug --state open --limit 50`, present the results |
@@ -377,5 +420,6 @@ If the user wants to break the *current active issue* into sub-issues, mention t
   - `shell_error` — the underlying `gh api` call failed. Check `details.stderr` for 404 (nonexistent issue) vs network/permissions error.
   - `validation_error` — the API returned unexpected data. This is an infrastructure issue — report to PO.
   - `internal_error` — write succeeded but verification failed. The change *may* have taken effect. Suggest manual verification.
+  - `foreign_repo_inaccessible` — the parent or sibling is in a foreign repo the token cannot access. `error.message` names the repo. `error.details.parentUrl` has the full API URL. Suggest verifying token scopes or using a token with access to the foreign repo.
 - **`gh` command failures:** The exit code is non-zero and stderr contains the error. Surface it verbatim and stop. Do not retry silently.
 - **Never roll back primary artifacts** on partial failure. An issue that was created but couldn't be linked to a parent is still a valid issue — report the partial outcome.

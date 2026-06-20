@@ -2,9 +2,18 @@
 // Supports read (query parent), set (--set <number>), and unset (--set NONE) operations.
 import { z } from "zod";
 import type { EnvDep, ShellDep } from "@adda/lib";
-import { buildIssueHeader, parseJson, requireOwnerRepo, ScriptError, ScriptZodValidationError } from "@adda/lib";
+import {
+    buildIssueHeader,
+    parseJson,
+    parseRepositoryUrl,
+    requireOwnerRepo,
+    ScriptError,
+    ScriptShellError,
+    ScriptZodValidationError,
+} from "@adda/lib";
 import type { GitHubIssueHeader } from "@adda/lib";
 import type { IssueHierarchyArgs, ParentResult } from "./types";
+import { IssueHierarchyError } from "./types";
 
 // --- Schema for /issues/{n} response ---
 
@@ -15,14 +24,23 @@ const IssueWithParentSchema = z.object({
     id: z.number(),
     labels: z.array(z.object({ name: z.string() })),
     parent_issue_url: z.string().nullable().optional(),
+    repository_url: z.string(),
 });
 
 // --- Internal helpers ---
 
-function parseParentNumber(parentUrl: string | null | undefined): number | null {
-    if (!parentUrl) return null;
-    const parts = parentUrl.replace(/\/+$/, "").split("/");
-    return Number(parts[parts.length - 1]!);
+/**
+ * Parses a GitHub issue API URL of the form
+ * "https://api.github.com/repos/{owner}/{repo}/issues/{number}"
+ * and returns {owner, repo, number}.
+ * Throws IssueHierarchyError("validation_error", ...) on malformed URL.
+ */
+function parseParentRef(url: string): { owner: string; repo: string; number: number } {
+    const match = /^https:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)\/issues\/(\d+)\/?$/.exec(url);
+    if (!match) {
+        throw new IssueHierarchyError("validation_error", `malformed parent_issue_url: ${url}`);
+    }
+    return { owner: match[1]!, repo: match[2]!, number: Number(match[3]!) };
 }
 
 async function fetchIssueById(deps: ShellDep & EnvDep, issueNumber: number): Promise<z.infer<typeof IssueWithParentSchema>> {
@@ -40,13 +58,28 @@ export async function fetchParent(deps: ShellDep & EnvDep, issueNumber: number):
     const issue = await fetchIssueById(deps, issueNumber);
     if (!issue.parent_issue_url) return null;
 
-    const { owner, repo } = requireOwnerRepo(deps);
-    const parentNumber = parseParentNumber(issue.parent_issue_url);
-    const result = await deps.shell.run(["gh", "api", `/repos/${owner}/${repo}/issues/${parentNumber}`]);
-    const raw = parseJson(result.stdout);
-    const parsed = IssueWithParentSchema.safeParse(raw);
-    if (!parsed.success) throw new ScriptZodValidationError("unexpected parent issue response", parsed.error, raw);
-    return buildIssueHeader(parsed.data);
+    const { owner, repo, number: parentNumber } = parseParentRef(issue.parent_issue_url);
+
+    let parentRaw: unknown;
+    try {
+        const result = await deps.shell.run(["gh", "api", `/repos/${owner}/${repo}/issues/${parentNumber}`]);
+        parentRaw = parseJson(result.stdout);
+    } catch (e) {
+        if (e instanceof ScriptShellError) {
+            throw new IssueHierarchyError(
+                "foreign_repo_inaccessible",
+                `parent of issue #${issueNumber} is in ${owner}/${repo} (issues/${parentNumber}) which is not accessible`,
+                { details: { parentUrl: issue.parent_issue_url } },
+            );
+        }
+        throw e;
+    }
+
+    const parsed = IssueWithParentSchema.safeParse(parentRaw);
+    if (!parsed.success) throw new ScriptZodValidationError("unexpected parent issue response", parsed.error, parentRaw);
+
+    const parentRepo = parseRepositoryUrl(parsed.data.repository_url);
+    return buildIssueHeader({ ...parsed.data, parent: undefined, owner: parentRepo.owner, repo: parentRepo.repo });
 }
 
 export async function runParent(
@@ -60,7 +93,7 @@ export async function runParent(
         if (args.setParent === null) {
             // Remove parent
             if (issue.parent_issue_url) {
-                const parentNumber = parseParentNumber(issue.parent_issue_url);
+                const { number: parentNumber } = parseParentRef(issue.parent_issue_url);
                 await deps.shell.run([
                     "gh",
                     "api",

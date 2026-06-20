@@ -1,4 +1,5 @@
 import type { EnvDep, FileSysDep, ShellDep } from "@adda/lib";
+import type { GitHubIssueHeader } from "@adda/lib";
 import { parseJson, requireOwnerRepo, ScriptZodValidationError } from "@adda/lib";
 import { fetchChildren, fetchParent, fetchSiblings } from "../issue-hierarchy";
 
@@ -53,11 +54,21 @@ export async function executeSwitch(
     // Step 4: Resolve branch (read-only GraphQL API call, safe to run always)
     const resolveData = await resolveIssueBranch(deps, issueId);
 
-    // Step 5: Enrich with hierarchy context (parallel, fails fast)
-    const [parentHeader, childrenHeaders, siblingHeaders] = await Promise.all([
-        fetchParent(deps, Number(issueId)),
+    // Step 5: Enrich with hierarchy context
+    // Parent: degrade gracefully on inaccessible foreign repo
+    let parentHeader: GitHubIssueHeader | null = null;
+    let hierarchyWarning: string | undefined;
+    try {
+        parentHeader = await fetchParent(deps, Number(issueId));
+    } catch (e) {
+        hierarchyWarning = e instanceof Error ? e.message : String(e);
+    }
+
+    // Children: always current repo — hard fail on any error
+    // Siblings: pass cached parent (null on failure → returns [] without fetching)
+    const [childrenHeaders, siblingHeaders] = await Promise.all([
         fetchChildren(deps, Number(issueId)),
-        fetchSiblings(deps, Number(issueId)),
+        fetchSiblings(deps, Number(issueId), parentHeader),
     ]);
 
     // Step 6: Determine branch
@@ -93,5 +104,7 @@ export async function executeSwitch(
     // Step 10: Run repo-level init hook (skip if issueStateOnly)
     const hook = await runRepoInitHook(deps, issueStateOnly ? true : skipRepoInit);
 
-    return { issue: issueState, details: { branch, resolution: resolveData.resolution, hook } };
+    const details: Record<string, unknown> = { branch, resolution: resolveData.resolution, hook };
+    if (hierarchyWarning !== undefined) details.hierarchyWarning = hierarchyWarning;
+    return { issue: issueState, details };
 }
