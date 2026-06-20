@@ -38,6 +38,8 @@ output="$(/usr/local/libexec/adda-dev-runtime/bin/current-issue show 2>/dev/null
 id="$(printf '%s' "$output" | jq -r '.result.issue.id // empty' 2>/dev/null)"
 
 if [[ -z "$id" ]]; then
+    owner="${GITHUB_OWNER:-}"
+    repo="${GITHUB_REPO:-}"
     no_issue_text="(no current issue)"
     cols=$(( ${COLUMNS:-80} - 5 ))
     pad=$(( cols - ${#no_issue_text} - ${#ctx_right} ))
@@ -47,64 +49,63 @@ if [[ -z "$id" ]]; then
     else
         printf '\033[2;36m%s\033[0m\n' "$no_issue_text"
     fi
-    exit 0
-fi
-
-title="$(printf '%s' "$output" | jq -r '.result.issue.title // empty')"
-issue_type="$(printf '%s' "$output" | jq -r '.result.issue.type // empty')"
-phase="$(printf '%s' "$output" | jq -r '.result.issue.phase // empty')"
-state="$(printf '%s' "$output" | jq -r '.result.issue.state // empty')"
-pr="$(printf '%s' "$output" | jq -r '.result.issue.pr // empty')"
-owner="$(printf '%s' "$output" | jq -r '.result.issue.owner // empty')"
-repo="$(printf '%s' "$output" | jq -r '.result.issue.repo // empty')"
-
-# Line 1: #id title (type, phase, PR #n)
-if [[ -n "$pr" ]]; then
-    meta="(${issue_type}, ${phase}, PR #${pr})"
 else
-    meta="(${issue_type}, ${phase})"
-fi
+    title="$(printf '%s' "$output" | jq -r '.result.issue.title // empty')"
+    issue_type="$(printf '%s' "$output" | jq -r '.result.issue.type // empty')"
+    phase="$(printf '%s' "$output" | jq -r '.result.issue.phase // empty')"
+    state="$(printf '%s' "$output" | jq -r '.result.issue.state // empty')"
+    pr="$(printf '%s' "$output" | jq -r '.result.issue.pr // empty')"
+    owner="$(printf '%s' "$output" | jq -r '.result.issue.owner // empty')"
+    repo="$(printf '%s' "$output" | jq -r '.result.issue.repo // empty')"
 
-# Dynamic title truncation: title gets whatever cols remain after #id and meta
-cols=$(( $(tput cols 2>/dev/null || echo "${COLUMNS:-80}") - 5 ))
-if [[ "$state" == "closed" ]]; then
-    id_overhead=$(( 1 + ${#id} + 1 + 9 ))
-else
-    id_overhead=$(( 1 + ${#id} + 1 ))
-fi
-max_left=$(( cols * 2 / 3 ))
-title_max=$(( max_left - id_overhead - 2 - ${#meta} ))
-[[ $title_max -lt 15 ]] && title_max=15
-if [[ ${#title} -gt $title_max ]]; then
-    title="${title:0:$(( title_max - 1 ))}…"
-fi
+    # Line 1: #id title (type, phase, PR #n)
+    if [[ -n "$pr" ]]; then
+        meta="(${issue_type}, ${phase}, PR #${pr})"
+    else
+        meta="(${issue_type}, ${phase})"
+    fi
 
-# Compute left-side visible length (no ANSI codes)
-if [[ "$state" == "closed" ]]; then
-    left_len=$(( 1 + ${#id} + 1 + 8 + 1 + ${#title} + 1 + ${#meta} ))
-else
-    left_len=$(( 1 + ${#id} + 1 + ${#title} + 1 + ${#meta} ))
-fi
+    # Dynamic title truncation: title gets whatever cols remain after #id and meta
+    cols=$(( $(tput cols 2>/dev/null || echo "${COLUMNS:-80}") - 5 ))
+    if [[ "$state" == "closed" ]]; then
+        id_overhead=$(( 1 + ${#id} + 1 + 9 ))
+    else
+        id_overhead=$(( 1 + ${#id} + 1 ))
+    fi
+    max_left=$(( cols * 2 / 3 ))
+    title_max=$(( max_left - id_overhead - 2 - ${#meta} ))
+    [[ $title_max -lt 15 ]] && title_max=15
+    if [[ ${#title} -gt $title_max ]]; then
+        title="${title:0:$(( title_max - 1 ))}…"
+    fi
 
-# Right-align: pad between left content and right info
-pad=$(( cols - left_len - ${#ctx_right} ))
+    # Compute left-side visible length (no ANSI codes)
+    if [[ "$state" == "closed" ]]; then
+        left_len=$(( 1 + ${#id} + 1 + 8 + 1 + ${#title} + 1 + ${#meta} ))
+    else
+        left_len=$(( 1 + ${#id} + 1 + ${#title} + 1 + ${#meta} ))
+    fi
 
-# If there's not enough room, suppress the right side rather than overflow
-if [[ $pad -lt 2 ]]; then
-    ctx_right=""
-fi
+    # Right-align: pad between left content and right info
+    pad=$(( cols - left_len - ${#ctx_right} ))
 
-if [[ "$state" == "closed" ]]; then
-    left_part="$(printf '\033[1;36m#%s\033[0m \033[2;36m[CLOSED]\033[0m \033[1;36m%s\033[0m \033[38;5;238m%s\033[0m' "$id" "$title" "$meta")"
-else
-    left_part="$(printf '\033[1;36m#%s\033[0m \033[1;36m%s\033[0m \033[38;5;238m%s\033[0m' "$id" "$title" "$meta")"
-fi
+    # If there's not enough room, suppress the right side rather than overflow
+    if [[ $pad -lt 2 ]]; then
+        ctx_right=""
+    fi
 
-if [[ -n "$ctx_right" ]]; then
-    printf '%s%*s\033[1;38;5;238m%s%s'"${ctx_part_color}"'%s\033[0m\n' \
-        "$left_part" "$pad" "" "$model_part" "$ctx_sep" "$ctx_pct_part"
-else
-    printf '%s\n' "$left_part"
+    if [[ "$state" == "closed" ]]; then
+        left_part="$(printf '\033[1;36m#%s\033[0m \033[2;36m[CLOSED]\033[0m \033[1;36m%s\033[0m \033[38;5;238m%s\033[0m' "$id" "$title" "$meta")"
+    else
+        left_part="$(printf '\033[1;36m#%s\033[0m \033[1;36m%s\033[0m \033[38;5;238m%s\033[0m' "$id" "$title" "$meta")"
+    fi
+
+    if [[ -n "$ctx_right" ]]; then
+        printf '%s%*s\033[1;38;5;238m%s%s'"${ctx_part_color}"'%s\033[0m\n' \
+            "$left_part" "$pad" "" "$model_part" "$ctx_sep" "$ctx_pct_part"
+    else
+        printf '%s\n' "$left_part"
+    fi
 fi
 
 # Line 2: owner/repo in bold magenta (omit when owner is empty)
