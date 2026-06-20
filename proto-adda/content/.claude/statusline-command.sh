@@ -55,16 +55,38 @@ issue_type="$(printf '%s' "$output" | jq -r '.result.issue.type // empty')"
 phase="$(printf '%s' "$output" | jq -r '.result.issue.phase // empty')"
 state="$(printf '%s' "$output" | jq -r '.result.issue.state // empty')"
 pr="$(printf '%s' "$output" | jq -r '.result.issue.pr // empty')"
+owner="$(printf '%s' "$output" | jq -r '.result.issue.owner // empty')"
+repo="$(printf '%s' "$output" | jq -r '.result.issue.repo // empty')"
+
+# Line 1: #id title (type, phase, PR #n)
+if [[ -n "$pr" ]]; then
+    meta="(${issue_type}, ${phase}, PR #${pr})"
+else
+    meta="(${issue_type}, ${phase})"
+fi
+
+# Dynamic title truncation: title gets whatever cols remain after #id and meta
+cols=$(( $(tput cols 2>/dev/null || echo "${COLUMNS:-80}") - 5 ))
+if [[ "$state" == "closed" ]]; then
+    id_overhead=$(( 1 + ${#id} + 1 + 9 ))
+else
+    id_overhead=$(( 1 + ${#id} + 1 ))
+fi
+max_left=$(( cols * 2 / 3 ))
+title_max=$(( max_left - id_overhead - 2 - ${#meta} ))
+[[ $title_max -lt 15 ]] && title_max=15
+if [[ ${#title} -gt $title_max ]]; then
+    title="${title:0:$(( title_max - 1 ))}…"
+fi
 
 # Compute left-side visible length (no ANSI codes)
 if [[ "$state" == "closed" ]]; then
-    left_len=$(( 1 + ${#id} + 1 + 8 + 1 + ${#title} ))
+    left_len=$(( 1 + ${#id} + 1 + 8 + 1 + ${#title} + 1 + ${#meta} ))
 else
-    left_len=$(( 1 + ${#id} + 1 + ${#title} ))
+    left_len=$(( 1 + ${#id} + 1 + ${#title} + 1 + ${#meta} ))
 fi
 
 # Right-align: pad between left content and right info
-cols=$(( ${COLUMNS:-80} - 5 ))
 pad=$(( cols - left_len - ${#ctx_right} ))
 
 # If there's not enough room, suppress the right side rather than overflow
@@ -73,9 +95,9 @@ if [[ $pad -lt 2 ]]; then
 fi
 
 if [[ "$state" == "closed" ]]; then
-    left_part="$(printf '\033[1;36m#%s\033[0m \033[2;36m[CLOSED]\033[0m \033[1;36m%s\033[0m' "$id" "$title")"
+    left_part="$(printf '\033[1;36m#%s\033[0m \033[2;36m[CLOSED]\033[0m \033[1;36m%s\033[0m \033[38;5;238m%s\033[0m' "$id" "$title" "$meta")"
 else
-    left_part="$(printf '\033[1;36m#%s\033[0m \033[1;36m%s\033[0m' "$id" "$title")"
+    left_part="$(printf '\033[1;36m#%s\033[0m \033[1;36m%s\033[0m \033[38;5;238m%s\033[0m' "$id" "$title" "$meta")"
 fi
 
 if [[ -n "$ctx_right" ]]; then
@@ -85,8 +107,7 @@ else
     printf '%s\n' "$left_part"
 fi
 
-if [[ -n "$pr" ]]; then
-    printf '\033[38;5;238m%s  %s  PR #%s\033[0m\n' "$issue_type" "$phase" "$pr"
-else
-    printf '\033[38;5;238m%s  %s\033[0m\n' "$issue_type" "$phase"
+# Line 2: owner/repo in bold magenta (omit when owner is empty)
+if [[ -n "$owner" ]]; then
+    printf '\033[1;35m%s/%s\033[0m\n' "$owner" "$repo"
 fi

@@ -21,6 +21,8 @@ export const IssueStateSchema = z.object({
     phase: z.string(),
     state: z.enum(["open", "closed"]),
     pr: z.string(),
+    owner: z.string(),
+    repo: z.string(),
     parent: hierarchyEntrySchema.nullable(),
     children: z.array(hierarchyEntrySchema),
     siblings: z.array(hierarchyEntrySchema),
@@ -43,6 +45,8 @@ export interface IssueStateView {
     phase: string;
     state: string;
     pr: string;
+    owner: string;
+    repo: string;
     parent: GitHubIssueHeader | null;
     children: GitHubIssueHeader[];
     siblings: GitHubIssueHeader[];
@@ -55,6 +59,8 @@ export const EMPTY_ISSUE_VIEW: IssueStateView = {
     phase: "",
     state: "",
     pr: "",
+    owner: "",
+    repo: "",
     parent: null,
     children: [],
     siblings: [],
