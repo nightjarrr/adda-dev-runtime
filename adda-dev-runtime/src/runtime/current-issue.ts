@@ -21,7 +21,7 @@ type CurrentIssueDeps = ShellDep & EnvDep & StdioDep & FileReaderDep & FileWrite
 
 type CurrentIssueArgs =
     | { subcommand: "switch"; issueId: string; skipRepoInit: boolean }
-    | { subcommand: "show" }
+    | { subcommand: "show"; withHierarchy: boolean }
     | { subcommand: "sync"; skipRepoInit: boolean; issueStateOnly: boolean }
     | { subcommand: "clear"; skipRepoInit: boolean }
     | { subcommand: "get"; field: string }
@@ -70,6 +70,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
             options: {
                 "skip-repo-init": { type: "boolean", default: false },
                 "issue-state-only": { type: "boolean", default: false },
+                "with-hierarchy": { type: "boolean", default: false },
                 ensure: { type: "boolean", default: false },
                 verify: { type: "boolean", default: false },
             },
@@ -94,6 +95,11 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
             throw new ScriptArgsError(`--issue-state-only is not valid for '${subcommand}'`);
         }
 
+        const withHierarchy = (parsed.values["with-hierarchy"] as boolean | undefined) ?? false;
+        if (withHierarchy && subcommand !== "show") {
+            throw new ScriptArgsError(`--with-hierarchy is not valid for '${subcommand}'`);
+        }
+
         const ensure = (parsed.values["ensure"] as boolean | undefined) ?? false;
         const verify = (parsed.values["verify"] as boolean | undefined) ?? false;
         if ((ensure || verify) && subcommand !== "branch") {
@@ -111,9 +117,9 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
 
         if (subcommand === "show") {
             if (positionals.length > 1) {
-                throw new ScriptArgsError("usage: current-issue show");
+                throw new ScriptArgsError("usage: current-issue show [--with-hierarchy]");
             }
-            return { subcommand: "show" };
+            return { subcommand: "show", withHierarchy };
         }
 
         if (subcommand === "sync") {
@@ -154,7 +160,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
                 this.emitOk(await executeSwitch(args.issueId, args.skipRepoInit, this.deps, this, false));
                 return;
             case "show":
-                this.emitOk(await executeShow(this));
+                this.emitOk(await executeShow(this, args.withHierarchy));
                 return;
             case "sync":
                 this.emitOk(await executeSync(args.skipRepoInit, this.deps, this, args.issueStateOnly));
@@ -163,7 +169,7 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
                 this.emitOk(await executeClear(args.skipRepoInit, this.deps, this));
                 return;
             case "get": {
-                const result = await executeShow(new SilentStore(this.deps)).catch(() => null);
+                const result = await executeShow(new SilentStore(this.deps), false).catch(() => null);
                 if (result?.issue) {
                     const value = (result.issue as unknown as Record<string, unknown>)[args.field];
                     if (typeof value === "string" && value) this.deps.stdio.stdout.write(value + "\n");

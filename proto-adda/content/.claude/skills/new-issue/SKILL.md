@@ -62,7 +62,7 @@ After 3 rounds of context-gathering without reaching clarity on both type and ti
    /usr/local/libexec/adda-dev-runtime/bin/current-issue show
    ```
 
-   The command emits a JSON envelope. On success (`status: "ok"`), the `result.issue` object carries the issue id, title, and other fields. For this skill, only the id and title are relevant:
+   The command emits a JSON envelope. On success (`status: "ok"`), the `result.issue` object carries the scalar issue fields (id, title, type, phase, pr, owner, repo). Hierarchy fields (parent, children, siblings) are not included in the default output — they are not needed here. For this skill, only the id and title are relevant:
 
    ```json
    {
