@@ -165,8 +165,8 @@ export class CurrentIssueScript extends ScriptBase<CurrentIssueDeps, CurrentIssu
             case "get": {
                 const result = await executeShow(new SilentStore(this.deps)).catch(() => null);
                 if (result?.issue) {
-                    const value = (result.issue as unknown as Record<string, string>)[args.field] ?? "";
-                    if (value) this.deps.stdio.stdout.write(value + "\n");
+                    const value = (result.issue as unknown as Record<string, unknown>)[args.field];
+                    if (typeof value === "string" && value) this.deps.stdio.stdout.write(value + "\n");
                 }
                 return;
             }
