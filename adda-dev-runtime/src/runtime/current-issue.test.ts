@@ -1551,6 +1551,86 @@ describe("CurrentIssueScript", () => {
             expect(code).toBe(0);
             expect(outLines.join("").trim()).toBe("");
         });
+
+        test("field 'parent' with parent: null — empty output, exit 0", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => validStateJson,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "parent"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("");
+        });
+
+        test("field 'parent' with non-null parent object — empty output, exit 0", async () => {
+            const stateWithParent = JSON.stringify({
+                id: "429",
+                title: "current-issue get silently drops non-scalar fields",
+                type: "bug",
+                phase: "phase: triage",
+                state: "open",
+                pr: "",
+                owner: "testowner",
+                repo: "testrepo",
+                parent: {
+                    number: 420,
+                    title: "current-issue script",
+                    state: "open",
+                    type: "feature",
+                    phase: "phase: triage",
+                    parent: null,
+                    labels: ["feature", "phase: triage"],
+                },
+                children: [],
+                siblings: [],
+            });
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => stateWithParent,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "parent"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("");
+        });
+
+        test("field 'children' with children: [] — empty output, exit 0", async () => {
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => validStateJson,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "children"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("");
+        });
+
+        test("field 'siblings' with non-empty siblings array — empty output, exit 0", async () => {
+            const stateWithSiblings = JSON.stringify({
+                id: "429",
+                title: "current-issue get silently drops non-scalar fields",
+                type: "bug",
+                phase: "phase: triage",
+                state: "open",
+                pr: "",
+                owner: "testowner",
+                repo: "testrepo",
+                parent: null,
+                children: [],
+                siblings: [
+                    {
+                        number: 413,
+                        title: "Show current repo in current-issue and status line",
+                        state: "closed",
+                        type: "feature",
+                        phase: "phase: triage",
+                        parent: 420,
+                        labels: ["feature", "phase: triage"],
+                    },
+                ],
+            });
+            const { deps, outLines } = makeMockDeps({
+                fileReaderReadFile: async (_path: string) => stateWithSiblings,
+            });
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "get", "siblings"]);
+            expect(code).toBe(0);
+            expect(outLines.join("").trim()).toBe("");
+        });
     });
 
     describe("IssueStateStore", () => {
