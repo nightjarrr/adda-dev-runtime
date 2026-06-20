@@ -48,6 +48,7 @@ function makeRawIssueResponse(
     id: number,
     labels: string[],
     parent_issue_url: string | null,
+    repository_url = "https://api.github.com/repos/testowner/testrepo",
 ): string {
     return JSON.stringify({
         number,
@@ -56,16 +57,24 @@ function makeRawIssueResponse(
         id,
         labels: labels.map((name) => ({ name })),
         parent_issue_url,
+        repository_url,
     });
 }
 
 /** Helper: build a raw sub-issue line for gh api /repos/.../sub_issues NDJSON */
-function makeRawSubIssue(number: number, title: string, state: "open" | "closed", labels: string[]): string {
+function makeRawSubIssue(
+    number: number,
+    title: string,
+    state: "open" | "closed",
+    labels: string[],
+    repository_url = "https://api.github.com/repos/testowner/testrepo",
+): string {
     return JSON.stringify({
         number,
         title,
         state,
         labels: labels.map((name) => ({ name })),
+        repository_url,
     });
 }
 
@@ -74,12 +83,23 @@ function makeRawSubIssue(number: number, title: string, state: "open" | "closed"
  * Returns a minimal valid issue with no parent, or empty for sub_issues.
  */
 function defaultHierarchyApiResponse(url: string): string {
-    const issueMatch = url.match(/\/issues\/(\d+)(?:\/sub_issues)?$/);
-    const issueNumber = issueMatch ? Number(issueMatch[1]) : 28;
+    const issueMatch = url.match(/\/repos\/([^/]+)\/([^/]+)\/issues\/(\d+)/);
+    if (!issueMatch) return "";
+    const owner = issueMatch[1]!;
+    const repo = issueMatch[2]!;
+    const issueNumber = Number(issueMatch[3]!);
     if (url.endsWith("/sub_issues")) {
         return "";
     }
-    return makeRawIssueResponse(issueNumber, `Issue #${issueNumber}`, "open", issueNumber * 1000 + 1, [], null);
+    return makeRawIssueResponse(
+        issueNumber,
+        `Issue #${issueNumber}`,
+        "open",
+        issueNumber * 1000 + 1,
+        [],
+        null,
+        `https://api.github.com/repos/${owner}/${repo}`,
+    );
 }
 
 // --- Mock factory ---
@@ -689,7 +709,15 @@ describe("CurrentIssueScript", () => {
                     }
                     if (url.includes("/issues/10")) {
                         return makeShellResult({
-                            stdout: makeRawIssueResponse(10, "Parent", "open", 10001, ["feature"], null),
+                            stdout: makeRawIssueResponse(
+                                10,
+                                "Parent",
+                                "open",
+                                10001,
+                                ["feature"],
+                                null,
+                                "https://api.github.com/repos/o/r",
+                            ),
                         });
                     }
                     return null; // fall through to default
@@ -758,7 +786,8 @@ describe("CurrentIssueScript", () => {
             expect(issue.siblings).toEqual([]);
         });
 
-        test("hierarchy API fails — exits 1, fail envelope", async () => {
+        test("children hierarchy API fails — exits 1, fail envelope", async () => {
+            // Children always hard-fail. Simulate a ScriptShellError for children sub_issues call.
             const { deps, outLines } = makeMockDeps({
                 shellRun: async (command: string[]) => {
                     if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
@@ -776,7 +805,15 @@ describe("CurrentIssueScript", () => {
                     if (command[0] === "git" && command[1] === "pull") return makeShellResult();
                     return makeShellResult();
                 },
-                hierarchyApi: () => makeShellResult({ stdout: "", stderr: "HTTP 500", exitCode: 1 }),
+                hierarchyApi: (command: string[]) => {
+                    const url = command[command.length - 1] as string;
+                    // Let the parent issue fetch return valid data (no parent)
+                    if (!url.endsWith("/sub_issues")) {
+                        return makeShellResult({ stdout: defaultHierarchyApiResponse(url) });
+                    }
+                    // Children sub_issues call throws to simulate hard failure
+                    throw new ScriptShellError(command.join(" "), 1, "", "HTTP 500");
+                },
             });
 
             const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
@@ -785,6 +822,128 @@ describe("CurrentIssueScript", () => {
             const out = parseStdoutJson(outLines);
             expect(out.status).toBe("fail");
             expect(out.result).toBeNull();
+        });
+
+        test("parent fetch fails with foreign_repo_inaccessible — switch succeeds with null parent and hierarchyWarning, fetchSiblings not called", async () => {
+            // Simulate fetchIssueById succeeding (has cross-repo parent url) but foreign repo fetch throwing
+            const foreignSubIssuesCalls: string[] = [];
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "gh" && command[1] === "issue") {
+                        return makeShellResult({
+                            stdout: makeGhIssueResponse("Cross-repo child", ["feature"], "OPEN"),
+                        });
+                    }
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
+                        return makeShellResult({
+                            stdout: makeResolveResponse("feature_branch", "feature/28-cross-repo", "42"),
+                        });
+                    }
+                    if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
+                    if (command[0] === "git" && command[1] === "pull") return makeShellResult();
+                    return makeShellResult();
+                },
+                hierarchyApi: (command: string[]) => {
+                    const url = command[command.length - 1] as string;
+                    // Track sub_issues calls to the foreign repo parent
+                    if (url.includes("/repos/foreign/repo/") && url.endsWith("/sub_issues")) {
+                        foreignSubIssuesCalls.push(url);
+                    }
+                    // fetchIssueById for #28: returns issue with cross-repo parent URL
+                    if (url.includes("/issues/28") && !url.endsWith("/sub_issues")) {
+                        return makeShellResult({
+                            stdout: makeRawIssueResponse(
+                                28,
+                                "Cross-repo child",
+                                "open",
+                                28001,
+                                ["feature"],
+                                "https://api.github.com/repos/foreign/repo/issues/5",
+                            ),
+                        });
+                    }
+                    // Foreign repo fetch throws (inaccessible)
+                    if (url.includes("/repos/foreign/repo/")) {
+                        throw new ScriptShellError(command.join(" "), 1, "", "HTTP 404: Not Found");
+                    }
+                    // Children and sub_issues for the current issue succeed normally
+                    return makeShellResult({ stdout: defaultHierarchyApiResponse(url) });
+                },
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
+            expect(code).toBe(0);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("ok");
+            const result = out.result as Record<string, unknown>;
+            const issue = result.issue as Record<string, unknown>;
+            expect(issue.parent).toBeNull();
+            expect(issue.siblings).toEqual([]);
+            const details = result.details as Record<string, unknown>;
+            expect(typeof details.hierarchyWarning).toBe("string");
+            expect((details.hierarchyWarning as string).length).toBeGreaterThan(0);
+            // fetchSiblings must not be called — no sub_issues request to the foreign repo parent
+            expect(foreignSubIssuesCalls).toHaveLength(0);
+        });
+
+        test("parent fetch fails with non-foreign_repo_inaccessible error — switch propagates the error", async () => {
+            // When the foreign repo fetch fails with a non-HTTP-4xx error (e.g. connection refused),
+            // fetchParent re-throws the original ScriptShellError, and switch must not degrade gracefully.
+            const { deps, outLines } = makeMockDeps({
+                shellRun: async (command: string[]) => {
+                    if (command[0] === "git" && command[1] === "status") return makeShellResult({ stdout: "" });
+                    if (command[0] === "gh" && command[1] === "issue") {
+                        return makeShellResult({
+                            stdout: makeGhIssueResponse("Cross-repo child", ["feature"], "OPEN"),
+                        });
+                    }
+                    if (command[0] === "/usr/local/libexec/adda-dev-runtime/bin/resolve-issue-branch") {
+                        return makeShellResult({
+                            stdout: makeResolveResponse("feature_branch", "feature/28-cross-repo", "42"),
+                        });
+                    }
+                    if (command[0] === "git" && command[1] === "checkout") return makeShellResult();
+                    if (command[0] === "git" && command[1] === "pull") return makeShellResult();
+                    return makeShellResult();
+                },
+                hierarchyApi: (command: string[]) => {
+                    const url = command[command.length - 1] as string;
+                    // fetchIssueById for #28: returns issue with cross-repo parent URL
+                    if (url.includes("/issues/28") && !url.endsWith("/sub_issues")) {
+                        return makeShellResult({
+                            stdout: makeRawIssueResponse(
+                                28,
+                                "Cross-repo child",
+                                "open",
+                                28001,
+                                ["feature"],
+                                "https://api.github.com/repos/foreign/repo/issues/5",
+                            ),
+                        });
+                    }
+                    // Foreign repo fetch fails with connection refused (no HTTP 4xx)
+                    if (url.includes("/repos/foreign/repo/") && !url.endsWith("/sub_issues")) {
+                        throw new ScriptShellError(command.join(" "), 1, "", "connection refused");
+                    }
+                    return makeShellResult({ stdout: defaultHierarchyApiResponse(url) });
+                },
+            });
+
+            const code = await new CurrentIssueScript(deps).run(["bun", "current-issue.ts", "switch", "28"]);
+            // Must fail — non-inaccessible errors propagate
+            expect(code).toBe(1);
+
+            const out = parseStdoutJson(outLines);
+            expect(out.status).toBe("fail");
+            expect(out.result).toBeNull();
+            const error = out.error as Record<string, unknown>;
+            // The propagated error is a ScriptShellError (reason: "shell_error")
+            expect(error.reason).toBe("shell_error");
+            // hierarchyWarning must NOT appear in details
+            const detailsFields = Object.keys(out);
+            expect(detailsFields).not.toContain("hierarchyWarning");
         });
     });
 
@@ -1014,10 +1173,22 @@ describe("CurrentIssueScript", () => {
                     phase: null,
                     parent: null,
                     labels: ["feature"],
+                    owner: "testowner",
+                    repo: "testrepo",
                 },
                 children: [],
                 siblings: [
-                    { number: 12, title: "Sibling", state: "open", type: "chore", phase: null, parent: 10, labels: ["chore"] },
+                    {
+                        number: 12,
+                        title: "Sibling",
+                        state: "open",
+                        type: "chore",
+                        phase: null,
+                        parent: 10,
+                        labels: ["chore"],
+                        owner: "testowner",
+                        repo: "testrepo",
+                    },
                 ],
             });
             const { deps, outLines } = makeMockDeps({
@@ -1059,10 +1230,22 @@ describe("CurrentIssueScript", () => {
                     phase: null,
                     parent: null,
                     labels: ["feature"],
+                    owner: "testowner",
+                    repo: "testrepo",
                 },
                 children: [],
                 siblings: [
-                    { number: 12, title: "Sibling", state: "open", type: "chore", phase: null, parent: 10, labels: ["chore"] },
+                    {
+                        number: 12,
+                        title: "Sibling",
+                        state: "open",
+                        type: "chore",
+                        phase: null,
+                        parent: 10,
+                        labels: ["chore"],
+                        owner: "testowner",
+                        repo: "testrepo",
+                    },
                 ],
             });
             const { deps, outLines } = makeMockDeps({

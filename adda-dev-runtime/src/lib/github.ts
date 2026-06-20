@@ -16,6 +16,8 @@ export interface GitHubIssueHeader {
     phase: string | null; // first label starting with "phase: "
     parent: number | null; // parent issue number; null if root
     labels: string[]; // all label names verbatim
+    owner: string; // GitHub owner (org or user)
+    repo: string; // GitHub repository name
 }
 
 // --- Label extraction helpers (internal) ---
@@ -42,6 +44,8 @@ export function buildIssueHeader(raw: {
     state: string;
     labels: Array<{ name: string }>;
     parent?: number;
+    owner: string;
+    repo: string;
 }): GitHubIssueHeader {
     const labelNames = raw.labels.map((l) => l.name);
     return {
@@ -52,7 +56,24 @@ export function buildIssueHeader(raw: {
         phase: extractPhaseLabel(labelNames),
         parent: raw.parent ?? null,
         labels: labelNames,
+        owner: raw.owner,
+        repo: raw.repo,
     };
+}
+
+// --- URL parsing helpers ---
+
+/**
+ * Parses a GitHub API repository URL of the form
+ * "https://api.github.com/repos/{owner}/{repo}" and returns {owner, repo}.
+ * Throws ScriptError("validation_error", ...) on malformed URL.
+ */
+export function parseRepositoryUrl(url: string): { owner: string; repo: string } {
+    const match = /^https:\/\/api\.github\.com\/repos\/([^/]+)\/([^/]+)\/?$/.exec(url);
+    if (!match) {
+        throw new ScriptError("validation_error", `malformed repository URL: ${url}`);
+    }
+    return { owner: match[1]!, repo: match[2]! };
 }
 
 // --- Env helpers ---
