@@ -22,9 +22,15 @@ This section maps the technology-agnostic concepts from the conceptual design to
 
 ---
 
+## Session model
+
+One development session maps one GitHub Issue to one container run. The entrypoint initialises the session — cloning the repository and resolving the working branch — then hands off to CMD. All state lives in the container for the duration of the session; anything not pushed to GitHub before exit is lost.
+
+---
+
 ## Container contract
 
-This section describes how the container stack validates the launcher's §1 obligations under the [launcher–container contract](launcher-container-contract.md). The contract specifies what each party owes the other and at what enforcement level; validation is split between the Tier 1 entrypoint and the Tier 2 hook.
+This section covers the [launcher–container contract](launcher-container-contract.md) and how the container stack validates the launcher's §1 obligations. §1 (Launcher obligations) and §2 (Container obligations) are the complete contract. This section appears before the Tier 1 and Tier 2 sections because the contract is a bilateral launcher↔container agreement; it is not specific to either tier. Validation of §1 is split between the Tier 1 entrypoint and the Tier 2 hook; the contract specifies the enforcement level for each requirement.
 
 ### §1.1 Environment
 
@@ -50,7 +56,7 @@ Enforced checks abort; expected checks emit diagnostics but do not abort. All ch
 
 | Mount | Level | Check |
 |---|---|---|
-| `/workspace` | Enforced | Abort if non-empty (step 3); used for the repository clone (step 11) |
+| `/workspace` | Enforced | Exists and is accessible (structural prerequisite — step 3 cannot run otherwise); abort if non-empty (step 3); writable by UID 1000 — verified when clone lands (step 11) |
 | `/workspace` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
 | `/tmp` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
 | `/home/adda` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
@@ -74,6 +80,8 @@ All checks are expected diagnostics performed by the Tier 1 entrypoint (step 4):
 ### §2 Container obligations
 
 The contract has one SHOULD obligation on the container side: the image SHOULD provide an executable at `/usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh`. The Tier 1 image fulfills this obligation — `open-interactive-shell.sh` is shipped at that path. The launcher `docker exec`s it to open an interactive shell window alongside the main session.
+
+Tier 3 — the project being developed — has no contract obligations. It is not part of the container infrastructure.
 
 ---
 
@@ -111,7 +119,7 @@ Container-side script (`entrypoint.sh`). Validates the runtime contract, starts 
 
 5. Install bootstrap-complete marker EXIT trap. From this point on, any premature exit (failure or signal) touches `/run/.adda_bootstrap_complete` so the parallel interactive shell can open for autopsy.
 
-6. Start `socat` bridge from `127.0.0.1:${ADDA_DEV_PROXY_PORT}` to `${ADDA_DEV_PROXY_SOCKET}`.
+6. Start `socat` bridge from `127.0.0.1:${ADDA_DEV_PROXY_PORT}` to `${ADDA_DEV_PROXY_SOCKET}`. If `socat` cannot start, the entrypoint fails.
 
 7. Export proxy environment variables:
 
@@ -160,7 +168,7 @@ Branch lookup uses GitHub's first-class Issue branch linkage, not a naming conve
 
 #### `entrypoint.d/` mechanism
 
-Hooks in `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/` are sourced by the entrypoint after core bootstrap completes (GitHub auth, clone, and branch resolution are done). Hooks are sourced — not subprocess — so they share the entrypoint's shell environment and may export variables downstream.
+Hooks in `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/` are sourced by the entrypoint after core bootstrap completes (GitHub auth, git identity, clone, and branch resolution are done). Hooks are sourced — not subprocess — so they share the entrypoint's shell environment and may export variables downstream.
 
 Hooks are named with a numeric prefix for explicit ordering (e.g. `10-name.sh`). Multiple hooks are sourced in lexicographic order.
 
@@ -315,6 +323,10 @@ A Tier 2 `entrypoint.d/` hook is responsible for validating and initialising the
 **Initialisation**:
 - Initialise the AI harness configuration in `$HOME` so that the harness is ready when CMD runs.
 
+### AI harness permission model
+
+The Tier 2 AI harness configuration implements a least-privilege permission model governing what agents, skills, and tools can do within the session — the innermost defense layer described in the [conceptual design](adda-dev-runtime-design.md).
+
 ### Runtime executables and libexec additions
 
 A Tier 2 implementation may add executables to `/usr/local/libexec/adda-dev-runtime/bin/` and scripts to `/usr/local/libexec/adda-dev-runtime/bootstrap/`, following the same libexec layout defined in Tier 1.
@@ -353,6 +365,8 @@ project-repo/
 ### Init hook (`.adda-init.sh`)
 
 `/workspace/.adda-init.sh`, if present in the repository root, is a repo-level lifecycle hook. Executed (not sourced) by the entrypoint. Guaranteed to run at bootstrap if present; also invoked when the session switches to a different issue and a branch checkout is performed.
+
+This hook is the installation site for project code dependencies — the runtime side of the two-class dependency model described in the [conceptual design](adda-dev-runtime-design.md). Container/toolchain dependencies (OS packages, shell tools, the AI harness) are baked into the Tier 1 and Tier 2 images at build time and are not installed at runtime; project code dependencies are declared by the repository and installed here, under the unprivileged container user.
 
 #### Discovery
 

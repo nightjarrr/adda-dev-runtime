@@ -10,7 +10,7 @@ For the host-side design — the session lifecycle, and the isolation and defens
 
 For the contract between the launcher and the container — the runtime interface each side must satisfy — see [`docs/launcher-container-contract.md`](launcher-container-contract.md).
 
-For the container-internal implementation — entrypoint sequence, bootstrap extension points, artifact routing, and image build pipeline — see [`docs/adda-dev-runtime-technical-design.md`](adda-dev-runtime-technical-design.md).
+For the container-internal implementation — container contract validation, entrypoint sequence, bootstrap extension points, artifact routing, and image build pipeline — see [`docs/adda-dev-runtime-technical-design.md`](adda-dev-runtime-technical-design.md).
 
 Companion to [adda-sdlc.md](https://github.com/nightjarrr/molim/blob/main/docs/adda-sdlc.md) — the vendor-agnostic conceptual design of the ADDA SDLC that this runtime implements.
 
