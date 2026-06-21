@@ -1,8 +1,10 @@
 # ADDA Dev Runtime — Technical Design
 
-This document is the technical complement to [`docs/adda-dev-runtime-design.md`](adda-dev-runtime-design.md). It describes the concrete implementation of the design established there — entrypoint sequence, configuration variables, network enforcement, authentication, artifact routing, and image build pipeline.
+This document is the technical complement to [`docs/adda-dev-runtime-design.md`](adda-dev-runtime-design.md). It describes the container-internal implementation — entrypoint sequence, bootstrap extension points, artifact routing, and image build pipeline.
 
 **Audience: human Project Owner only.** Read when implementing, extending, or debugging the runtime. Not part of any agent's runtime context.
+
+For the host-side implementation — launcher behavior, Envoy sidecar, network enforcement, and authentication — see [`docs/technical-design.md`](https://github.com/nightjarrr/adda-dev-launcher/blob/main/docs/technical-design.md) in `adda-dev-launcher`.
 
 Throughout, `{owner}` and `{repo}` refer to the GitHub namespace and repository name of the project.
 
@@ -14,353 +16,72 @@ This section maps the technology-agnostic concepts from the conceptual design to
 
 | Concept | Technology |
 |---|---|
-| AI harness container | Docker Engine |
-| Network proxy sidecar | Envoy |
-| Host terminal multiplexer | tmux |
-| Host terminal emulator | Ghostty |
 | Tier 1 scripting runtime | Bun |
-| Host secret storage | Secret Service (`secret-tool` / GNOME Keyring) |
 | Container image registry | GitHub Container Registry (GHCR) |
 | Project hosting, issues, PRs, CI/CD | GitHub + GitHub Actions |
 
 ---
 
-## Host prerequisites
+## Session model
 
-Linux only, tested on Ubuntu 24.04.
-
-Required:
-
-* Docker Engine or compatible OCI runtime. Desktop is not required.
-* Bash.
-* `openssl` command-line utility — used by the launcher for random run/session identifiers.
-* Ghostty, or another modern terminal emulator.
-* `tmux` — used for survivable terminal sessions.
-* `libsecret-tools` — provides `secret-tool` for keyring access.
-* `seahorse` — optional but recommended for GUI keyring inspection.
-* An active GNOME, KDE, or compatible Secret Service login session, so the keyring is unlocked.
-
-Notably **not** required on the host: `git`, `gh`, the AI harness CLI, Python, Node, uv, or any project-specific runtime tooling. Those live inside containers.
+One development session maps one GitHub Issue to one container run. The entrypoint initialises the session — cloning the repository and resolving the working branch — then hands off to CMD. All state lives in the container for the duration of the session; anything not pushed to GitHub before exit is lost.
 
 ---
 
-## Launcher
+## Container contract
 
-Host-side script (`adda-dev.sh`). Creates one ephemeral AI harness dev runtime per invocation.
+This section covers the [launcher–container contract](launcher-container-contract.md) and how the container stack validates the launcher's §1 obligations. §1 (Launcher obligations) and §2 (Container obligations) are the complete contract. This section appears before the Tier 1 and Tier 2 sections because the contract is a bilateral launcher↔container agreement; it is not specific to either tier. Validation of §1 is split between the Tier 1 entrypoint and the Tier 2 hook; the contract specifies the enforcement level for each requirement.
 
-Invocation:
+### §1.1 Environment
 
-```bash
-adda-dev.sh
-adda-dev.sh <issue-id>
-adda-dev.sh -- <cmd> [args...]
-adda-dev.sh <issue-id> -- <cmd> [args...]
-```
+Enforced variables cause an abort if absent; optional variables are used only when present.
 
-### Per-project configuration
-
-The launcher reads `adda-dev.env` from the same directory as the launcher script.
-
-Required variables:
-
-```bash
-# Github repo
-GITHUB_OWNER=
-GITHUB_REPO=
-
-# ADDA Dev Runtime container image configuration
-ADDA_DEV_IMAGE=
-ADDA_DEV_USER=adda
-ADDA_DEV_UID=1000
-ADDA_DEV_GID=1000
-ADDA_DEV_HOME_TMPFS_SIZE=500m
-ADDA_DEV_WORKSPACE_TMPFS_SIZE=200m
-# Needs to be a file directly in /run to support the /run tmpfs
-ADDA_DEV_PROXY_SOCKET_CONTAINER_PATH=/run/proxy.sock
-ADDA_DEV_PROXY_PORT=8080
-
-# Envoy perimeter sidecar configuration
-ENVOY_IMAGE=envoyproxy/envoy:v1.33.14
-ENVOY_SOCKET_CONTAINER_PATH=/run/adda-dev-proxy/proxy.sock
-```
-
-### Behavior
-
-1. Validate arguments.
-2. Verify host prerequisites: `docker`, `secret-tool`, `tmux`, `openssl`.
-3. Source `adda-dev.env` and validate required variables.
-4. Seed `~/.tmux.conf` from `scripts/adda-dev.tmux.conf` only if missing; source it best-effort.
-5. If not already inside tmux, generate a session name, export it, and re-enter the launcher inside a named tmux session.
-6. Retrieve auth tokens from the Secret Service keyring. See *Authentication*.
-7. Detect host timezone.
-8. Create a private per-run runtime directory under `${XDG_RUNTIME_DIR:-/tmp}`.
-9. Render Envoy config from `envoy.yaml.template`, co-located with the launcher script, into the runtime directory.
-10. Start Envoy sidecar container with hardened flags. See *Envoy sidecar*.
-11. Wait for the Envoy Unix socket.
-12. Create `adda-dev shell` and `adda-dev envoy logs` windows in the primary tmux session. The `adda-dev shell` window invokes a container-side script that waits for bootstrap to finish before opening the interactive bash prompt.
-13. Assemble and run the AI harness container. See *Filesystem and process hardening* for flags and *Network* for proxy wiring.
-14. On exit, stop Envoy and remove the runtime directory.
-
-### tmux and terminal emulator
-
-The launcher creates a named host tmux session and re-enters itself inside that session. This keeps the launcher, Envoy lifecycle, and `docker run` under tmux control. If the terminal emulator crashes or closes, the tmux server keeps the session alive. Reattach using the printed tmux session name.
-
-The launcher seeds `~/.tmux.conf` from `scripts/adda-dev.tmux.conf` only when `~/.tmux.conf` is absent. Existing user tmux config is never overwritten.
-
-### Concurrency
-
-Multiple features may run concurrently. Each invocation gets its own AI harness container, Envoy sidecar, runtime directory, Unix socket, and tmux session. Sessions share no state with each other except through GitHub.
-
----
-
-## Envoy sidecar
-
-Runs as a separate container managed by the launcher. Not inside the AI harness container. Per-session: one AI harness container gets one Envoy sidecar.
-
-The Envoy sidecar is outside the AI harness container trust boundary but should still be minimized. Hardening flags:
-
-* exact image version and digest pinned in launcher configuration
-* `--rm -d`
-* `--cap-drop ALL`
-* `--security-opt no-new-privileges`
-* read-only root where compatible
-* tmpfs for `/tmp`
-* admin interface not published to host; accessible via `docker exec` only
-
-See *Network* for Envoy's policy responsibilities.
-
-### Admin interface
-
-Bound to container loopback (`127.0.0.1:9901`). Not published to any host port — parallel Envoy sidecars coexist without port conflicts.
-
-The admin interface is for diagnostics only. It is not a policy editing UI and must not be exposed to untrusted networks.
-
----
-
-## Network
-
-The complete network story spans three components: the launcher (starts Envoy), the Envoy sidecar (enforces policy), and the entrypoint (starts the in-container proxy bridge). This section describes all three together.
-
-### Container networking
-
-The AI harness container is launched with `--network none`.
-
-Expected properties inside the container:
-* Only loopback is available.
-* There is no default route.
-* Direct DNS resolution to internet resolvers is unavailable.
-* Direct TCP connections to internet IPs fail.
-* Tools that ignore proxy settings fail to reach the network.
-
-### Proxy bridge
-
-Most applications understand HTTP proxies as `host:port`, not Unix sockets. The entrypoint starts a `socat` bridge inside the container:
-
-```text
-127.0.0.1:<ADDA_DEV_PROXY_PORT>  ->  <ADDA_DEV_PROXY_SOCKET>
-```
-
-The entrypoint then exports:
-
-```bash
-HTTP_PROXY=http://127.0.0.1:<port>
-HTTPS_PROXY=http://127.0.0.1:<port>
-http_proxy=http://127.0.0.1:<port>
-https_proxy=http://127.0.0.1:<port>
-NO_PROXY=localhost,127.0.0.1,::1
-no_proxy=localhost,127.0.0.1,::1
-```
-
-For HTTPS destinations, clients send HTTP `CONNECT` to Envoy. Envoy sees the target authority (e.g. `api.github.com:443`) but does not decrypt TLS in the baseline design.
-
-### Envoy policy
-
-Envoy responsibilities:
-* Accept explicit HTTP proxy traffic on the Unix socket.
-* Support plain HTTP forwarding and HTTPS `CONNECT` tunneling.
-* Enforce domain allow-list / default-deny policy using RBAC.
-* Resolve allowed upstream domains.
-* Emit access logs for audit/debugging.
-
-Default-deny is achieved via Envoy RBAC `action: ALLOW` — no explicit wildcard deny rule is needed; a request that matches no policy entry is denied automatically.
-
-Policy match basis is `:authority`. For HTTPS `CONNECT`, authority is `host:port` (e.g. `api.github.com:443`); for plain HTTP, authority may be `host` or `host:port` — allow-list entries must account for both forms.
-
-### DNS
-
-The AI harness container does not resolve internet destinations for proxied traffic — it only connects to loopback. Envoy receives the requested authority from the explicit proxy request and resolves allowed destinations from the sidecar container. Policy is applied before DNS resolution and before upstream connection.
-
-### Allow-list
-
-Target-state allow-list is default-deny. Requests are allowed only if the requested authority matches an explicit policy.
-
-Baseline target destinations:
-
-| Destination | Why |
-|---|---|
-| `api.anthropic.com` | Claude Code API calls. |
-| `claude.ai` | Claude Code auth/runtime flows where required. |
-| `statsig.anthropic.com` | Claude Code telemetry / feature gates, if required. |
-| `sentry.io` | Claude Code error reporting, if required. |
-| `github.com` | Git over HTTPS, web endpoint dependencies. |
-| `api.github.com` | GitHub CLI issue, PR, label, branch linkage, and account API calls. |
-| `raw.githubusercontent.com` | Raw repository content where required. |
-| `objects.githubusercontent.com` | GitHub release assets and Git LFS objects where required. |
-| narrowly scoped `githubusercontent.com` hosts | GitHub-hosted raw/assets content where required. |
-
-Runtime package-registry access:
-- Container/toolchain dependencies are baked into the image and do not require runtime package-manager access.
-- Project code dependencies may require runtime registry access. Registry access must be explicit, ecosystem-specific, and lockfile/frozen-mode based. Examples: PyPI domains for Python/uv projects; npm registry domains for Node projects.
-- OS package registries such as APT mirrors are not allowed in the runtime container.
-- `ghcr.io` is not required inside the container; the host launcher pulls the image.
-
-### Failure handling
-
-Target-state behavior:
-* If Envoy cannot start, the launcher fails before starting the AI harness container.
-* If the Unix socket does not appear, the launcher fails.
-* If the in-container socat bridge cannot start, the entrypoint fails.
-* If a request does not match the allow-list, Envoy denies it.
-* If a process bypasses proxy configuration, it has no network path due to `--network none`.
-
-### Broad web research / Web Fetch
-
-Direct URL fetching and broad internet research conflict with a narrow runtime allow-list. The baseline design does not open general internet egress for this use case. Future design work will define a separate retrieval plane.
-
----
-
-## Authentication
-
-Authentication spans the launcher (credential retrieval) and the entrypoint (credential use and cleanup). This section covers both together.
-
-### Secrets
-
-Two authentication secrets are required:
-* **AI harness credential** — either a Claude Code OAuth token (Anthropic backend) or a DeepSeek API key (DeepSeek backend).
-* **GitHub Token** — for repository access.
-
-Both are stored in the host Secret Service keyring, retrieved by the launcher, and injected into the container at startup.
-
-### Secret naming in keyring
-
-| Secret | Service | Account | Key |
+| Variable | Level | Validated by | Action |
 |---|---|---|---|
-| Claude Code OAuth token | `adda-dev` | `claude` | `oauth` (default) |
-| GitHub Token | `adda-dev` | `github` | repo-specific (e.g. `acme-token`) |
-| DeepSeek API key | `adda-dev` | `deepseek` | `apikey` (default) |
+| `GITHUB_OWNER` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
+| `GITHUB_REPO` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
+| `GITHUB_TOKEN_` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent; consumed for `gh auth login --with-token` (step 8) then removed from the process environment (step 9) |
+| `TZ` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
+| `ADDA_DEV_PROXY_SOCKET` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent; socket existence verified when starting the proxy bridge (step 6) |
+| `ADDA_DEV_PROXY_PORT` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
+| `ADDA_DEV_LLM_BACKEND` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
+| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
+| `ADDA_DEV_RUNTIME_IMAGE` | Optional | Tier 1 entrypoint (step 2) | Displayed in banner if present; absence is not an error |
+| `ISSUE_ID` | Optional | Tier 1 entrypoint (step 2) | Drives branch resolution (step 12); absent means stay on `main` |
+| Backend credential | Enforced | Tier 2 hook | `require_env` per `ADDA_DEV_LLM_BACKEND` — abort if absent |
 
-All entries use the `adda-dev` service namespace. `account` identifies the target system; `key` identifies the credential within that system, configured per-repo in `adda-dev.env` via `ADDA_DEV_KEYRING_GITHUB_KEY`, `ADDA_DEV_KEYRING_CLAUDE_KEY`, and `ADDA_DEV_KEYRING_DEEPSEEK_KEY`. Multiple GitHub repos can coexist in one keyring by using distinct key values (e.g. `acme-token`, `otherrepo-token`).
+### §1.2 Filesystem
 
-### Retrieval
+Enforced checks abort; expected checks emit diagnostics but do not abort. All checks are performed by the Tier 1 entrypoint.
 
-The launcher retrieves the required credentials at runtime:
-
-```bash
-CLAUDE_CODE_OAUTH_TOKEN=$(secret-tool lookup service adda-dev account claude key oauth)
-GITHUB_TOKEN_=$(secret-tool lookup service adda-dev account github key {repo}-token)
-```
-
-If either lookup returns empty, the launcher fails fast with a bootstrap-procedure pointer.
-
-### Rotation
-
-Re-run the bootstrap or GitHub token generation procedure and store a replacement value using the same `secret-tool store` attributes. Recommended GitHub Token rotation interval: 90 days or less.
-
-### GitHub Token scoping
-
-Hard requirements:
-* Repository scope: exactly one repository, `{owner}/{repo}`.
-* No account-level permissions.
-* No repository administration permissions.
-* No access to secrets, variables, environments, deployments, webhooks, Pages, Codespaces, or repository settings.
-
-Baseline repository permissions:
-
-| Permission | Access | Why |
+| Mount | Level | Check |
 |---|---|---|
-| Metadata | Read | Prerequisite for everything else. |
-| Contents | Read & write | Clone, fetch, push, branch creation/deletion. |
-| Issues | Read & write | Issue creation, labels, comments, phase tracking. |
-| Pull requests | Read & write | PR creation, comments, review/status updates. |
-| Workflows | Read & write | Required if SDLC-governed work modifies `.github/workflows/*`. |
-| Actions | Read | Read CI status and quality-gate results. |
+| `/workspace` | Enforced | Exists and is accessible (structural prerequisite — step 3 cannot run otherwise); abort if non-empty (step 3); writable by UID 1000 — verified when clone lands (step 11) |
+| `/workspace` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
+| `/tmp` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
+| `/home/adda` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
+| `/run` | Expected | Diagnostic: tmpfs, writable, noexec (step 4) |
+| Proxy socket at `ADDA_DEV_PROXY_SOCKET` | Enforced | Socket must exist — verified when `socat` starts the proxy bridge (step 6) |
 
-Grey-area permissions are added only when a named SDLC operation requires them and the reason is documented in the repository.
+### §1.3 Hardening
 
----
+All checks are expected diagnostics performed by the Tier 1 entrypoint (step 4): warns on mismatch but does not abort. Enforcement is outside the container, applied by the launcher.
 
-## Filesystem and process hardening
+| Expected condition | Check |
+|---|---|
+| Loopback-only network | No default route; only loopback interface present |
+| No effective capabilities | `CapEff: 0000000000000000` |
+| No privilege escalation | `NoNewPrivs: 1` |
+| Read-only root filesystem | No writable non-tmpfs mounts |
+| Expected tmpfs mounts present | `/home/adda`, `/workspace`, `/tmp`, `/run` are tmpfs |
+| `/home/adda` and `/workspace` executable | exec bit set |
+| `/run` noexec | noexec mount option |
 
-### Container process privileges
+### §2 Container obligations
 
-The AI harness container is launched with:
+The contract has one SHOULD obligation on the container side: the image SHOULD provide an executable at `/usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh`. The Tier 1 image fulfills this obligation — `open-interactive-shell.sh` is shipped at that path. The launcher `docker exec`s it to open an interactive shell window alongside the main session.
 
-```bash
---cap-drop ALL
---security-opt no-new-privileges
-```
-
-Expected runtime diagnostics:
-
-```text
-CapEff:        0000000000000000
-NoNewPrivs:    1
-```
-
-No capability is added back for firewall or network configuration. Network enforcement is outside the container.
-
-### Read-only root filesystem
-
-The AI harness container root filesystem is read-only:
-
-```bash
-docker run --read-only
-```
-
-Writable paths are explicit tmpfs mounts. The design assumes a single effective runtime user inside the container. Writable mounts are owned by that runtime UID/GID and are private by default.
-
-### Runtime user configuration
-
-Defined in the launcher/project configuration:
-
-```bash
-ADDA_DEV_USER=adda
-ADDA_DEV_UID=1000
-ADDA_DEV_GID=1000
-ADDA_DEV_HOME=/home/adda
-```
-
-The image must run as that user, or the entrypoint should warn that runtime UID/GID do not match the expected configuration.
-
-### Writable tmpfs mounts
-
-| Path | Mode | Exec? | Purpose |
-|---|---|---|---|
-| `/home/${ADDA_DEV_USER}` | `0700` | yes | AI harness state, gh config, git config, runtime state, shell config. |
-| `/workspace` | `0700` | yes | Repository checkout, project writes, test/build output. |
-| `/tmp` | `0700` | yes | Temporary files; exec permitted for tools that create and run temp scripts. |
-| `/run` | `0700` | no | Runtime files and mounted proxy socket. |
-
-`$HOME` and `/workspace` must permit execution because language tooling may install executable interpreters, virtualenvs, or scripts there. `/run` should be `noexec`; it exists for runtime/socket files.
-
-Tmpfs sizes are configured by launcher variables:
-
-```bash
-ADDA_DEV_HOME_TMPFS_SIZE=500m
-ADDA_DEV_WORKSPACE_TMPFS_SIZE=200m
-```
-
-Sizes are limits, not pre-allocated RAM reservations.
-
-### Proxy socket mount
-
-The Envoy Unix socket is bind-mounted into the container as an immediate child of `/run` (e.g. `/run/proxy.sock`). This avoids relying on nested parent directories under a tmpfs-mounted `/run`.
-
-Socket permissions must allow the container runtime user to connect despite possible UID/GID mismatch between host user, Envoy sidecar process, and container user.
-
-### Expected Docker-managed mounts
-
-Docker provides managed files (`/etc/hosts`, `/etc/hostname`, `/etc/resolv.conf`). These do not by themselves provide network access and should be treated as expected Docker runtime configuration unless they contain unexpected content.
+Tier 3 — the project being developed — has no contract obligations. It is not part of the container infrastructure.
 
 ---
 
@@ -368,7 +89,7 @@ Docker provides managed files (`/etc/hosts`, `/etc/hostname`, `/etc/resolv.conf`
 
 ### TUI environment
 
-The AI harness is a TUI application. The container provides a real PTY (`docker run -it`), `TERM=xterm-256color` or compatible behavior, and a UTF-8 locale.
+The AI harness is a TUI application. It runs in a PTY allocated by `docker run -it`, with `TERM=xterm-256color` or compatible behavior and a UTF-8 locale.
 
 Micro is installed as the default TUI editor (`EDITOR=micro`, `VISUAL=micro`). It is available for interactive file editing and is the fallback editor for CLI tools that open `$EDITOR` (e.g. `git commit`, `gh pr create`).
 
@@ -380,7 +101,7 @@ Bun is included in Tier 1 as the shared scripting runtime for infrastructure too
 
 Shell scripts remain in use for entrypoint glue and `entrypoint.d` hooks, which must participate directly in the entrypoint's shell environment.
 
-Bun executables are compiled to native binaries during the Docker image build. See *Image build and distribution* for build conventions.
+TypeScript sources are compiled to extensionless JavaScript bundles with a `#!/usr/bin/env bun` shebang during the Docker image build. See *Image build and distribution* for build conventions.
 
 ### Entrypoint
 
@@ -390,29 +111,28 @@ Container-side script (`entrypoint.sh`). Validates the runtime contract, starts 
 
 1. Print welcome banner.
 
-2. Validate required environment variables. Optionally display image identity variables (`ADDA_DEV_RUNTIME_IMAGE`, `ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA`) when present.
+2. Validate §1.1 environment — see *Container contract*. Optionally display `ADDA_DEV_RUNTIME_IMAGE` and `ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA` when present.
 
-3. Verify `/workspace` is empty.
+3. Validate §1.2 filesystem — abort if `/workspace` is non-empty. See *Container contract*.
 
-4. Report diagnostic hardening checks:
-   * loopback-only network expected;
-   * no default route expected;
-   * no effective capabilities expected;
-   * `NoNewPrivs: 1` expected;
-   * root filesystem read-only expected;
-   * expected tmpfs mounts present;
-   * expected tmpfs mounts writable by current user;
-   * `$HOME` and `/workspace` executable;
-   * `/run` noexec;
-   * no unexpected writable non-tmpfs mounts.
+4. Report §1.3 hardening diagnostics. See *Container contract*.
 
 5. Install bootstrap-complete marker EXIT trap. From this point on, any premature exit (failure or signal) touches `/run/.adda_bootstrap_complete` so the parallel interactive shell can open for autopsy.
 
-6. Start `socat` bridge from `127.0.0.1:${ADDA_DEV_PROXY_PORT}` to `${ADDA_DEV_PROXY_SOCKET}`. See *Network*.
+6. Start `socat` bridge from `127.0.0.1:${ADDA_DEV_PROXY_PORT}` to `${ADDA_DEV_PROXY_SOCKET}`. If `socat` cannot start, the entrypoint fails.
 
-7. Export proxy environment variables. See *Network*.
+7. Export proxy environment variables:
 
-8. Configure GitHub authentication using `gh auth login --with-token`. See *Authentication*.
+   ```bash
+   HTTP_PROXY=http://127.0.0.1:<port>
+   HTTPS_PROXY=http://127.0.0.1:<port>
+   http_proxy=http://127.0.0.1:<port>
+   https_proxy=http://127.0.0.1:<port>
+   NO_PROXY=localhost,127.0.0.1,::1
+   no_proxy=localhost,127.0.0.1,::1
+   ```
+
+8. Configure GitHub authentication using `gh auth login --with-token`.
 
 9. Remove `GITHUB_TOKEN_` from the process environment after GitHub authentication is initialized. Set `GH_REPO=${GITHUB_OWNER}/${GITHUB_REPO}` so subsequent gh calls have a repo default.
 
@@ -448,7 +168,7 @@ Branch lookup uses GitHub's first-class Issue branch linkage, not a naming conve
 
 #### `entrypoint.d/` mechanism
 
-Hooks in `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/` are sourced by the entrypoint after core bootstrap completes (GitHub auth, clone, and branch resolution are done). Hooks are sourced — not subprocess — so they share the entrypoint's shell environment and may export variables downstream.
+Hooks in `/usr/local/libexec/adda-dev-runtime/bootstrap/entrypoint.d/` are sourced by the entrypoint after core bootstrap completes (GitHub auth, git identity, clone, and branch resolution are done). Hooks are sourced — not subprocess — so they share the entrypoint's shell environment and may export variables downstream.
 
 Hooks are named with a numeric prefix for explicit ordering (e.g. `10-name.sh`). Multiple hooks are sourced in lexicographic order.
 
@@ -546,7 +266,7 @@ These conventions apply to all images in the tier stack.
 
 **SHELL pipefail:** All Dockerfiles set `SHELL ["/bin/bash", "-o", "pipefail"]` after each `FROM` in the runtime stage. This satisfies hadolint DL4006 and ensures that piped commands (e.g. `echo | sha256sum -c`) fail if *any* stage in the pipeline fails, not just the last. The directive applies to all subsequent `RUN` commands and does not affect build stages that use `/bin/sh`.
 
-**TypeScript compilation:** Bun executables are compiled in a multi-stage build. A `bun-builder` stage compiles `.ts` source files to extensionless executables; the runtime stage copies only the compiled output and pruned `node_modules`.
+**TypeScript compilation:** TypeScript sources are compiled in a multi-stage build. A `bun-builder` stage bundles each `.ts` entry point to a single-file JavaScript with a `#!/usr/bin/env bun` shebang, then strips the `.js` extension to produce extensionless executables; the runtime stage copies only the compiled output and pruned `node_modules`.
 
 **GHCR distribution:** production images are published to GHCR. Each build is tagged with its commit SHA for immutable reference.
 
@@ -594,12 +314,18 @@ Each attestation is signed with a short-lived Sigstore certificate, logged in th
 
 ### `entrypoint.d` hook requirements
 
-A Tier 2 `entrypoint.d/` hook should:
-- Use Tier 1 helper functions (`require_env`, `require_tool`, `section`, `success`, `die`, `info`) for consistent output and failure handling.
-- Use `info()` instead of bare `echo` for any plain-text output.
-- Validate AI-harness-specific environment variables using `require_env`.
+A Tier 2 `entrypoint.d/` hook is responsible for validating and initialising the AI harness environment. Use Tier 1 helper functions (`require_env`, `require_tool`, `section`, `success`, `die`, `info`) for consistent output and failure handling; use `info()` instead of bare `echo` for all plain-text output.
+
+**Validation** (abort the hook on failure):
+- Validate AI-harness-specific environment variables using `require_env`, including backend credentials selected by `ADDA_DEV_LLM_BACKEND`.
 - Validate that the AI harness binary is present using `require_tool`.
+
+**Initialisation**:
 - Initialise the AI harness configuration in `$HOME` so that the harness is ready when CMD runs.
+
+### AI harness permission model
+
+The Tier 2 AI harness configuration implements a least-privilege permission model governing what agents, skills, and tools can do within the session — the innermost defense layer described in the [conceptual design](adda-dev-runtime-design.md).
 
 ### Runtime executables and libexec additions
 
@@ -639,6 +365,8 @@ project-repo/
 ### Init hook (`.adda-init.sh`)
 
 `/workspace/.adda-init.sh`, if present in the repository root, is a repo-level lifecycle hook. Executed (not sourced) by the entrypoint. Guaranteed to run at bootstrap if present; also invoked when the session switches to a different issue and a branch checkout is performed.
+
+This hook is the installation site for project code dependencies — the runtime side of the two-class dependency model described in the [conceptual design](adda-dev-runtime-design.md). Container/toolchain dependencies (OS packages, shell tools, the AI harness) are baked into the Tier 1 and Tier 2 images at build time and are not installed at runtime; project code dependencies are declared by the repository and installed here, under the unprivileged container user.
 
 #### Discovery
 
