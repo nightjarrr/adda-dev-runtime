@@ -4,6 +4,8 @@
 
 This document establishes the container-side conceptual design: the design principles the container implements, the components it operates alongside, its security posture from inside the trust boundary, and the Tier architecture of its internal stack. It is a design rationale document — the place to understand *why* the container is structured the way it is and what trade-offs it makes.
 
+**Audience: human Project Owner only.** Read at setup time and when modifying the environment. Not part of any agent's runtime context.
+
 For the host-side design — the session lifecycle, and the isolation and defense-in-depth principles the launcher enforces — see [`docs/conceptual-design.md`](https://github.com/nightjarrr/adda-dev-launcher/blob/main/docs/conceptual-design.md) in adda-dev-launcher.
 
 For the contract between the launcher and the container — the runtime interface each side must satisfy — see [`docs/launcher-container-contract.md`](launcher-container-contract.md).
@@ -11,8 +13,6 @@ For the contract between the launcher and the container — the runtime interfac
 For the concrete implementation of this design — entrypoint sequence, configuration variables, network enforcement, authentication, artifact routing — see [`docs/adda-dev-runtime-technical-design.md`](adda-dev-runtime-technical-design.md).
 
 Companion to [adda-sdlc.md](https://github.com/nightjarrr/molim/blob/main/docs/adda-sdlc.md) — the vendor-agnostic conceptual design of the ADDA SDLC that this runtime implements.
-
-**Audience: human Project Owner only.** Read at setup time and when modifying the environment. Not part of any agent's runtime context.
 
 Throughout, `{owner}` and `{repo}` refer to the GitHub namespace and repository name of the project.
 
@@ -53,7 +53,7 @@ The ADDA Dev Runtime is composed of four components. The three external componen
 
 ### AI harness container
 
-The isolated, ephemeral runtime in which the AI agent and all development tooling run. Explicitly treated as untrusted — nothing running inside it is assumed to be non-exploitable. The tier stack (Tiers 1 and 2, and optionally Tier 3) runs inside the container; see *Tier architecture* below.
+The isolated, ephemeral runtime in which the AI agent and all development tooling run. Explicitly treated as untrusted — nothing running inside it is assumed to be non-exploitable. The launcher runs it with a read-only root filesystem and explicit writable mounts — a hardening constraint imposed from outside, not something the container configures itself. The tier stack runs inside the container; see *Tier architecture* below.
 
 ---
 
@@ -78,7 +78,7 @@ The full threat model — including host compromise, network exfiltration, token
 
 Adversarial content may reach the AI agent's context through web pages, dependency READMEs, Issue bodies, PR comments, fetched files, or repository content.
 
-Mitigations: ephemeral runtime limits persistence and blast radius; narrow GitHub Token scope prevents cross-repository or account-level damage; AI harness permission configuration enforces least privilege; network egress allow-list limits where compromised code can communicate; PR review remains the final human gate for code and workflow changes.
+Container-enforced mitigations: AI harness permission configuration limits what compromised actors can do within the session; PR review is the final human gate for code and workflow changes. The launcher contributes complementary mitigations — ephemeral runtime boundary, narrow GitHub Token scope, network egress allow-list — described in the launcher conceptual design.
 
 Residual risk: hostile content may influence changes on the current branch until caught at review.
 
@@ -115,7 +115,7 @@ A session is created when work begins and destroyed when the session exits. Resu
 
 ## Tier architecture
 
-The AI harness container runs a layered stack of three tiers. Each tier has a distinct concern and a distinct form.
+The AI harness container runs a layered stack of three tiers. Each tier has a distinct concern and a distinct form. Tier 1 and Tier 2 are always present as container images. Tier 3 — the project repository — is always cloned into the workspace; it may also contribute a container image extending Tier 2 when the project requires OS-level tooling not available in Tier 1.
 
 ### Tier 1 — infrastructure
 
