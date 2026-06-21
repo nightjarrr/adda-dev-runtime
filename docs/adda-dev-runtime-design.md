@@ -1,12 +1,18 @@
 # ADDA Dev Runtime — Conceptual Design
 
-This document establishes the conceptual design of the ADDA Dev Runtime: its goals, principles, components, security posture, and tier architecture. It is a design rationale document — the place to understand *why* the system looks the way it does and what trade-offs it makes.
+**`adda-dev-runtime`** is the container-side implementation of the **ADDA Dev Runtime** (ADDA: Agentic Development with Durable Artifacts) — the isolated, ephemeral container in which the AI harness and all development tooling run. It implements the stateless-agent and persistent-GitHub patterns, enforces the innermost defense-in-depth boundary within the container trust wall, and defines the Tier architecture that structures its own internals. [`adda-dev-launcher`](https://github.com/nightjarrr/adda-dev-launcher) is the companion repository that owns the host-side launcher and network proxy sidecar.
 
-For the concrete implementation of this design — entrypoint sequence, configuration variables, network allow-list, authentication specifics, artifact routing — see [`docs/adda-dev-runtime-technical-design.md`](adda-dev-runtime-technical-design.md).
-
-Companion to [adda-sdlc.md](https://github.com/nightjarrr/molim/blob/main/docs/adda-sdlc.md) — the vendor-agnostic conceptual design of the ADDA SDLC that this runtime implements.
+This document establishes the container-side conceptual design: the design principles the container implements, the components it operates alongside, its security posture from inside the trust boundary, and the Tier architecture of its internal stack. It is a design rationale document — the place to understand *why* the container is structured the way it is and what trade-offs it makes.
 
 **Audience: human Project Owner only.** Read at setup time and when modifying the environment. Not part of any agent's runtime context.
+
+For the host-side design — the session lifecycle, and the isolation and defense-in-depth principles the launcher enforces — see [`docs/conceptual-design.md`](https://github.com/nightjarrr/adda-dev-launcher/blob/main/docs/conceptual-design.md) in adda-dev-launcher.
+
+For the contract between the launcher and the container — the runtime interface each side must satisfy — see [`docs/launcher-container-contract.md`](launcher-container-contract.md).
+
+For the concrete implementation of this design — entrypoint sequence, configuration variables, network enforcement, authentication, artifact routing — see [`docs/adda-dev-runtime-technical-design.md`](adda-dev-runtime-technical-design.md).
+
+Companion to [adda-sdlc.md](https://github.com/nightjarrr/molim/blob/main/docs/adda-sdlc.md) — the vendor-agnostic conceptual design of the ADDA SDLC that this runtime implements.
 
 Throughout, `{owner}` and `{repo}` refer to the GitHub namespace and repository name of the project.
 
@@ -16,7 +22,9 @@ Throughout, `{owner}` and `{repo}` refer to the GitHub namespace and repository 
 
 ### Ephemeral runtime, stateless agent, persistent GitHub
 
-A dev runtime exists for one feature workflow and is destroyed on exit. The AI agent carries no state across container exits — it rebuilds context at session start by reading GitHub state and repository artifacts. Anything not pushed before exit is lost. This is an intentional and accepted trade-off for isolation and reproducibility.
+A dev runtime exists for one feature workflow and is destroyed on exit. The ephemeral runtime boundary is enforced by the launcher; the stateless-agent and persistent-GitHub patterns are the container's side of the same design intent.
+
+The AI agent carries no state across container exits — it rebuilds context at session start by reading GitHub state and repository artifacts. Anything not pushed before exit is lost. This is an intentional and accepted trade-off for isolation and reproducibility.
 
 GitHub is the persistence layer for all project work. Project state flows to GitHub through:
 
@@ -29,46 +37,21 @@ Nothing outside GitHub persists: no host source bind mount, no persistent AI har
 
 ### Defense in depth
 
-Three concentric boundaries protect the host and project from code running inside the development environment:
-
-1. **Container isolation** — the AI harness container has no host filesystem, process, device, display, container engine socket, or network namespace access beyond what the launcher explicitly grants.
-2. **Proxy-based network perimeter** — the AI harness container has no general network access. All intended outbound traffic goes through a network proxy sidecar that enforces a default-deny domain allow-list. The proxy is a trusted perimeter component that runs outside the container — running enforcement inside the container would make it defeatable by the untrusted code it protects. The proxy is per-session and runs on the same host; it is not a shared host daemon and requires no external proxy infrastructure.
-3. **AI harness permission configuration** — enforces least privilege when granting permissions to AI actors: agents, skills, and tools.
-
-Two further protections bound the impact of credential exposure:
-
-- **Host-side keyring** — authentication tokens never reside in plaintext on host disk; the keyring is encrypted at rest and unlocked only by an active login session.
-- **Token scoping** — the GitHub Token is scoped to a single repository with no administration permissions, bounding GitHub blast radius.
-
-### Host launcher and network proxy are trusted perimeter components
-
-The AI harness container is treated as untrusted. Nothing inside it is assumed to be non-exploitable. The host launcher and the per-session network proxy sidecar are therefore part of the trusted computing base for network and runtime isolation. A user who deliberately bypasses the launcher or weakens the network proxy policy is outside the protection model.
-
-### No plaintext secrets on host disk
-
-Authentication tokens live in the host keyring. The launcher retrieves tokens on demand. There is no project `.env` containing secrets, no credentials file, and no token in shell history.
+Three concentric boundaries protect the host and project from code running inside the development environment. The first two — container isolation and the proxy-based network perimeter — are established by the launcher outside the container wall; see the launcher conceptual design. The third operates inside the container: the AI harness enforces a least-privilege permission model governing what agents, skills, and tools can do, constraining AI actors that are legitimately inside the container from overreaching within it.
 
 ---
 
 ## Components
 
-The ADDA Dev Runtime is composed of four distinct components. Understanding what each component is and its trust level is essential for the design principles and threat model to be meaningful.
+The ADDA Dev Runtime is composed of four components. The three external components are described in full in the launcher conceptual design; what follows is the context needed to understand the constraints the container operates under.
 
-### Host system
-
-The machine on which the development environment runs. The only fully trusted environment. It carries the host keyring (secrets at rest) and the launcher program. The container engine runs here. The host system is never directly accessible from inside the AI harness container. No development tooling — git, the GitHub CLI, language runtimes, or project-specific tools — is required on the host; all of that runs inside containers.
-
-### Launcher
-
-A host-side program that creates and tears down a single development session. The launcher retrieves credentials from the host keyring, starts the network proxy sidecar, assembles and runs the AI harness container with its required security constraints, and cleans up on exit. The workflow is terminal-first; the launcher creates a plain isolated container — not a Dev Container — with no IDE integration protocols or host-container IPC sockets. It is the only component that can set session parameters. The launcher is a trusted perimeter component.
-
-### Network proxy sidecar
-
-A per-session network perimeter proxy. It runs as a separate component managed by the launcher — outside the AI harness container trust boundary — and enforces a default-deny domain allow-list on all outbound traffic from the session. The network proxy sidecar is a trusted perimeter component. Each session gets its own dedicated proxy instance; sessions do not share a proxy.
+- **Host system** — the machine outside the container; the only fully trusted environment. Carries the host keyring and the launcher program; the container engine runs here. No development tooling is required on the host.
+- **Launcher** — the host-side program that creates and tears down development sessions. Retrieves credentials from the host keyring, starts the network proxy sidecar, and assembles the AI harness container with its required security constraints. A trusted perimeter component.
+- **Network proxy sidecar** — a per-session proxy started by the launcher outside the container trust boundary. Enforces a default-deny domain allow-list on all outbound traffic; the container has no general network access as a consequence. A trusted perimeter component.
 
 ### AI harness container
 
-The isolated, ephemeral runtime in which the AI agent and all development tooling run. It is explicitly treated as untrusted — nothing running inside it is assumed to be non-exploitable. The container has no general network access; outbound traffic reaches the internet only through the network proxy sidecar. Its root filesystem is read-only; writable paths are explicit in-memory mounts. The tier stack (Tiers 1 and 2, and optionally Tier 3) runs inside this container; see *Tier architecture* below.
+The isolated, ephemeral runtime in which the AI agent and all development tooling run. Explicitly treated as untrusted — nothing running inside it is assumed to be non-exploitable. The launcher runs it with a read-only root filesystem and explicit writable mounts — a hardening constraint imposed from outside, not something the container configures itself. The tier stack runs inside the container; see *Tier architecture* below.
 
 ---
 
@@ -81,27 +64,19 @@ The isolated, ephemeral runtime in which the AI agent and all development toolin
 | Network proxy sidecar | Trusted | Runs outside the container; enforces network policy |
 | AI harness container | **Untrusted** | May run exploited or manipulated code |
 
-The boundary between trusted and untrusted runs at the container wall. Network enforcement sits outside this boundary — in the network proxy — specifically because components inside the boundary cannot be trusted to enforce their own rules.
+The boundary between trusted and untrusted runs at the container wall. The AI harness container's untrusted designation carries a design consequence inward: the AI harness cannot assume its own internal actors are trustworthy either. The defense-in-depth principle (see *Design principles*) is the container's response — its AI harness enforces least privilege on agents, skills, and tools regardless of whether the container itself has been compromised.
 
 ---
 
 ## Threat model
 
-### Primary threat: host compromise from code inside the development environment
-
-The environment must prevent any code, tool, dependency, or AI agent running inside the AI harness container from affecting the host system.
-
-The container is constrained by a set of non-negotiable properties: no host namespace access, no container engine socket, non-root user, minimal OS-level privileges, read-only root filesystem, and no general network egress. See the technical design for the exact constraints that implement these properties.
-
-### Limits of container isolation
-
-Container isolation reduces likelihood and blast radius; it does not reduce risk to zero. The host kernel must be patched. Image provenance, base-image discipline, pinned digests, CI provenance, and minimal runtime privileges are part of the mitigation. A determined attacker exploiting an unpatched container escape CVE is outside of this design's guarantee.
+The full threat model — including host compromise, network exfiltration, token theft, and quota abuse — is described in the launcher conceptual design. Two threats are elaborated here because they materialize specifically inside the container and bear on container-side design decisions.
 
 ### Prompt injection
 
 Adversarial content may reach the AI agent's context through web pages, dependency READMEs, Issue bodies, PR comments, fetched files, or repository content.
 
-Mitigations: ephemeral runtime limits persistence and blast radius; narrow GitHub Token scope prevents cross-repository or account-level damage; AI harness permission configuration enforces least privilege; network egress allow-list limits where compromised code can communicate; PR review remains the final human gate for code and workflow changes.
+Container-enforced mitigations: AI harness permission configuration limits what compromised actors can do within the session; PR review is the final human gate for code and workflow changes. The launcher contributes complementary mitigations — ephemeral runtime boundary, narrow GitHub Token scope, network egress allow-list — described in the launcher conceptual design.
 
 Residual risk: hostile content may influence changes on the current branch until caught at review.
 
@@ -112,23 +87,7 @@ A dependency may execute hostile code during install, test, build, or runtime. T
 - **Container/toolchain dependencies** — OS packages, shell tools, language managers, the AI harness, and other infrastructure baked into the image at build time. Versions are pinned in image definitions; these dependencies are not installed at runtime.
 - **Project code dependencies** — dependencies declared by the repository after it is cloned. Installed at runtime from locked registries, under the unprivileged container user, with only the package-registry access the project requires.
 
-Residual risk: a malicious version already present in a reviewed lockfile can still execute inside the isolated container.
-
-### Network exfiltration
-
-A compromised tool or manipulated AI agent may attempt to send repository contents, tokens, or other data to an attacker-controlled endpoint.
-
-Primary mitigation: the container has no network interface beyond loopback; all proxied traffic reaches the internet only through the network proxy's default-deny domain allow-list; processes that ignore proxy configuration fail because there is no direct network path.
-
-### Token theft
-
-The container must hold credentials to function. Mitigations: the GitHub Token is single-repository with no administration permissions; the AI harness token is revocable; exfiltration routes are constrained by the network allow-list; tokens are never stored in plaintext on host disk.
-
-Accepted residual risk: an attacker in a live session can use available credentials within their granted scope until the session is terminated or tokens are revoked.
-
-### Quota and resource abuse
-
-A runaway AI agent session or hostile instruction may consume API quota, GitHub API rate limits, or host CPU and memory. Mitigations: ephemeral container teardown stops further consumption; in-memory filesystem sizes bound writable storage growth; GitHub API rate limits apply naturally.
+Residual risk: a malicious version already present in a reviewed lockfile can still execute inside the container.
 
 ---
 
@@ -154,7 +113,7 @@ A session is created when work begins and destroyed when the session exits. Resu
 
 ## Tier architecture
 
-The AI harness container runs a layered stack of three tiers. Each tier has a distinct concern and a distinct form.
+The AI harness container runs a layered stack of three tiers. Each tier has a distinct concern and a distinct form. Tier 1 and Tier 2 are always present as container images. Tier 3 — the project repository — is always cloned into the workspace; it may also contribute a container image extending Tier 2 when the project requires OS-level tooling not available in Tier 1.
 
 ### Tier 1 — infrastructure
 
@@ -195,15 +154,3 @@ The Tier 2 agent configuration contains the SDLC workflow, roles, working princi
 | **Examples** | `adda-dev-runtime` | `proto-adda`, `DAWE` (planned) | any project using ADDA |
 | **Agent config** | — | Bundled SDLC implementation, project-agnostic | Project-specific harness configuration and context |
 | **Multiplicity** | One | One per AI harness / SDLC implementation | One per project |
-
----
-
-## Deferred questions
-
-The following are recognized but not addressed by the current design:
-
-1. **Broad web retrieval plane** — define how user-approved direct URL fetch and research should work without opening general egress from the container.
-2. **Live allow-list management** — explore whether network proxy policy should be reloadable without sidecar restart, and whether a UI/control plane is justified.
-3. **Credential hiding behind proxy/gateway** — investigate whether future API-specific gateways can inject auth headers so selected tools do not receive raw tokens.
-4. **Stronger sandboxing** — evaluate alternative container isolation technologies (e.g. gVisor, VM-based runtimes) if kernel escape risk becomes a higher priority.
-5. **Container resource limits** — CPU and memory quotas for the AI harness container are not currently enforced. Evaluate container runtime resource constraint features.
