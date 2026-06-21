@@ -259,7 +259,6 @@ Validated at step 2. Enforced variables cause an abort if absent; optional varia
 | `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | Enforced | `require_env` — abort if absent |
 | `ADDA_DEV_RUNTIME_IMAGE` | Optional | Displayed in banner (step 2) if present; absence is not an error |
 | `ISSUE_ID` | Optional | Drives branch resolution (step 12); absent means stay on `main` |
-| Backend credential | Enforced | Validated per `ADDA_DEV_LLM_BACKEND` — abort if absent |
 
 ### §1.2 Filesystem
 
@@ -290,7 +289,7 @@ All checks are expected diagnostics (step 4): the entrypoint warns on mismatch b
 
 ### §2 Container obligations
 
-The contract has one SHOULD obligation on the container side: the image SHOULD provide an executable at `/usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh`. The launcher `docker exec`s it to open an interactive shell window alongside the main session; if absent, that window fails but the main session is unaffected.
+The contract has one SHOULD obligation on the container side: the image SHOULD provide an executable at `/usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh`. The Tier 1 image fulfills this obligation — `open-interactive-shell.sh` is shipped at that path. The launcher `docker exec`s it to open an interactive shell window alongside the main session.
 
 ---
 
@@ -309,7 +308,7 @@ The contract has one SHOULD obligation on the container side: the image SHOULD p
 A Tier 2 `entrypoint.d/` hook is responsible for validating and initialising the AI harness environment. Use Tier 1 helper functions (`require_env`, `require_tool`, `section`, `success`, `die`, `info`) for consistent output and failure handling; use `info()` instead of bare `echo` for all plain-text output.
 
 **Validation** (abort the hook on failure):
-- Validate AI-harness-specific environment variables using `require_env`.
+- Validate AI-harness-specific environment variables using `require_env`, including backend credentials selected by `ADDA_DEV_LLM_BACKEND`.
 - Validate that the AI harness binary is present using `require_tool`.
 
 **Initialisation**:
