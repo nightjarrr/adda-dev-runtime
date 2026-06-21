@@ -22,7 +22,7 @@ Throughout, `{owner}` and `{repo}` refer to the GitHub namespace and repository 
 
 ### Ephemeral runtime, stateless agent, persistent GitHub
 
-A dev runtime exists for one feature workflow and is destroyed on exit. The ephemeral runtime boundary is enforced by the launcher (see the launcher conceptual design); the stateless-agent and persistent-GitHub patterns are the container's side of the same design intent.
+A dev runtime exists for one feature workflow and is destroyed on exit. The ephemeral runtime boundary is enforced by the launcher; the stateless-agent and persistent-GitHub patterns are the container's side of the same design intent.
 
 The AI agent carries no state across container exits — it rebuilds context at session start by reading GitHub state and repository artifacts. Anything not pushed before exit is lost. This is an intentional and accepted trade-off for isolation and reproducibility.
 
@@ -45,12 +45,15 @@ The outer two boundaries — container isolation and the proxy-based network per
 
 ## Components
 
-The ADDA Dev Runtime is composed of four components. Full definitions are in the launcher conceptual design; what follows is the context needed to understand the container-side design.
+The ADDA Dev Runtime is composed of four components. The three external components are described in full in the launcher conceptual design; what follows is the context needed to understand the constraints the container operates under.
 
 - **Host system** — the machine outside the container; the only fully trusted environment. Carries the host keyring and the launcher program; the container engine runs here. No development tooling is required on the host.
 - **Launcher** — the host-side program that creates and tears down development sessions. Retrieves credentials from the host keyring, starts the network proxy sidecar, and assembles the AI harness container with its required security constraints. A trusted perimeter component.
 - **Network proxy sidecar** — a per-session proxy started by the launcher outside the container trust boundary. Enforces a default-deny domain allow-list on all outbound traffic; the container has no general network access as a consequence. A trusted perimeter component.
-- **AI harness container** — the isolated, ephemeral runtime in which the AI agent and all development tooling run; explicitly treated as untrusted. The tier stack (Tiers 1 and 2, and optionally Tier 3) runs inside it; see *Tier architecture* below.
+
+### AI harness container
+
+The isolated, ephemeral runtime in which the AI agent and all development tooling run. Explicitly treated as untrusted — nothing running inside it is assumed to be non-exploitable. The tier stack (Tiers 1 and 2, and optionally Tier 3) runs inside the container; see *Tier architecture* below.
 
 ---
 
