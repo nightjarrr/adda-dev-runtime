@@ -26,7 +26,7 @@ This section maps the technology-agnostic concepts from the conceptual design to
 
 ### TUI environment
 
-The AI harness is a TUI application. The container provides a real PTY (`docker run -it`), `TERM=xterm-256color` or compatible behavior, and a UTF-8 locale.
+The AI harness is a TUI application. It runs in a PTY allocated by `docker run -it`, with `TERM=xterm-256color` or compatible behavior and a UTF-8 locale.
 
 Micro is installed as the default TUI editor (`EDITOR=micro`, `VISUAL=micro`). It is available for interactive file editing and is the fallback editor for CLI tools that open `$EDITOR` (e.g. `git commit`, `gh pr create`).
 
@@ -38,7 +38,7 @@ Bun is included in Tier 1 as the shared scripting runtime for infrastructure too
 
 Shell scripts remain in use for entrypoint glue and `entrypoint.d` hooks, which must participate directly in the entrypoint's shell environment.
 
-Bun executables are compiled to native binaries during the Docker image build. See *Image build and distribution* for build conventions.
+TypeScript sources are compiled to extensionless JavaScript bundles with a `#!/usr/bin/env bun` shebang during the Docker image build. See *Image build and distribution* for build conventions.
 
 ### Entrypoint
 
@@ -48,21 +48,11 @@ Container-side script (`entrypoint.sh`). Validates the runtime contract, starts 
 
 1. Print welcome banner.
 
-2. Validate required environment variables. Optionally display image identity variables (`ADDA_DEV_RUNTIME_IMAGE`, `ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA`) when present.
+2. Validate §1.1 environment — see *Container contract*. Optionally display `ADDA_DEV_RUNTIME_IMAGE` and `ADDA_DEV_RUNTIME_IMAGE_COMMIT_SHA` when present.
 
-3. Verify `/workspace` is empty.
+3. Validate §1.2 filesystem — abort if `/workspace` is non-empty. See *Container contract*.
 
-4. Report diagnostic hardening checks:
-   * loopback-only network expected;
-   * no default route expected;
-   * no effective capabilities expected;
-   * `NoNewPrivs: 1` expected;
-   * root filesystem read-only expected;
-   * expected tmpfs mounts present;
-   * expected tmpfs mounts writable by current user;
-   * `$HOME` and `/workspace` executable;
-   * `/run` noexec;
-   * no unexpected writable non-tmpfs mounts.
+4. Report §1.3 hardening diagnostics. See *Container contract*.
 
 5. Install bootstrap-complete marker EXIT trap. From this point on, any premature exit (failure or signal) touches `/run/.adda_bootstrap_complete` so the parallel interactive shell can open for autopsy.
 
@@ -213,7 +203,7 @@ These conventions apply to all images in the tier stack.
 
 **SHELL pipefail:** All Dockerfiles set `SHELL ["/bin/bash", "-o", "pipefail"]` after each `FROM` in the runtime stage. This satisfies hadolint DL4006 and ensures that piped commands (e.g. `echo | sha256sum -c`) fail if *any* stage in the pipeline fails, not just the last. The directive applies to all subsequent `RUN` commands and does not affect build stages that use `/bin/sh`.
 
-**TypeScript compilation:** Bun executables are compiled in a multi-stage build. A `bun-builder` stage compiles `.ts` source files to extensionless executables; the runtime stage copies only the compiled output and pruned `node_modules`.
+**TypeScript compilation:** TypeScript sources are compiled in a multi-stage build. A `bun-builder` stage bundles each `.ts` entry point to a single-file JavaScript with a `#!/usr/bin/env bun` shebang, then strips the `.js` extension to produce extensionless executables; the runtime stage copies only the compiled output and pruned `node_modules`.
 
 **GHCR distribution:** production images are published to GHCR. Each build is tagged with its commit SHA for immutable reference.
 
@@ -249,6 +239,61 @@ Each attestation is signed with a short-lived Sigstore certificate, logged in th
 
 ---
 
+## Container contract
+
+This section describes how the entrypoint validates the launcher's §1 obligations under the [launcher–container contract](launcher-container-contract.md). The contract specifies what each party owes the other and at what enforcement level; what follows is how the entrypoint verifies each requirement.
+
+### §1.1 Environment
+
+Validated at step 2. Enforced variables cause an abort if absent; optional variables are used only when present.
+
+| Variable | Level | Entrypoint action |
+|---|---|---|
+| `GITHUB_OWNER` | Enforced | `require_env` — abort if absent |
+| `GITHUB_REPO` | Enforced | `require_env` — abort if absent |
+| `GITHUB_TOKEN_` | Enforced | `require_env` — abort if absent; consumed for `gh auth login --with-token` (step 8) then removed from the process environment (step 9) |
+| `TZ` | Enforced | `require_env` — abort if absent |
+| `ADDA_DEV_PROXY_SOCKET` | Enforced | `require_env` — abort if absent; socket existence verified when starting the proxy bridge (step 6) |
+| `ADDA_DEV_PROXY_PORT` | Enforced | `require_env` — abort if absent |
+| `ADDA_DEV_LLM_BACKEND` | Enforced | `require_env` — abort if absent |
+| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | Enforced | `require_env` — abort if absent |
+| `ADDA_DEV_RUNTIME_IMAGE` | Optional | Displayed in banner (step 2) if present; absence is not an error |
+| `ISSUE_ID` | Optional | Drives branch resolution (step 12); absent means stay on `main` |
+| Backend credential | Enforced | Validated per `ADDA_DEV_LLM_BACKEND` — abort if absent |
+
+### §1.2 Filesystem
+
+Enforced checks abort; expected checks emit diagnostics but do not abort.
+
+| Mount | Level | Entrypoint check |
+|---|---|---|
+| `/workspace` | Enforced | Abort if non-empty (step 3); used for the repository clone (step 11) |
+| `/workspace` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
+| `/tmp` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
+| `/home/adda` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
+| `/run` | Expected | Diagnostic: tmpfs, writable, noexec (step 4) |
+| Proxy socket at `ADDA_DEV_PROXY_SOCKET` | Enforced | Socket must exist — verified when `socat` starts the proxy bridge (step 6) |
+
+### §1.3 Hardening
+
+All checks are expected diagnostics (step 4): the entrypoint warns on mismatch but does not abort. Enforcement is outside the container, applied by the launcher.
+
+| Expected condition | Check |
+|---|---|
+| Loopback-only network | No default route; only loopback interface present |
+| No effective capabilities | `CapEff: 0000000000000000` |
+| No privilege escalation | `NoNewPrivs: 1` |
+| Read-only root filesystem | No writable non-tmpfs mounts |
+| Expected tmpfs mounts present | `/home/adda`, `/workspace`, `/tmp`, `/run` are tmpfs |
+| `/home/adda` and `/workspace` executable | exec bit set |
+| `/run` noexec | noexec mount option |
+
+### §2 Container obligations
+
+The contract has one SHOULD obligation on the container side: the image SHOULD provide an executable at `/usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh`. The launcher `docker exec`s it to open an interactive shell window alongside the main session; if absent, that window fails but the main session is unaffected.
+
+---
+
 ## Tier 2
 
 ### Infrastructure contract
@@ -261,11 +306,13 @@ Each attestation is signed with a short-lived Sigstore certificate, logged in th
 
 ### `entrypoint.d` hook requirements
 
-A Tier 2 `entrypoint.d/` hook should:
-- Use Tier 1 helper functions (`require_env`, `require_tool`, `section`, `success`, `die`, `info`) for consistent output and failure handling.
-- Use `info()` instead of bare `echo` for any plain-text output.
+A Tier 2 `entrypoint.d/` hook is responsible for validating and initialising the AI harness environment. Use Tier 1 helper functions (`require_env`, `require_tool`, `section`, `success`, `die`, `info`) for consistent output and failure handling; use `info()` instead of bare `echo` for all plain-text output.
+
+**Validation** (abort the hook on failure):
 - Validate AI-harness-specific environment variables using `require_env`.
 - Validate that the AI harness binary is present using `require_tool`.
+
+**Initialisation**:
 - Initialise the AI harness configuration in `$HOME` so that the harness is ready when CMD runs.
 
 ### Runtime executables and libexec additions
