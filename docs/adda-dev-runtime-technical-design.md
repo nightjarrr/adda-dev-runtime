@@ -22,6 +22,61 @@ This section maps the technology-agnostic concepts from the conceptual design to
 
 ---
 
+## Container contract
+
+This section describes how the container stack validates the launcher's §1 obligations under the [launcher–container contract](launcher-container-contract.md). The contract specifies what each party owes the other and at what enforcement level; validation is split between the Tier 1 entrypoint and the Tier 2 hook.
+
+### §1.1 Environment
+
+Enforced variables cause an abort if absent; optional variables are used only when present.
+
+| Variable | Level | Validated by | Action |
+|---|---|---|---|
+| `GITHUB_OWNER` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
+| `GITHUB_REPO` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
+| `GITHUB_TOKEN_` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent; consumed for `gh auth login --with-token` (step 8) then removed from the process environment (step 9) |
+| `TZ` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
+| `ADDA_DEV_PROXY_SOCKET` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent; socket existence verified when starting the proxy bridge (step 6) |
+| `ADDA_DEV_PROXY_PORT` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
+| `ADDA_DEV_LLM_BACKEND` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
+| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
+| `ADDA_DEV_RUNTIME_IMAGE` | Optional | Tier 1 entrypoint (step 2) | Displayed in banner if present; absence is not an error |
+| `ISSUE_ID` | Optional | Tier 1 entrypoint (step 2) | Drives branch resolution (step 12); absent means stay on `main` |
+| Backend credential | Enforced | Tier 2 hook | `require_env` per `ADDA_DEV_LLM_BACKEND` — abort if absent |
+
+### §1.2 Filesystem
+
+Enforced checks abort; expected checks emit diagnostics but do not abort. All checks are performed by the Tier 1 entrypoint.
+
+| Mount | Level | Check |
+|---|---|---|
+| `/workspace` | Enforced | Abort if non-empty (step 3); used for the repository clone (step 11) |
+| `/workspace` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
+| `/tmp` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
+| `/home/adda` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
+| `/run` | Expected | Diagnostic: tmpfs, writable, noexec (step 4) |
+| Proxy socket at `ADDA_DEV_PROXY_SOCKET` | Enforced | Socket must exist — verified when `socat` starts the proxy bridge (step 6) |
+
+### §1.3 Hardening
+
+All checks are expected diagnostics performed by the Tier 1 entrypoint (step 4): warns on mismatch but does not abort. Enforcement is outside the container, applied by the launcher.
+
+| Expected condition | Check |
+|---|---|
+| Loopback-only network | No default route; only loopback interface present |
+| No effective capabilities | `CapEff: 0000000000000000` |
+| No privilege escalation | `NoNewPrivs: 1` |
+| Read-only root filesystem | No writable non-tmpfs mounts |
+| Expected tmpfs mounts present | `/home/adda`, `/workspace`, `/tmp`, `/run` are tmpfs |
+| `/home/adda` and `/workspace` executable | exec bit set |
+| `/run` noexec | noexec mount option |
+
+### §2 Container obligations
+
+The contract has one SHOULD obligation on the container side: the image SHOULD provide an executable at `/usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh`. The Tier 1 image fulfills this obligation — `open-interactive-shell.sh` is shipped at that path. The launcher `docker exec`s it to open an interactive shell window alongside the main session.
+
+---
+
 ## Tier 1
 
 ### TUI environment
@@ -350,58 +405,3 @@ Optional. Present only when the project needs OS-level tooling not in Tier 1. Bu
 ### Launcher target
 
 When the project carries no Dockerfile, the launcher configuration references the Tier 2 image as the runtime target. When a project Dockerfile is present and built, the launcher configuration references the project image instead — the Tier 2 image becomes an intermediate build stage.
-
----
-
-## Container contract
-
-This section describes how the container stack validates the launcher's §1 obligations under the [launcher–container contract](launcher-container-contract.md). The contract specifies what each party owes the other and at what enforcement level; validation is split between the Tier 1 entrypoint and the Tier 2 hook.
-
-### §1.1 Environment
-
-Enforced variables cause an abort if absent; optional variables are used only when present.
-
-| Variable | Level | Validated by | Action |
-|---|---|---|---|
-| `GITHUB_OWNER` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
-| `GITHUB_REPO` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
-| `GITHUB_TOKEN_` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent; consumed for `gh auth login --with-token` (step 8) then removed from the process environment (step 9) |
-| `TZ` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
-| `ADDA_DEV_PROXY_SOCKET` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent; socket existence verified when starting the proxy bridge (step 6) |
-| `ADDA_DEV_PROXY_PORT` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
-| `ADDA_DEV_LLM_BACKEND` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
-| `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC` | Enforced | Tier 1 entrypoint (step 2) | `require_env` — abort if absent |
-| `ADDA_DEV_RUNTIME_IMAGE` | Optional | Tier 1 entrypoint (step 2) | Displayed in banner if present; absence is not an error |
-| `ISSUE_ID` | Optional | Tier 1 entrypoint (step 2) | Drives branch resolution (step 12); absent means stay on `main` |
-| Backend credential | Enforced | Tier 2 hook | `require_env` per `ADDA_DEV_LLM_BACKEND` — abort if absent |
-
-### §1.2 Filesystem
-
-Enforced checks abort; expected checks emit diagnostics but do not abort. All checks are performed by the Tier 1 entrypoint.
-
-| Mount | Level | Check |
-|---|---|---|
-| `/workspace` | Enforced | Abort if non-empty (step 3); used for the repository clone (step 11) |
-| `/workspace` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
-| `/tmp` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
-| `/home/adda` | Expected | Diagnostic: tmpfs, writable, exec (step 4) |
-| `/run` | Expected | Diagnostic: tmpfs, writable, noexec (step 4) |
-| Proxy socket at `ADDA_DEV_PROXY_SOCKET` | Enforced | Socket must exist — verified when `socat` starts the proxy bridge (step 6) |
-
-### §1.3 Hardening
-
-All checks are expected diagnostics performed by the Tier 1 entrypoint (step 4): warns on mismatch but does not abort. Enforcement is outside the container, applied by the launcher.
-
-| Expected condition | Check |
-|---|---|
-| Loopback-only network | No default route; only loopback interface present |
-| No effective capabilities | `CapEff: 0000000000000000` |
-| No privilege escalation | `NoNewPrivs: 1` |
-| Read-only root filesystem | No writable non-tmpfs mounts |
-| Expected tmpfs mounts present | `/home/adda`, `/workspace`, `/tmp`, `/run` are tmpfs |
-| `/home/adda` and `/workspace` executable | exec bit set |
-| `/run` noexec | noexec mount option |
-
-### §2 Container obligations
-
-The contract has one SHOULD obligation on the container side: the image SHOULD provide an executable at `/usr/local/libexec/adda-dev-runtime/bootstrap/open-interactive-shell.sh`. The Tier 1 image fulfills this obligation — `open-interactive-shell.sh` is shipped at that path. The launcher `docker exec`s it to open an interactive shell window alongside the main session.
