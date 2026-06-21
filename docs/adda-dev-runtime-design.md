@@ -35,11 +35,9 @@ GitHub is the persistence layer for all project work. Project state flows to Git
 
 Nothing outside GitHub persists: no host source bind mount, no persistent AI harness config volume, no SSH agent forwarding, and no shared host clone are used.
 
-### AI harness permission configuration
+### Defense in depth
 
-The AI harness enforces the innermost boundary in the system's defense-in-depth design: a least-privilege permission model governing what agents, skills, and tools can do inside the container.
-
-The outer two boundaries — container isolation and the proxy-based network perimeter — are established by the launcher outside the container wall. This third boundary operates inside the container and addresses what the outer boundaries cannot: an AI actor that is legitimately inside the container but must be constrained from overreaching within it.
+Three concentric boundaries protect the host and project from code running inside the development environment. The first two — container isolation and the proxy-based network perimeter — are established by the launcher outside the container wall; see the launcher conceptual design. The third operates inside the container: the AI harness enforces a least-privilege permission model governing what agents, skills, and tools can do, constraining AI actors that are legitimately inside the container from overreaching within it.
 
 ---
 
@@ -66,7 +64,7 @@ The isolated, ephemeral runtime in which the AI agent and all development toolin
 | Network proxy sidecar | Trusted | Runs outside the container; enforces network policy |
 | AI harness container | **Untrusted** | May run exploited or manipulated code |
 
-The boundary between trusted and untrusted runs at the container wall. The AI harness container's untrusted designation carries a design consequence inward: the AI harness cannot assume its own internal actors are trustworthy either. The AI harness permission configuration boundary (see *Design principles*) is the container's response — it enforces least privilege on agents, skills, and tools regardless of whether the container itself has been compromised.
+The boundary between trusted and untrusted runs at the container wall. The AI harness container's untrusted designation carries a design consequence inward: the AI harness cannot assume its own internal actors are trustworthy either. The defense-in-depth principle (see *Design principles*) is the container's response — its AI harness enforces least privilege on agents, skills, and tools regardless of whether the container itself has been compromised.
 
 ---
 
