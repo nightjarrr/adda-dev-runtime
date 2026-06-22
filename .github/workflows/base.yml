@@ -47,7 +47,6 @@ jobs:
           shellcheck \
             adda-dev-runtime/content/scripts/bootstrap/entrypoint.sh.source \
             adda-dev-runtime/build/prune-node-modules.sh \
-            launcher/adda-dev.sh \
             proto-adda/content/scripts/bootstrap/entrypoint.d/10-claude-config.sh.source
 
       - name: hadolint

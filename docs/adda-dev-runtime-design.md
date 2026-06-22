@@ -8,7 +8,7 @@ This document establishes the container-side conceptual design: the design princ
 
 For the host-side design — the session lifecycle, and the isolation and defense-in-depth principles the launcher enforces — see [`docs/conceptual-design.md`](https://github.com/nightjarrr/adda-dev-launcher/blob/main/docs/conceptual-design.md) in adda-dev-launcher.
 
-For the contract between the launcher and the container — the runtime interface each side must satisfy — see [`docs/launcher-container-contract.md`](launcher-container-contract.md).
+For the contract between the launcher and the container — the runtime interface each side must satisfy — see [`docs/launcher-container-contract.md`](https://github.com/nightjarrr/adda-dev-launcher/blob/main/docs/launcher-container-contract.md) in `adda-dev-launcher`.
 
 For the container-internal implementation — container contract validation, entrypoint sequence, bootstrap extension points, artifact routing, and image build pipeline — see [`docs/adda-dev-runtime-technical-design.md`](adda-dev-runtime-technical-design.md).
 

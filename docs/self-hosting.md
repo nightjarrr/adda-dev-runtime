@@ -24,8 +24,6 @@ This duality is real and intentional. It does not change how ADDA works; it just
 ```
 adda-dev-runtime/          Tier 1 source — generic, AI-tool-agnostic base image
 proto-adda/                Tier 2 source — AI-harness image (builds FROM Tier 1)
-launcher/                  Host-side infrastructure — launcher script, Envoy config
-                           (not a container image tier; runs on the host)
 
 .adda-init.sh              Tier 3 — repo-level ADDA init hook for this project
 CLAUDE.md                  Tier 3 — agent instructions for developing this repo

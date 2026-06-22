@@ -7,7 +7,6 @@ This repo *is* the dev runtime. Conceptual design is documented in `docs/adda-de
 - `adda-dev-runtime/` — Tier 1 base image (Dockerfile, content/scripts/).
 - `proto-adda/` — Tier 2 AI-harness image. Adds Claude Code, the Claude
   config, and the `10-claude-config.sh` bootstrap hook.
-- `launcher/` — host-side launcher script, config, and Envoy proxy template.
 
 ## Working on the runtime from inside the runtime
 
@@ -54,11 +53,7 @@ commit command.
 
 ## Script placement decision model
 
-When adding a new script, use these four axes to determine where it goes:
-
-0. **Host vs Container**: if the script runs on the host, it lives in `launcher/`
-   and this decision model does not apply. If it runs inside the container,
-   proceed to axes 1–3.
+When adding a new container-side script, use these three axes to determine where it goes:
 
 1. **Tier**: Tier 1 (`adda-dev-runtime/`) if generic and AI-tool-agnostic, or if
    the script modifies the bootstrap/entrypoint process itself (rather than

@@ -30,7 +30,7 @@ One development session maps one GitHub Issue to one container run. The entrypoi
 
 ## Container contract
 
-This section covers the [launcher–container contract](launcher-container-contract.md) and how the container stack validates the launcher's §1 obligations. §1 (Launcher obligations) and §2 (Container obligations) are the complete contract. This section appears before the Tier 1 and Tier 2 sections because the contract is a bilateral launcher↔container agreement; it is not specific to either tier. Validation of §1 is split between the Tier 1 entrypoint and the Tier 2 hook; the contract specifies the enforcement level for each requirement.
+This section covers the [launcher–container contract](https://github.com/nightjarrr/adda-dev-launcher/blob/main/docs/launcher-container-contract.md) and how the container stack validates the launcher's §1 obligations. §1 (Launcher obligations) and §2 (Container obligations) are the complete contract. This section appears before the Tier 1 and Tier 2 sections because the contract is a bilateral launcher↔container agreement; it is not specific to either tier. Validation of §1 is split between the Tier 1 entrypoint and the Tier 2 hook; the contract specifies the enforcement level for each requirement.
 
 ### §1.1 Environment
 
